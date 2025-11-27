@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { OtherCostItem, Currency } from '../types';
+import { OtherCostItem, Currency, VariantItemType } from '../types';
 import { Receipt, Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 import { convert } from '../services/calculationService';
 
@@ -9,10 +8,25 @@ interface Props {
   onChange: (costs: OtherCostItem[]) => void;
   exchangeRate: number;
   offerCurrency: Currency;
+  isPickingMode?: boolean;
+  onPick?: (item: { id: string, type: VariantItemType, label: string }, origin?: {x: number, y: number}) => void;
 }
 
-export const OtherCostsSection: React.FC<Props> = ({ costs, onChange, exchangeRate, offerCurrency }) => {
+export const OtherCostsSection: React.FC<Props> = ({ 
+    costs, onChange, exchangeRate, offerCurrency,
+    isPickingMode, onPick
+}) => {
   const [isOpen, setIsOpen] = useState(true);
+
+  const handlePick = (e: React.MouseEvent, c: OtherCostItem) => {
+      if (isPickingMode && onPick) {
+          onPick({
+              id: c.id,
+              type: 'OTHER',
+              label: `[Inne] ${c.description}`
+          }, { x: e.clientX, y: e.clientY });
+      }
+  };
 
   const addCost = () => {
     onChange([...costs, {
@@ -45,6 +59,9 @@ export const OtherCostsSection: React.FC<Props> = ({ costs, onChange, exchangeRa
   const textInputClass = "w-full p-2 bg-transparent border-b border-transparent focus:border-yellow-400 outline-none text-sm text-zinc-800 dark:text-zinc-200 placeholder-zinc-400";
   const selectClass = "w-full p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs outline-none focus:border-yellow-400 cursor-pointer";
 
+  const pickingClass = isPickingMode 
+      ? "hover:bg-yellow-50 dark:hover:bg-yellow-900/20 hover:ring-1 hover:ring-inset hover:ring-yellow-400 cursor-crosshair hover:animate-pulse-border"
+      : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50";
 
   return (
     <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 mb-8 overflow-hidden transition-colors">
@@ -102,14 +119,37 @@ export const OtherCostsSection: React.FC<Props> = ({ costs, onChange, exchangeRa
                                 </tr>
                             )}
                             {costs.map((cost, idx) => (
-                                <tr key={cost.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                                <tr 
+                                    key={cost.id} 
+                                    className={`${pickingClass} transition-colors`}
+                                    onClick={(e) => handlePick(e, cost)}
+                                >
                                     <td className={`${cellClass} text-center text-zinc-400 text-xs`}>{idx + 1}</td>
                                     <td className={cellClass}>
-                                        <input type="text" placeholder="np. Hotel, Paliwo" className={textInputClass} value={cost.description} onChange={(e) => updateCost(idx, 'description', e.target.value)} />
+                                        <input type="text" placeholder="np. Hotel, Paliwo" className={textInputClass} value={cost.description} onChange={(e) => updateCost(idx, 'description', e.target.value)} onClick={(e) => e.stopPropagation()}/>
                                     </td>
                                     <td className={cellClass}>
-                                        <input type="number" min="0" step="0.01" className={inputClass} value={cost.price} onChange={(e) => updateCost(idx, 'price', parseFloat(e.target.value) || 0)} />
+                                        <input type="number" min="0" step="0.01" className={inputClass} value={cost.price} onChange={(e) => updateCost(idx, 'price', parseFloat(e.target.value) || 0)} onClick={(e) => e.stopPropagation()}/>
                                     </td>
                                     <td className={cellClass}>
-                                        <select className={selectClass} value={cost.currency} onChange={(e) => updateCost(idx, 'currency', e.target.value)}>
-                                            <option value={Currency.PLN}>PLN</option
+                                        <select className={selectClass} value={cost.currency} onChange={(e) => updateCost(idx, 'currency', e.target.value)} onClick={(e) => e.stopPropagation()}>
+                                            <option value={Currency.PLN}>PLN</option>
+                                            <option value={Currency.EUR}>EUR</option>
+                                        </select>
+                                    </td>
+                                    <td className={cellClass}>
+                                        <button onClick={(e) => { e.stopPropagation(); removeCost(idx); }} className="text-zinc-300 hover:text-red-500 p-1.5 transition-colors">
+                                            <Trash2 size={16}/>
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+      </div>
+    </div>
+  );
+};

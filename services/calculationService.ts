@@ -1,8 +1,3 @@
-
-
-
-
-
 import { CalculationData, Currency, CalculationMode, InstallationStage } from '../types';
 
 export const convert = (amount: number, from: Currency, to: Currency, rate: number) => {
@@ -24,8 +19,12 @@ export interface CostBreakdown {
 
 // Helper to calculate cost of a single stage (without converting currency yet)
 // Now returns Total Stage Cost including Equipment and Custom Items
-export const calculateStageCost = (stage: InstallationStage, data: CalculationData): number => {
-    if (stage.isExcluded) return 0;
+export const calculateStageCost = (
+    stage: InstallationStage, 
+    data: CalculationData,
+    options: { ignoreExclusions?: boolean } = {}
+): number => {
+    const { ignoreExclusions = false } = options;
 
     let laborCost = 0;
 
@@ -42,9 +41,11 @@ export const calculateStageCost = (stage: InstallationStage, data: CalculationDa
         if (stage.linkedSupplierIds && stage.linkedSupplierIds.length > 0) {
             stage.linkedSupplierIds.forEach(suppId => {
                 const supplier = data.suppliers.find(s => s.id === suppId);
-                if (supplier && supplier.isIncluded !== false) {
+                // Check if supplier is active OR if we are ignoring exclusions
+                if (supplier && (ignoreExclusions || supplier.isIncluded !== false)) {
                     supplier.items.forEach(i => {
-                         if (!i.isExcluded) {
+                         // Check if item is active OR if we are ignoring exclusions
+                         if (ignoreExclusions || !i.isExcluded) {
                              totalMinutes += (i.quantity * (i.timeMinutes || 0));
                          }
                     });
@@ -66,7 +67,7 @@ export const calculateStageCost = (stage: InstallationStage, data: CalculationDa
 
     // Custom Items (Per Stage)
     const customItemsCost = stage.customItems.reduce((sum, i) => {
-        if (i.isExcluded) return sum;
+        if (!ignoreExclusions && i.isExcluded) return sum;
         return sum + (i.quantity * i.unitPrice);
     }, 0);
 
@@ -192,21 +193,24 @@ export const calculateProjectCosts = (
 
         if (inst.stages && inst.stages.length > 0) {
             stagesCost = inst.stages.reduce((sum, stage) => {
-                 const sCost = calculateStageCost(stage, data);
+                 // Active Cost: Respects exclusions (If supplier is gone, we don't pay to install it)
+                 const sCost = calculateStageCost(stage, data, { ignoreExclusions: false });
+                 
                  if (stage.isExcluded) {
-                     excludedTotal += convert(sCost, Currency.PLN, targetCurrency, rate);
+                     // Excluded Cost: Uses FULL POTENTIAL cost (ignoring input exclusions)
+                     // This ensures that when a stage is excluded, the "What-If" delta captures the full value
+                     // of the work that was removed, not just the currently active portion (which might be 0).
+                     const excludedCost = calculateStageCost(stage, data, { ignoreExclusions: true });
+                     excludedTotal += convert(excludedCost, Currency.PLN, targetCurrency, rate);
                      return sum;
                  }
                  return sum + sCost;
             }, 0);
         } else {
             // FALLBACK FOR LEGACY DATA
-            // If no stages, we assume old structure. 
-            // In a real migration, this shouldn't happen often as app creates default stage.
-            // Simplified fallback:
             const labor = inst.calcMethod === 'PALLETS' 
                 ? inst.palletSpots * inst.palletSpotPrice 
-                : 0; // Simplified time fallback
+                : 0; 
              
             const equipment = 
                 (inst.forkliftDailyRate * inst.forkliftDays) + inst.forkliftTransportPrice +

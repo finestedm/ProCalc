@@ -1,7 +1,6 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Supplier, SupplierItem, Currency, Language, SupplierStatus, TransportItem, InstallationData } from '../types';
-import { Package, Plus, Trash2, Calendar, FileSpreadsheet, Copy, Eye, EyeOff, StickyNote, Tag, Loader2, Sparkles, Euro, Maximize2, ArrowUp, ArrowDown, Search, ArrowUpDown, ChevronDown, ChevronUp, GripVertical, Settings2, ArrowLeft, ArrowRight, Zap, FolderPlus, Edit3, MessageSquarePlus, SplitSquareHorizontal } from 'lucide-react';
+import { Supplier, SupplierItem, Currency, Language, SupplierStatus, TransportItem, InstallationData, VariantItemType } from '../types';
+import { Package, Plus, Trash2, Calendar, FileSpreadsheet, Copy, Eye, EyeOff, StickyNote, Tag, Loader2, Sparkles, Euro, Maximize2, ArrowUp, ArrowDown, Search, ArrowUpDown, ChevronDown, ChevronUp, GripVertical, Settings2, ArrowLeft, ArrowRight, Zap, FolderPlus, Edit3, MessageSquarePlus, SplitSquareHorizontal, MousePointer2 } from 'lucide-react';
 import { DropdownMenu } from './DropdownMenu';
 import * as XLSX from 'xlsx';
 import { extractDataFromOffer } from '../services/aiService';
@@ -21,9 +20,15 @@ interface Props {
   nameplateQty: number;
   onNameplateChange: (qty: number) => void;
   onConfirm: (title: string, message: string, onConfirm: () => void, isDanger?: boolean) => void;
+  // Picking Mode Props
+  isPickingMode?: boolean;
+  onPick?: (item: { id: string, type: VariantItemType, label: string }, origin?: {x: number, y: number}) => void;
 }
 
-export const SuppliersSection: React.FC<Props> = ({ suppliers, transport, installation, onChange, onBatchChange, onOpenComparison, exchangeRate, offerCurrency, nameplateQty, onNameplateChange, onConfirm }) => {
+export const SuppliersSection: React.FC<Props> = ({ 
+    suppliers, transport, installation, onChange, onBatchChange, onOpenComparison, exchangeRate, offerCurrency, nameplateQty, onNameplateChange, onConfirm,
+    isPickingMode, onPick 
+}) => {
   const [activeTab, setActiveTab] = useState<number>(0);
   const [isOpen, setIsOpen] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
@@ -34,6 +39,19 @@ export const SuppliersSection: React.FC<Props> = ({ suppliers, transport, instal
 
   // Constants
   const NAMEPLATE_TAB_INDEX = suppliers.length;
+
+  // Picking Handler for Header (Whole Supplier Group)
+  const handleSupplierGroupPick = (e: React.MouseEvent, s: Supplier) => {
+      if (isPickingMode && onPick) {
+          e.preventDefault();
+          e.stopPropagation();
+          onPick({
+              id: `group_supp_${s.id}`, // Special ID prefix for whole group
+              type: 'SUPPLIER_ITEM',
+              label: `DOSTAWCA: ${s.customTabName || s.name}`
+          }, { x: e.clientX, y: e.clientY });
+      }
+  };
 
   const addSupplier = () => {
     const newSupplier: Supplier = {
@@ -438,17 +456,23 @@ export const SuppliersSection: React.FC<Props> = ({ suppliers, transport, instal
                                     <button
                                         key={s.id}
                                         onClick={() => setActiveTab(idx)}
-                                        className={`relative px-4 py-2 rounded-t-lg text-sm font-bold transition-all border-x border-t whitespace-nowrap min-w-[120px] max-w-[200px] truncate
+                                        className={`relative px-4 py-2 rounded-t-lg text-sm font-bold transition-all border-x border-t whitespace-nowrap min-w-[120px] max-w-[200px] truncate group
                                             ${isActive 
                                                 ? 'bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white border-zinc-300 dark:border-zinc-600 border-b-zinc-50 dark:border-b-zinc-800 z-10 mb-[-1px] pb-2.5' 
                                                 : 'bg-zinc-100 dark:bg-zinc-900/50 text-zinc-500 dark:text-zinc-400 border-transparent border-b-zinc-300 dark:border-b-zinc-600 hover:bg-zinc-200 dark:hover:bg-zinc-800'
                                             }
                                             ${s.isIncluded === false ? 'opacity-50' : ''}
+                                            ${isPickingMode && isActive ? 'ring-2 ring-yellow-400 z-20 cursor-crosshair' : ''}
                                         `}
                                     >
                                         {/* Color Stripe indicator */}
                                         <div className={`absolute top-0 left-0 right-0 h-[3px] rounded-t-lg ${s.isOrm ? 'bg-green-500' : 'bg-yellow-500'} ${!isActive ? 'opacity-50' : ''}`}></div>
-                                        <span className="relative z-10">{s.customTabName || s.name}</span>
+                                        <span className="relative z-10 flex items-center gap-1 justify-center">
+                                            {isPickingMode && isActive && <MousePointer2 size={12} className="animate-pulse" />}
+                                            {s.customTabName || s.name}
+                                        </span>
+
+                                        {/* Picking Overlay for Inactive Tabs? No, user must activate tab to pick items, but can pick GROUP from header below */}
                                     </button>
                                 );
                             })}
@@ -501,9 +525,20 @@ export const SuppliersSection: React.FC<Props> = ({ suppliers, transport, instal
                     </div>
 
                     {/* --- SUPPLIER HEADER CONTROLS --- */}
-                    <div className="bg-zinc-50 dark:bg-zinc-800 p-4 border-x border-b border-zinc-200 dark:border-zinc-700 rounded-b-lg">
+                    <div 
+                        className={`bg-zinc-50 dark:bg-zinc-800 p-4 border-x border-b border-zinc-200 dark:border-zinc-700 rounded-b-lg relative transition-all
+                            ${isPickingMode && currentSupplier ? 'hover:bg-yellow-50 dark:hover:bg-yellow-900/10 cursor-crosshair hover:animate-pulse-border' : ''}
+                        `}
+                        onClick={(e) => currentSupplier && handleSupplierGroupPick(e, currentSupplier)}
+                    >
+                        {isPickingMode && currentSupplier && (
+                            <div className="absolute top-2 right-2 bg-yellow-400 text-black text-[10px] font-bold px-2 py-0.5 rounded shadow animate-pulse pointer-events-none z-10">
+                                Kliknij, aby dodać całą grupę
+                            </div>
+                        )}
+
                         {!isNameplateTab && currentSupplier && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4 mb-2 animate-fadeIn">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4 mb-2 animate-fadeIn" onClick={(e) => e.stopPropagation()}>
                                 {/* Tab Name Editing */}
                                 <div className="col-span-1 md:col-span-2">
                                     <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1 flex items-center gap-1">
@@ -652,7 +687,21 @@ export const SuppliersSection: React.FC<Props> = ({ suppliers, transport, instal
                                         onDeleteItem={(id) => removeItem(activeTab, id)}
                                         onAddItem={() => addItem(activeTab)}
                                         onMoveItem={(idx, dir) => moveItemManual(activeTab, idx, dir)}
-                                        className="max-h-[70vh] border-0 rounded-none shadow-none" 
+                                        className="max-h-[70vh] border-0 rounded-none shadow-none"
+                                        // PICKING PROPS
+                                        isPickingMode={isPickingMode}
+                                        onPick={(id, coords) => {
+                                            if (onPick) {
+                                                const item = currentSupplier.items.find(i => i.id === id);
+                                                if (item) {
+                                                    onPick({
+                                                        id: item.id,
+                                                        type: 'SUPPLIER_ITEM',
+                                                        label: `[Mat] ${item.itemDescription}`
+                                                    }, coords);
+                                                }
+                                            }
+                                        }}
                                     />
                                 </div>
 

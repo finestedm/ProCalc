@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { InstallationData, CustomInstallationItem, Currency, Supplier, InstallationStage, LinkedSource } from '../types';
+import { InstallationData, CustomInstallationItem, Currency, Supplier, InstallationStage, LinkedSource, VariantItemType } from '../types';
 import { Wrench, Plus, Trash2, ChevronUp, ChevronDown, Eye, EyeOff, Link, Search, X, Box, Package, Clock, Users, Combine, Info, RefreshCw, Settings, Truck, Edit2, Lock, Unlock, CheckSquare, Square, AlertCircle } from 'lucide-react';
 import { convert, calculateStageCost } from '../services/calculationService';
 
@@ -10,6 +9,8 @@ interface Props {
   exchangeRate: number;
   offerCurrency: Currency;
   suppliers: Supplier[];
+  isPickingMode?: boolean;
+  onPick?: (item: { id: string, type: VariantItemType, label: string }, origin?: {x: number, y: number}) => void;
 }
 
 interface LinkOption {
@@ -21,7 +22,10 @@ interface LinkOption {
     supplierId: string;
 }
 
-export const InstallationSection: React.FC<Props> = ({ data, onChange, exchangeRate, offerCurrency, suppliers }) => {
+export const InstallationSection: React.FC<Props> = ({ 
+    data, onChange, exchangeRate, offerCurrency, suppliers,
+    isPickingMode, onPick
+}) => {
   const [isOpen, setIsOpen] = useState(true);
   const [collapsedStages, setCollapsedStages] = useState<Set<string>>(new Set());
   const [linkMenuOpen, setLinkMenuOpen] = useState<{stageId: string, itemIdx: number} | null>(null);
@@ -262,6 +266,16 @@ export const InstallationSection: React.FC<Props> = ({ data, onChange, exchangeR
       return total;
   };
 
+  const handleStagePick = (e: React.MouseEvent, stage: InstallationStage) => {
+      if (isPickingMode && onPick) {
+          onPick({
+              id: stage.id,
+              type: 'STAGE',
+              label: `[Etap] ${stage.name}`
+          }, { x: e.clientX, y: e.clientY });
+      }
+  };
+
   // --- Render Stage ---
   const renderStage = (stage: InstallationStage, index: number) => {
       const stageCost = calculateStageCost(stage, { ...data, suppliers });
@@ -357,14 +371,21 @@ export const InstallationSection: React.FC<Props> = ({ data, onChange, exchangeR
 
 
       return (
-          <div key={stage.id} className={`bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl mb-6 relative shadow-sm transition-all ${isExcluded ? 'opacity-50 grayscale' : ''}`}>
+          <div 
+            key={stage.id} 
+            className={`bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl mb-6 relative shadow-sm transition-all 
+                ${isExcluded ? 'opacity-50 grayscale' : ''}
+                ${isPickingMode ? 'hover:bg-yellow-50 dark:hover:bg-yellow-900/10 cursor-crosshair hover:animate-pulse-border' : ''}
+            `}
+            onClick={(e) => handleStagePick(e, stage)}
+          >
                {isExcluded && <div className="absolute top-0 right-0 left-0 bg-red-500 text-white text-xs font-bold text-center py-0.5 rounded-t-2xl z-10">ETAP WYKLUCZONY Z WARIANTU</div>}
                
                {/* STAGE HEADER */}
                <div className="flex justify-between items-center p-5 bg-zinc-50/50 dark:bg-zinc-800/50 rounded-t-2xl border-b border-zinc-100 dark:border-zinc-700">
                    <div className="flex items-center gap-3 w-full max-w-md">
                        <button 
-                           onClick={() => toggleStageCollapse(stage.id)} 
+                           onClick={(e) => { e.stopPropagation(); toggleStageCollapse(stage.id); }} 
                            className="bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 p-1.5 rounded-lg transition-colors text-zinc-500 dark:text-zinc-300"
                        >
                            {isCollapsed ? <ChevronDown size={16}/> : <ChevronUp size={16}/>}
@@ -387,13 +408,13 @@ export const InstallationSection: React.FC<Props> = ({ data, onChange, exchangeR
                            <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Koszt Etapu</span>
                            <div className="font-mono font-bold text-zinc-800 dark:text-zinc-200 text-lg">{stageCost.toFixed(2)} PLN</div>
                        </div>
-                       <button onClick={() => removeStage(stage.id)} className="text-zinc-300 hover:text-red-500 transition-colors"><Trash2 size={20}/></button>
+                       <button onClick={(e) => { e.stopPropagation(); removeStage(stage.id); }} className="text-zinc-300 hover:text-red-500 transition-colors"><Trash2 size={20}/></button>
                    </div>
                </div>
 
                {/* STAGE CONTENT (COLLAPSIBLE) */}
                <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${isCollapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}>
-                   <div className="overflow-hidden">
+                   <div className="overflow-hidden" onClick={(e) => e.stopPropagation()}>
                         <div className="p-6">
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                                 {/* Col 1: Suppliers Linking */}

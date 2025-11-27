@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { TransportItem, Supplier, Currency } from '../types';
+import { TransportItem, Supplier, Currency, VariantItemType } from '../types';
 import { Truck, CheckSquare, Square, Plus, Trash2, ChevronUp, ChevronDown, Combine, Info, Unplug } from 'lucide-react';
 import { convert } from '../services/calculationService';
 
@@ -10,10 +9,26 @@ interface Props {
   onChange: (items: TransportItem[]) => void;
   exchangeRate: number;
   offerCurrency: Currency;
+  isPickingMode?: boolean;
+  onPick?: (item: { id: string, type: VariantItemType, label: string }, origin?: {x: number, y: number}) => void;
 }
 
-export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChange, exchangeRate, offerCurrency }) => {
+export const TransportSection: React.FC<Props> = ({ 
+    transport, suppliers, onChange, exchangeRate, offerCurrency,
+    isPickingMode, onPick
+}) => {
   const [isOpen, setIsOpen] = useState(true);
+
+  const handlePick = (e: React.MouseEvent, t: TransportItem) => {
+      if (isPickingMode && onPick) {
+          const name = t.name || (t.supplierId ? suppliers.find(s => s.id === t.supplierId)?.name : 'Transport');
+          onPick({
+              id: t.id,
+              type: 'TRANSPORT',
+              label: `[Transport] ${name}`
+          }, { x: e.clientX, y: e.clientY });
+      }
+  };
 
   const getTransportItemForSupplier = (supplierId: string): TransportItem => {
       const existing = transport.find(t => t.supplierId === supplierId);
@@ -225,6 +240,10 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
   const inputClass = "w-full p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-right bg-white dark:bg-zinc-900 focus:border-yellow-400 outline-none font-bold text-zinc-800 dark:text-white text-sm";
   const textInputClass = "w-full p-2 bg-transparent border-b border-transparent focus:border-yellow-400 outline-none text-sm text-zinc-800 dark:text-zinc-200 placeholder-zinc-400";
   const selectClass = "w-full p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs outline-none focus:border-yellow-400 cursor-pointer";
+  
+  const pickingClass = isPickingMode 
+      ? "hover:bg-yellow-50 dark:hover:bg-yellow-900/20 hover:ring-1 hover:ring-inset hover:ring-yellow-400 cursor-crosshair hover:animate-pulse-border"
+      : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50";
 
   return (
     <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 mb-8 overflow-hidden transition-colors">
@@ -308,14 +327,18 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
                                 const isManual = tItem.isManualOverride;
 
                                 return (
-                                    <tr key={supplier.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 group transition-colors">
+                                    <tr 
+                                        key={supplier.id} 
+                                        className={`${pickingClass} group transition-colors`}
+                                        onClick={(e) => handlePick(e, tItem)}
+                                    >
                                         <td className={`${cellClass} pl-6`}>
                                             <div className="font-bold text-zinc-800 dark:text-zinc-200">{supplier.name}</div>
                                             {supplier.isOrm && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 rounded font-bold">ORM</span>}
                                         </td>
                                         <td className={`${cellClass} text-center font-mono text-zinc-600 dark:text-zinc-400 text-xs`}>{weight > 0 ? `${weight.toLocaleString()} kg` : '-'}</td>
                                         <td className={`${cellClass} text-center`}>
-                                            <button type="button" onClick={() => updateSupplierTransport(supplier.id, { isSupplierOrganized: !isOrgBySupplier })} className={`flex items-center justify-center gap-2 mx-auto px-2 py-1 rounded-lg border transition-all ${isOrgBySupplier ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-zinc-200 text-zinc-400 hover:border-zinc-300'}`}>
+                                            <button type="button" onClick={(e) => { e.stopPropagation(); updateSupplierTransport(supplier.id, { isSupplierOrganized: !isOrgBySupplier }); }} className={`flex items-center justify-center gap-2 mx-auto px-2 py-1 rounded-lg border transition-all ${isOrgBySupplier ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-zinc-200 text-zinc-400 hover:border-zinc-300'}`}>
                                                 {isOrgBySupplier ? <CheckSquare size={16}/> : <Square size={16}/>}
                                             </button>
                                         </td>
@@ -333,13 +356,13 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
                                             ) : <span className="text-zinc-300 text-center block">-</span>}
                                         </td>
                                         <td className={cellClass}>
-                                            <input type="number" min="0" className={`${inputClass} text-center`} value={tItem.trucksCount} onChange={(e) => handleManualInputChange(supplier.id, parseFloat(e.target.value) || 0)} disabled={isOrgBySupplier || (!isManual && supplier.isOrm)} />
+                                            <input type="number" min="0" className={`${inputClass} text-center`} value={tItem.trucksCount} onChange={(e) => handleManualInputChange(supplier.id, parseFloat(e.target.value) || 0)} disabled={isOrgBySupplier || (!isManual && supplier.isOrm)} onClick={(e) => e.stopPropagation()} />
                                         </td>
                                         <td className={cellClass}>
-                                            <input type="number" min="0" className={inputClass} value={tItem.pricePerTruck} onChange={(e) => updateSupplierTransport(supplier.id, { pricePerTruck: parseFloat(e.target.value) || 0 })} disabled={isOrgBySupplier} />
+                                            <input type="number" min="0" className={inputClass} value={tItem.pricePerTruck} onChange={(e) => updateSupplierTransport(supplier.id, { pricePerTruck: parseFloat(e.target.value) || 0 })} disabled={isOrgBySupplier} onClick={(e) => e.stopPropagation()} />
                                         </td>
                                         <td className={cellClass}>
-                                            <select className={selectClass} value={tItem.currency} onChange={(e) => updateSupplierTransport(supplier.id, { currency: e.target.value as Currency })} disabled={isOrgBySupplier}>
+                                            <select className={selectClass} value={tItem.currency} onChange={(e) => updateSupplierTransport(supplier.id, { currency: e.target.value as Currency })} disabled={isOrgBySupplier} onClick={(e) => e.stopPropagation()}>
                                                 <option value={Currency.PLN}>PLN</option>
                                                 <option value={Currency.EUR}>EUR</option>
                                             </select>
@@ -359,7 +382,11 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
                                 const totalWeight = mergedSuppliers.reduce((sum, s) => sum + s.items.reduce((iSum, i) => iSum + (i.weight * i.quantity), 0), 0);
                                 
                                 return (
-                                    <tr key={item.id} className="bg-blue-50/30 hover:bg-blue-50/50 dark:bg-blue-900/10 dark:hover:bg-blue-900/20 transition-colors border-l-4 border-l-blue-400">
+                                    <tr 
+                                        key={item.id} 
+                                        className={`${pickingClass} bg-blue-50/30 transition-colors border-l-4 border-l-blue-400`}
+                                        onClick={(e) => handlePick(e, item)}
+                                    >
                                         <td className={`${cellClass} pl-4`}>
                                             <div className="font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
                                                 <Combine size={16} className="text-blue-500"/>
@@ -377,13 +404,13 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
                                             <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded">AUTO</span>
                                         </td>
                                         <td className={cellClass}>
-                                            <input type="number" min="0" className={`${inputClass} text-center`} value={item.trucksCount} onChange={(e) => updateById(item.id, { trucksCount: parseFloat(e.target.value) || 0 })} />
+                                            <input type="number" min="0" className={`${inputClass} text-center`} value={item.trucksCount} onChange={(e) => updateById(item.id, { trucksCount: parseFloat(e.target.value) || 0 })} onClick={(e) => e.stopPropagation()}/>
                                         </td>
                                         <td className={cellClass}>
-                                            <input type="number" min="0" className={inputClass} value={item.pricePerTruck} onChange={(e) => updateById(item.id, { pricePerTruck: parseFloat(e.target.value) || 0 })} />
+                                            <input type="number" min="0" className={inputClass} value={item.pricePerTruck} onChange={(e) => updateById(item.id, { pricePerTruck: parseFloat(e.target.value) || 0 })} onClick={(e) => e.stopPropagation()}/>
                                         </td>
                                         <td className={cellClass}>
-                                            <select className={selectClass} value={item.currency} onChange={(e) => updateById(item.id, { currency: e.target.value as Currency })}>
+                                            <select className={selectClass} value={item.currency} onChange={(e) => updateById(item.id, { currency: e.target.value as Currency })} onClick={(e) => e.stopPropagation()}>
                                                 <option value={Currency.PLN}>PLN</option>
                                                 <option value={Currency.EUR}>EUR</option>
                                             </select>
@@ -392,7 +419,7 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
                                         <td className={`${cellClass} text-center`}>
                                             <button 
                                                 type="button" 
-                                                onClick={() => handleUnmerge(item.id)} 
+                                                onClick={(e) => { e.stopPropagation(); handleUnmerge(item.id); }} 
                                                 className="text-zinc-400 hover:text-red-500 transition-colors"
                                                 title="Rozdziel transporty"
                                             >
@@ -405,23 +432,27 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
 
                             {/* 3. Manual Items */}
                             {manualItems.map(item => (
-                                <tr key={item.id} className="bg-amber-50/20 hover:bg-amber-50/40 transition-colors">
+                                <tr 
+                                    key={item.id} 
+                                    className={`${pickingClass} bg-amber-50/20 transition-colors`}
+                                    onClick={(e) => handlePick(e, item)}
+                                >
                                     <td className={`${cellClass} pl-6`}>
-                                        <input type="text" className={textInputClass} placeholder="Nazwa transportu" value={item.name || ''} onChange={(e) => updateById(item.id, { name: e.target.value })} />
+                                        <input type="text" className={textInputClass} placeholder="Nazwa transportu" value={item.name || ''} onChange={(e) => updateById(item.id, { name: e.target.value })} onClick={(e) => e.stopPropagation()}/>
                                     </td>
                                     <td className={`${cellClass} text-center text-zinc-300`}>-</td>
                                     <td className={`${cellClass} text-center text-zinc-300`}>-</td>
                                     <td className={`${cellClass} text-center text-zinc-300`}>-</td>
-                                    <td className={cellClass}><input type="number" min="0" className={`${inputClass} text-center`} value={item.trucksCount} onChange={(e) => updateById(item.id, { trucksCount: parseFloat(e.target.value) || 0 })} /></td>
-                                    <td className={cellClass}><input type="number" min="0" className={inputClass} value={item.pricePerTruck} onChange={(e) => updateById(item.id, { pricePerTruck: parseFloat(e.target.value) || 0 })} /></td>
+                                    <td className={cellClass}><input type="number" min="0" className={`${inputClass} text-center`} value={item.trucksCount} onChange={(e) => updateById(item.id, { trucksCount: parseFloat(e.target.value) || 0 })} onClick={(e) => e.stopPropagation()}/></td>
+                                    <td className={cellClass}><input type="number" min="0" className={inputClass} value={item.pricePerTruck} onChange={(e) => updateById(item.id, { pricePerTruck: parseFloat(e.target.value) || 0 })} onClick={(e) => e.stopPropagation()}/></td>
                                     <td className={cellClass}>
-                                        <select className={selectClass} value={item.currency} onChange={(e) => updateById(item.id, { currency: e.target.value as Currency })}>
+                                        <select className={selectClass} value={item.currency} onChange={(e) => updateById(item.id, { currency: e.target.value as Currency })} onClick={(e) => e.stopPropagation()}>
                                             <option value={Currency.PLN}>PLN</option>
                                             <option value={Currency.EUR}>EUR</option>
                                         </select>
                                     </td>
                                     <td className={`${cellClass} text-right font-bold text-zinc-800 dark:text-zinc-200 font-mono pr-6`}>{item.totalPrice.toFixed(2)}</td>
-                                    <td className={`${cellClass} text-center`}><button type="button" onClick={() => removeTransport(item.id)} className="text-zinc-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button></td>
+                                    <td className={`${cellClass} text-center`}><button type="button" onClick={(e) => { e.stopPropagation(); removeTransport(item.id); }} className="text-zinc-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button></td>
                                 </tr>
                             ))}
                         </tbody>

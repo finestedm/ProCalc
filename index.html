@@ -55,6 +55,7 @@
                 slideUp: 'slideUp 0.3s ease-out',
                 scaleIn: 'scaleIn 0.4s ease-out',
                 slideInRight: 'slideInRight 0.3s ease-out',
+                'pulse-border': 'pickingPulse 2s infinite ease-in-out',
             },
             keyframes: {
                 fadeIn: {
@@ -72,6 +73,17 @@
                 slideInRight: {
                     '0%': { transform: 'translateX(20px)', opacity: '0' },
                     '100%': { transform: 'translateX(0)', opacity: '1' },
+                },
+                // NEW STABLE ANIMATION using inset shadow
+                pickingPulse: {
+                    '0%, 100%': { 
+                        boxShadow: 'inset 0 0 0 2px rgba(234, 179, 8, 0.5)', 
+                        backgroundColor: 'rgba(254, 252, 232, 0.3)' 
+                    },
+                    '50%': { 
+                        boxShadow: 'inset 0 0 0 4px rgba(234, 179, 8, 1)', 
+                        backgroundColor: 'rgba(254, 240, 138, 0.4)' 
+                    },
                 }
             }
           }

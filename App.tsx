@@ -1,16 +1,17 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   AppState, 
   CalculationMode, 
   Currency, 
   EMPTY_CALCULATION,
-  CalculationData,
+  CalculationData, 
   ViewMode,
   Supplier,
   TransportItem,
   HistoryEntry,
-  ProjectFile
+  ProjectFile,
+  VariantItemType,
+  VariantItem
 } from './types';
 import { CustomerSection } from './components/CustomerSection';
 import { ProjectMetaForm } from './components/ProjectMetaForm';
@@ -33,10 +34,50 @@ import { Header } from './components/Header';
 import { FloatingSummary } from './components/FloatingSummary';
 import { ProjectManagerModal } from './components/ProjectManagerModal';
 import { fetchEurRate } from './services/currencyService';
-import { Moon, Sun, History, Download, Upload, FilePlus, HardDrive } from 'lucide-react';
+import { Moon, Sun, History, Download, Upload, FilePlus, HardDrive, MousePointer2, X, Plus, Check, Trash2 } from 'lucide-react';
 
 const STORAGE_KEY = 'procalc_data_v1';
 const THEME_KEY = 'procalc_theme';
+
+// --- ANIMATION HELPER COMPONENT ---
+interface FlyingParticleProps {
+    id: number;
+    startX: number;
+    startY: number;
+    label: string;
+    onComplete: (id: number) => void;
+}
+
+const FlyingParticle: React.FC<FlyingParticleProps> = ({ id, startX, startY, label, onComplete }) => {
+    useEffect(() => {
+        const timer = setTimeout(() => onComplete(id), 800); // Match animation duration
+        return () => clearTimeout(timer);
+    }, [id, onComplete]);
+
+    // Calculate destination (Bottom Left, where the basket icon is roughly located)
+    // Assuming icon is at roughly left: 30px, bottom: 30px
+    const targetX = 30; 
+    const targetY = window.innerHeight - 30;
+    
+    const deltaX = targetX - startX;
+    const deltaY = targetY - startY;
+
+    return (
+        <div 
+            className="fixed z-[9999] pointer-events-none bg-yellow-400 text-black text-xs font-bold px-3 py-1.5 rounded-full shadow-lg border border-yellow-600 flex items-center gap-1"
+            style={{ 
+                left: startX, 
+                top: startY,
+                // We use CSS variables for the transform destination
+                '--tx': `${deltaX}px`,
+                '--ty': `${deltaY}px`,
+                animation: 'flyToBasket 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards'
+            } as React.CSSProperties}
+        >
+            <Plus size={12} strokeWidth={3} /> {label}
+        </div>
+    );
+};
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>({
@@ -57,6 +98,12 @@ const App: React.FC = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [showProjectManager, setShowProjectManager] = useState(false);
   
+  // --- VISUAL PICKING MODE STATE ---
+  const [pickingVariantId, setPickingVariantId] = useState<string | null>(null);
+  const [pickedItemsBuffer, setPickedItemsBuffer] = useState<VariantItem[]>([]); // Staging area
+  const [flyingParticles, setFlyingParticles] = useState<FlyingParticleProps[]>([]);
+  const [basketPulse, setBasketPulse] = useState(false);
+
   // File System Handle State (Persisted during session)
   const [dirHandle, setDirHandle] = useState<any>(null);
 
@@ -183,6 +230,91 @@ const App: React.FC = () => {
           if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
       };
   }, [appState, isLoaded]);
+
+  // --- PICKING MODE LOGIC ---
+  
+  const handleVariantItemPick = (item: { id: string, type: VariantItemType, label: string }, origin?: {x: number, y: number}) => {
+      if (!pickingVariantId) return;
+
+      // Check if already in buffer
+      if (pickedItemsBuffer.some(i => i.id === item.id && i.type === item.type)) {
+          showSnackbar("Ten element jest już wybrany (w koszyku).");
+          return;
+      }
+
+      // Check if already in the existing variant
+      const dataKey = appState.mode === CalculationMode.INITIAL ? 'initial' : 'final';
+      const variants = appState[dataKey].variants;
+      const targetVariant = variants.find(v => v.id === pickingVariantId);
+      if (targetVariant && targetVariant.items.some(i => i.id === item.id && i.type === item.type)) {
+          showSnackbar("Ten element jest już w wariancie.");
+          return;
+      }
+
+      // Add to buffer
+      setPickedItemsBuffer(prev => [...prev, {
+          id: item.id,
+          type: item.type,
+          originalDescription: item.label
+      }]);
+
+      // Trigger Animation
+      if (origin) {
+          const pid = Date.now();
+          setFlyingParticles(prev => [...prev, { 
+              id: pid, 
+              startX: origin.x, 
+              startY: origin.y, 
+              label: item.label.length > 20 ? item.label.substring(0,20)+'...' : item.label,
+              onComplete: (id) => {
+                  setFlyingParticles(p => p.filter(x => x.id !== id));
+                  // Trigger basket pulse
+                  setBasketPulse(true);
+                  setTimeout(() => setBasketPulse(false), 300);
+              }
+          }]);
+      }
+  };
+
+  const handleRemovePickedItem = (index: number) => {
+      setPickedItemsBuffer(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleCancelPicking = () => {
+      setPickingVariantId(null);
+      setPickedItemsBuffer([]);
+  };
+
+  const handleConfirmPicking = () => {
+      if (!pickingVariantId || pickedItemsBuffer.length === 0) {
+          setPickingVariantId(null);
+          return;
+      }
+
+      // Commit changes to AppState
+      setAppState(prev => {
+          const newState = { ...prev };
+          const dataKey = prev.mode === CalculationMode.INITIAL ? 'initial' : 'final';
+          const variants = [...newState[dataKey].variants]; // Shallow copy of array
+          
+          const variantIndex = variants.findIndex(v => v.id === pickingVariantId);
+          if (variantIndex !== -1) {
+              const updatedVariant = { ...variants[variantIndex] };
+              updatedVariant.items = [...updatedVariant.items, ...pickedItemsBuffer];
+              variants[variantIndex] = updatedVariant;
+              
+              newState[dataKey] = {
+                  ...newState[dataKey],
+                  variants: variants
+              };
+          }
+          return newState;
+      });
+
+      showSnackbar(`Dodano ${pickedItemsBuffer.length} elementów do wariantu.`);
+      setPickingVariantId(null);
+      setPickedItemsBuffer([]);
+  };
 
   const handleUndo = () => {
       if (past.length === 0) return;
@@ -352,7 +484,14 @@ const App: React.FC = () => {
 
   return (
     <div className="h-screen overflow-hidden bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 transition-colors font-sans selection:bg-yellow-200 dark:selection:bg-yellow-900 flex flex-col">
-      
+      <style>{`
+        @keyframes flyToBasket {
+          0% { transform: translate(0, 0) scale(1); opacity: 1; }
+          60% { opacity: 1; transform: translate(calc(var(--tx) * 0.5), calc(var(--ty) * 0.8)) scale(0.8); }
+          100% { transform: translate(var(--tx), var(--ty)) scale(0.1); opacity: 0; }
+        }
+      `}</style>
+
       <Header 
          appState={appState}
          setAppState={setAppState}
@@ -372,7 +511,7 @@ const App: React.FC = () => {
         
         {/* LEFT COLUMN (Forms) */}
         {appState.viewMode === ViewMode.CALCULATOR && (
-            <div className="xl:col-span-9 space-y-6 animate-slideInRight">
+            <div className="xl:col-span-9 space-y-6 animate-slideInRight pb-24">
                 {/* If in Final Mode, show Comparison Header or specific Final View */}
                 {isFinal ? (
                     <FinalCalculationView 
@@ -403,6 +542,9 @@ const App: React.FC = () => {
                         nameplateQty={data.nameplateQty}
                         onNameplateChange={(qty) => updateCalculationData({ nameplateQty: qty })}
                         onConfirm={triggerConfirm}
+                        // PICKING PROPS
+                        isPickingMode={!!pickingVariantId}
+                        onPick={handleVariantItemPick}
                     />
                     
                     <TransportSection 
@@ -411,6 +553,9 @@ const App: React.FC = () => {
                         onChange={(val) => updateCalculationData({ transport: val })} 
                         exchangeRate={appState.exchangeRate}
                         offerCurrency={appState.offerCurrency}
+                         // PICKING PROPS
+                        isPickingMode={!!pickingVariantId}
+                        onPick={handleVariantItemPick}
                     />
 
                     <OtherCostsSection 
@@ -418,6 +563,9 @@ const App: React.FC = () => {
                         onChange={(val) => updateCalculationData({ otherCosts: val })} 
                         exchangeRate={appState.exchangeRate}
                         offerCurrency={appState.offerCurrency}
+                         // PICKING PROPS
+                        isPickingMode={!!pickingVariantId}
+                        onPick={handleVariantItemPick}
                     />
 
                     <InstallationSection 
@@ -426,6 +574,9 @@ const App: React.FC = () => {
                         onChange={(val) => updateCalculationData({ installation: val })}
                         exchangeRate={appState.exchangeRate}
                         offerCurrency={appState.offerCurrency}
+                         // PICKING PROPS
+                        isPickingMode={!!pickingVariantId}
+                        onPick={handleVariantItemPick}
                     />
                     
                     {/* VARIANTS SECTION - Moved to Bottom (Only in Initial Mode) */}
@@ -435,6 +586,7 @@ const App: React.FC = () => {
                             exchangeRate={appState.exchangeRate}
                             offerCurrency={appState.offerCurrency}
                             onConfirm={triggerConfirm}
+                            onEnterPickingMode={(id) => setPickingVariantId(id)}
                     />
 
                     <SummarySection 
@@ -500,8 +652,69 @@ const App: React.FC = () => {
 
       </main>
 
+      {/* RENDER FLYING PARTICLES */}
+      {flyingParticles.map(p => (
+          <FlyingParticle key={p.id} {...p} />
+      ))}
+
       {/* Floating Summary - Visible ONLY on small screens (xl:hidden) */}
-      <FloatingSummary data={data} appState={appState} />
+      {!pickingVariantId && (
+        <FloatingSummary data={data} appState={appState} />
+      )}
+
+      {/* PICKING MODE OVERLAY BAR */}
+      {pickingVariantId && (
+          <div className="fixed bottom-0 left-0 right-0 bg-zinc-900 text-white p-4 z-[999] animate-slideUp flex flex-col md:flex-row items-center justify-between shadow-2xl border-t-2 border-yellow-500 gap-4">
+              <div className="flex items-center gap-4 flex-1 overflow-hidden">
+                  <div className={`bg-yellow-500 p-2 rounded-full text-black transition-transform duration-200 shrink-0 ${basketPulse ? 'scale-150' : ''}`}>
+                      <MousePointer2 size={24} />
+                  </div>
+                  <div className="overflow-hidden flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                           <h3 className="font-bold text-lg leading-none whitespace-nowrap">Tryb Wybierania</h3>
+                           <span className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full border border-zinc-700">
+                               {data.variants.find(v => v.id === pickingVariantId)?.name}
+                           </span>
+                      </div>
+                      
+                      {/* Picked Items Horizontal Scroll List */}
+                      {pickedItemsBuffer.length === 0 ? (
+                          <p className="text-sm text-zinc-400">Kliknij element w interfejsie aby dodać go do koszyka.</p>
+                      ) : (
+                          <div className="flex gap-2 overflow-x-auto pb-1 items-center mask-gradient-right no-scrollbar">
+                              {pickedItemsBuffer.map((item, idx) => (
+                                  <div key={idx} className="bg-zinc-800 border border-zinc-600 rounded px-2 py-1 flex items-center gap-2 shrink-0 animate-scaleIn text-xs">
+                                      <span className="truncate max-w-[150px]">{item.originalDescription}</span>
+                                      <button 
+                                        onClick={() => handleRemovePickedItem(idx)}
+                                        className="text-zinc-400 hover:text-red-400 p-0.5"
+                                      >
+                                          <X size={12} />
+                                      </button>
+                                  </div>
+                              ))}
+                          </div>
+                      )}
+                  </div>
+              </div>
+              
+              <div className="flex items-center gap-2 shrink-0">
+                  <button 
+                      onClick={handleCancelPicking}
+                      className="bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors text-sm"
+                  >
+                      <X size={16}/> Anuluj
+                  </button>
+                   <button 
+                      onClick={handleConfirmPicking}
+                      disabled={pickedItemsBuffer.length === 0}
+                      className="bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors text-sm shadow-lg shadow-yellow-500/20"
+                  >
+                      <Check size={16}/> Zatwierdź ({pickedItemsBuffer.length})
+                  </button>
+              </div>
+          </div>
+      )}
 
       {/* Modals & Overlays */}
       {showComparison && (

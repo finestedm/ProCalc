@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { SupplierItem, Currency } from '../types';
 import { ArrowUp, ArrowDown, Trash2, ArrowLeft, ArrowRight, ArrowUpDown, ChevronUp, ChevronDown, Search, Settings2, Plus, Eye, EyeOff } from 'lucide-react';
@@ -21,6 +20,9 @@ interface DataGridProps {
     onMoveItem?: (index: number, direction: 'up' | 'down') => void; // Manual sort override
     readOnly?: boolean;
     className?: string; // Allow external layout control
+    // Picking Mode
+    isPickingMode?: boolean;
+    onPick?: (id: string, coords?: {x: number, y: number}) => void;
 }
 
 export const DataGrid: React.FC<DataGridProps> = ({ 
@@ -32,7 +34,9 @@ export const DataGrid: React.FC<DataGridProps> = ({
     onAddItem,
     onMoveItem,
     readOnly,
-    className = ''
+    className = '',
+    isPickingMode,
+    onPick
 }) => {
     const [filterText, setFilterText] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
@@ -136,6 +140,11 @@ export const DataGrid: React.FC<DataGridProps> = ({
         return result;
     }, [items, filterText, sortConfig, isOrm]);
 
+    // Use picking-pulse animation (inset box shadow) which doesn't affect layout
+    const pickingClass = isPickingMode 
+        ? "cursor-crosshair hover:animate-pulse-border" 
+        : "hover:bg-blue-50/50 dark:hover:bg-blue-900/10";
+
     return (
         <div className={`flex flex-col w-full ${className}`}>
             {/* Toolbar */}
@@ -234,7 +243,16 @@ export const DataGrid: React.FC<DataGridProps> = ({
                             const isExcluded = item.isExcluded;
 
                             return (
-                                <tr key={item.id} className={`hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors group ${isExcluded ? 'opacity-50' : ''}`}>
+                                <tr 
+                                    key={item.id} 
+                                    className={`${pickingClass} transition-colors group ${isExcluded ? 'opacity-50' : ''}`}
+                                    onClick={(e) => {
+                                        if (isPickingMode && onPick) {
+                                            e.stopPropagation(); // Stop propagation to prevent group selection
+                                            onPick(item.id, { x: e.clientX, y: e.clientY });
+                                        }
+                                    }}
+                                >
                                     <td className="p-2 text-center text-zinc-400 text-xs">{index + 1}</td>
                                     
                                     {!sortConfig && onMoveItem && (
@@ -265,14 +283,14 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                                  <td key={col.id} className="p-2 text-center border-l border-transparent">
                                                     <div className="flex items-center justify-center gap-1">
                                                         <button 
-                                                            onClick={() => onUpdateItem(item.id, 'isExcluded', !item.isExcluded)}
+                                                            onClick={(e) => { e.stopPropagation(); onUpdateItem(item.id, 'isExcluded', !item.isExcluded); }}
                                                             className={`p-1.5 rounded transition-colors ${isExcluded ? 'text-zinc-400 hover:text-zinc-600' : 'text-green-600 bg-green-50 dark:bg-green-900/20 hover:bg-green-100'}`}
                                                             title={isExcluded ? "Przywróć do kalkulacji" : "Wyłącz z kalkulacji"}
                                                         >
                                                             {isExcluded ? <EyeOff size={14}/> : <Eye size={14}/>}
                                                         </button>
                                                         {!readOnly && (
-                                                            <button onClick={() => onDeleteItem(item.id)} className="p-1.5 rounded text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                                                            <button onClick={(e) => { e.stopPropagation(); onDeleteItem(item.id); }} className="p-1.5 rounded text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
                                                                 <Trash2 size={14}/>
                                                             </button>
                                                         )}
@@ -290,6 +308,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                                         value={item.itemDescription} 
                                                         onChange={(e) => onUpdateItem(item.id, 'itemDescription', e.target.value)}
                                                         readOnly={readOnly || isExcluded}
+                                                        onClick={(e) => e.stopPropagation()}
                                                     />
                                                 )}
                                                 {col.id === 'componentNumber' && (
@@ -299,6 +318,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                                         value={item.componentNumber} 
                                                         onChange={(e) => onUpdateItem(item.id, 'componentNumber', e.target.value)}
                                                         readOnly={readOnly || isExcluded}
+                                                        onClick={(e) => e.stopPropagation()}
                                                     />
                                                 )}
                                                 {col.id === 'quantity' && (
@@ -308,6 +328,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                                         value={item.quantity} 
                                                         onChange={(e) => onUpdateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
                                                         readOnly={readOnly || isExcluded}
+                                                        onClick={(e) => e.stopPropagation()}
                                                     />
                                                 )}
                                                 {col.id === 'weight' && (
@@ -317,6 +338,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                                         value={item.weight} 
                                                         onChange={(e) => onUpdateItem(item.id, 'weight', parseFloat(e.target.value) || 0)}
                                                         readOnly={readOnly || isExcluded}
+                                                        onClick={(e) => e.stopPropagation()}
                                                     />
                                                 )}
                                                 {col.id === 'unitPrice' && (
@@ -328,6 +350,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                                             value={item.unitPrice} 
                                                             onChange={(e) => onUpdateItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
                                                             readOnly={readOnly || isExcluded}
+                                                            onClick={(e) => e.stopPropagation()}
                                                         />
                                                     </div>
                                                 )}

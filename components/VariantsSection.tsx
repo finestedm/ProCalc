@@ -1,7 +1,6 @@
-
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { CalculationData, ProjectVariant, VariantItem, VariantItemType, Currency, VariantStatus } from '../types';
-import { Layers, Search, Trash2, Eye, EyeOff, ChevronDown, ChevronUp, Check, X, Crosshair, MinusCircle, Link, ArrowRight, Edit2, Lock, Plus } from 'lucide-react';
+import { Layers, Search, Trash2, Eye, EyeOff, ChevronDown, ChevronUp, Check, X, Crosshair, MinusCircle, Link, ArrowRight, Edit2, Lock, Plus, MousePointer2 } from 'lucide-react';
 import { convert, calculateStageCost } from '../services/calculationService';
 
 interface Props {
@@ -10,6 +9,7 @@ interface Props {
   exchangeRate: number;
   offerCurrency: Currency;
   onConfirm: (title: string, message: string, onConfirm: () => void, isDanger?: boolean) => void;
+  onEnterPickingMode?: (variantId: string) => void;
 }
 
 interface SearchResult {
@@ -24,7 +24,7 @@ interface SearchResult {
     isRecommended?: boolean; // Smart linking recommendation
 }
 
-export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate, offerCurrency, onConfirm }) => {
+export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate, offerCurrency, onConfirm, onEnterPickingMode }) => {
   const [isOpen, setIsOpen] = useState(true);
   const [newVariantName, setNewVariantName] = useState('');
   const [activeVariantId, setActiveVariantId] = useState<string | null>(null); // For editing (expanding row)
@@ -249,7 +249,9 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
           }
       } else if (type === 'STAGE') {
           const stage = data.installation.stages.find(s => s.id === id);
-          if (stage) return { val: calculateStageCost(stage, data), curr: Currency.PLN };
+          // FORCE ignoreExclusions: true to ensure we see the full potential cost of the stage 
+          // regardless of current project state (e.g. excluded suppliers)
+          if (stage) return { val: calculateStageCost(stage, data, { ignoreExclusions: true }), curr: Currency.PLN };
       } else if (type === 'TRANSPORT') {
           const t = data.transport.find(x => x.id === id);
           if (t) return { val: t.totalPrice, curr: t.currency };
@@ -427,7 +429,7 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
                           </>
                       )}
                       <div className="pt-1 border-t border-zinc-700 font-bold text-yellow-500 text-right">
-                          {calculateStageCost(stage, data).toFixed(2)} PLN
+                          {calculateStageCost(stage, data, { ignoreExclusions: true }).toFixed(2)} PLN
                       </div>
                   </div>
               );
@@ -582,21 +584,32 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
                                             <tr>
                                                 <td colSpan={5} className="bg-zinc-50/50 dark:bg-black/20 p-0 border-b border-zinc-100 dark:border-zinc-700 animate-fadeIn">
                                                     <div className="p-4 relative">
-                                                        <div className="relative z-50 mb-4">
-                                                            <Search className="absolute left-3 top-2.5 text-zinc-400" size={16}/>
-                                                            <input 
-                                                                ref={searchInputRef}
-                                                                type="text" 
-                                                                className="w-full pl-10 p-2.5 border border-zinc-200 dark:border-zinc-600 rounded-xl text-sm outline-none focus:border-yellow-400 focus:ring-2 focus:ring-yellow-100 dark:bg-zinc-900 dark:text-white transition-all" 
-                                                                placeholder="Wyszukaj elementy do dodania (Etap, Dostawca, Transport)..." 
-                                                                value={searchTerm} 
-                                                                onChange={(e) => {
-                                                                    setSearchTerm(e.target.value);
-                                                                    setShowDropdown(true);
-                                                                }}
-                                                                onFocus={() => setShowDropdown(true)}
-                                                                autoFocus
-                                                            />
+                                                        <div className="flex gap-2 items-center relative z-50 mb-4">
+                                                            <div className="relative flex-1">
+                                                                <Search className="absolute left-3 top-2.5 text-zinc-400" size={16}/>
+                                                                <input 
+                                                                    ref={searchInputRef}
+                                                                    type="text" 
+                                                                    className="w-full pl-10 p-2.5 border border-zinc-200 dark:border-zinc-600 rounded-xl text-sm outline-none focus:border-yellow-400 focus:ring-2 focus:ring-yellow-100 dark:bg-zinc-900 dark:text-white transition-all" 
+                                                                    placeholder="Wyszukaj elementy do dodania (Etap, Dostawca, Transport)..." 
+                                                                    value={searchTerm} 
+                                                                    onChange={(e) => {
+                                                                        setSearchTerm(e.target.value);
+                                                                        setShowDropdown(true);
+                                                                    }}
+                                                                    onFocus={() => setShowDropdown(true)}
+                                                                    autoFocus
+                                                                />
+                                                            </div>
+                                                            {onEnterPickingMode && (
+                                                                <button 
+                                                                    onClick={() => onEnterPickingMode(variant.id)}
+                                                                    className="bg-yellow-400 hover:bg-yellow-500 text-black p-2.5 rounded-xl transition-colors shadow-sm flex items-center gap-2 font-bold text-xs whitespace-nowrap"
+                                                                    title="Wybierz elementy myszką z innych sekcji"
+                                                                >
+                                                                    <MousePointer2 size={18} /> Tryb Wybierania
+                                                                </button>
+                                                            )}
                                                         </div>
 
                                                         {/* Fixed Position Dropdown to avoid clipping - Updates on Scroll */}
@@ -674,7 +687,7 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
                                                         )}
 
                                                         <div className="space-y-1 max-h-[200px] overflow-y-auto border border-zinc-200 dark:border-zinc-600 rounded-xl bg-white dark:bg-zinc-900">
-                                                            {variant.items.length === 0 && <div className="p-6 text-center text-xs text-zinc-400 italic">Pusty wariant. Dodaj elementy korzystając z wyszukiwarki powyżej.</div>}
+                                                            {variant.items.length === 0 && <div className="p-6 text-center text-xs text-zinc-400 italic">Pusty wariant. Dodaj elementy korzystając z wyszukiwarki lub przycisku "Tryb Wybierania".</div>}
                                                             {variant.items.map((item, idx) => {
                                                                 const { val, curr } = getItemValue(item.id, item.type);
                                                                 return (
