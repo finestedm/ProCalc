@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { CalculationData, AppState, Currency } from '../types';
 import { Calculator, ArrowRight } from 'lucide-react';
@@ -41,7 +40,7 @@ export const FloatingSummary: React.FC<Props> = ({ data, appState }) => {
   const sellingPriceOffer = sellingPricePLN;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-800 border-t border-yellow-500 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-50 animate-slideUp">
+    <div className="xl:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-800 border-t border-yellow-500 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-50 animate-slideUp">
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
          <div className="flex flex-col sm:flex-row gap-x-6 gap-y-1">
              <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400 text-sm">

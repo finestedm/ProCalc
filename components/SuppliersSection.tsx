@@ -452,7 +452,7 @@ export const SuppliersSection: React.FC<Props> = ({ suppliers, transport, instal
                             className="px-3 py-2 rounded-t-lg text-sm font-medium whitespace-nowrap transition-colors border-b-2 border-transparent bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 flex items-center justify-center gap-1"
                             title="Importuj jako nowy dostawca ORM"
                         >
-                            <FileSpreadsheet size={16} /> <Plus size={12} className="-ml-1"/>
+                            <FileSpreadsheet size={16} /> <span className="hidden sm:inline text-xs ml-1">Importuj listę materiałową dostawcy ORM</span>
                         </button>
 
                         {/* Add Supplier Tab Button */}
@@ -560,10 +560,6 @@ export const SuppliersSection: React.FC<Props> = ({ suppliers, transport, instal
                                     </button>
                                 </div>
                             </div>
-                           
-                            <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx, .xls" onChange={handleFileUpload} />
-                            <input type="file" ref={newOrmInputRef} className="hidden" accept=".xlsx, .xls" onChange={handleNewOrmUpload} />
-                            <input type="file" ref={pdfInputRef} className="hidden" accept=".pdf, .png, .jpg, .jpeg" onChange={handleSmartImport} />
                         </div>
                     </div>
                 )}
@@ -690,6 +686,11 @@ export const SuppliersSection: React.FC<Props> = ({ suppliers, transport, instal
             onClose={() => setDetailViewIndex(null)}
         />
       )}
+      
+      {/* Hidden inputs always available */}
+      <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx, .xls" onChange={handleFileUpload} />
+      <input type="file" ref={newOrmInputRef} className="hidden" accept=".xlsx, .xls" onChange={handleNewOrmUpload} />
+      <input type="file" ref={pdfInputRef} className="hidden" accept=".pdf, .png, .jpg, .jpeg" onChange={handleSmartImport} />
     </div>
   );
 };

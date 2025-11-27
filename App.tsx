@@ -29,6 +29,7 @@ import { VariantsSection } from './components/VariantsSection';
 import { DocumentsView } from './components/DocumentsView';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { Header } from './components/Header';
+import { FloatingSummary } from './components/FloatingSummary';
 import { fetchEurRate } from './services/currencyService';
 import { Moon, Sun, History, Download, Upload, FilePlus } from 'lucide-react';
 
@@ -329,13 +330,13 @@ const App: React.FC = () => {
     { label: 'Pobierz Projekt (.json)', icon: <Download size={16}/>, onClick: handleExport },
     { label: 'Wczytaj Projekt (.json)', icon: <Upload size={16}/>, onClick: () => projectInputRef.current?.click() },
     { label: 'Historia Zmian', icon: <History size={16}/>, onClick: () => setShowHistory(true) },
-    { label: isDarkMode ? 'Tryb Jasny' : 'Tryb Ciemny', icon: isDarkMode ? <Sun size={16}/> : <Moon size={16}/>, onClick: toggleTheme },
+    { label: 'Zmień Motyw', icon: isDarkMode ? <Sun size={16}/> : <Moon size={16}/>, onClick: toggleTheme },
   ];
 
   if (!isLoaded) return <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900 flex items-center justify-center text-zinc-500 font-sans">Ładowanie...</div>;
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 transition-colors font-sans selection:bg-yellow-200 dark:selection:bg-yellow-900">
+    <div className="h-screen overflow-hidden bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 transition-colors font-sans selection:bg-yellow-200 dark:selection:bg-yellow-900 flex flex-col">
       
       <Header 
          appState={appState}
@@ -350,83 +351,85 @@ const App: React.FC = () => {
          handleImport={handleImport}
       />
 
-      {/* Main Layout */}
-      <main className="max-w-[1600px] mx-auto p-4 md:p-6 grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+      {/* Main Layout - Standard padding now that header is part of flow */}
+      <main className="flex-1 overflow-y-auto w-full max-w-[1600px] mx-auto p-4 md:p-6 grid grid-cols-1 xl:grid-cols-12 gap-8 items-start pt-6">
         
         {/* LEFT COLUMN (Forms) */}
-        <div className={`xl:col-span-9 space-y-6 ${appState.viewMode !== ViewMode.CALCULATOR ? 'hidden xl:block opacity-50 pointer-events-none h-0 overflow-hidden' : ''}`}>
-           {/* If in Final Mode, show Comparison Header or specific Final View */}
-           {isFinal ? (
-               <FinalCalculationView 
-                   data={appState.final}
-                   initialData={appState.initial}
-                   onChange={(updated) => updateCalculationData(updated)}
-                   exchangeRate={appState.exchangeRate}
-                   offerCurrency={appState.offerCurrency}
-               />
-           ) : (
-             <>
-               <CustomerSection 
-                  data={{ payer: data.payer, recipient: data.recipient, orderingParty: data.orderingParty }} 
-                  onChange={(field, val) => updateCalculationData({ [field]: val })} 
-               />
-               
-               <ProjectMetaForm data={data.meta} mode={appState.mode} onChange={(val) => updateCalculationData({ meta: val })} />
+        {appState.viewMode === ViewMode.CALCULATOR && (
+            <div className="xl:col-span-9 space-y-6">
+                {/* If in Final Mode, show Comparison Header or specific Final View */}
+                {isFinal ? (
+                    <FinalCalculationView 
+                        data={appState.final}
+                        initialData={appState.initial}
+                        onChange={(updated) => updateCalculationData(updated)}
+                        exchangeRate={appState.exchangeRate}
+                        offerCurrency={appState.offerCurrency}
+                    />
+                ) : (
+                    <>
+                    <CustomerSection 
+                        data={{ payer: data.payer, recipient: data.recipient, orderingParty: data.orderingParty }} 
+                        onChange={(field, val) => updateCalculationData({ [field]: val })} 
+                    />
+                    
+                    <ProjectMetaForm data={data.meta} mode={appState.mode} onChange={(val) => updateCalculationData({ meta: val })} />
 
-               <SuppliersSection 
-                  suppliers={data.suppliers} 
-                  transport={data.transport}
-                  installation={data.installation}
-                  onChange={(val) => updateCalculationData({ suppliers: val })}
-                  onBatchChange={handleBatchUpdate}
-                  onOpenComparison={() => setAppState(prev => ({...prev, viewMode: ViewMode.COMPARISON }))}
-                  exchangeRate={appState.exchangeRate}
-                  offerCurrency={appState.offerCurrency}
-                  nameplateQty={data.nameplateQty}
-                  onNameplateChange={(qty) => updateCalculationData({ nameplateQty: qty })}
-                  onConfirm={triggerConfirm}
-               />
-               
-               <TransportSection 
-                  transport={data.transport} 
-                  suppliers={data.suppliers}
-                  onChange={(val) => updateCalculationData({ transport: val })} 
-                  exchangeRate={appState.exchangeRate}
-                  offerCurrency={appState.offerCurrency}
-               />
+                    <SuppliersSection 
+                        suppliers={data.suppliers} 
+                        transport={data.transport}
+                        installation={data.installation}
+                        onChange={(val) => updateCalculationData({ suppliers: val })}
+                        onBatchChange={handleBatchUpdate}
+                        onOpenComparison={() => setAppState(prev => ({...prev, viewMode: ViewMode.COMPARISON }))}
+                        exchangeRate={appState.exchangeRate}
+                        offerCurrency={appState.offerCurrency}
+                        nameplateQty={data.nameplateQty}
+                        onNameplateChange={(qty) => updateCalculationData({ nameplateQty: qty })}
+                        onConfirm={triggerConfirm}
+                    />
+                    
+                    <TransportSection 
+                        transport={data.transport} 
+                        suppliers={data.suppliers}
+                        onChange={(val) => updateCalculationData({ transport: val })} 
+                        exchangeRate={appState.exchangeRate}
+                        offerCurrency={appState.offerCurrency}
+                    />
 
-               <OtherCostsSection 
-                  costs={data.otherCosts} 
-                  onChange={(val) => updateCalculationData({ otherCosts: val })} 
-                  exchangeRate={appState.exchangeRate}
-                  offerCurrency={appState.offerCurrency}
-               />
+                    <OtherCostsSection 
+                        costs={data.otherCosts} 
+                        onChange={(val) => updateCalculationData({ otherCosts: val })} 
+                        exchangeRate={appState.exchangeRate}
+                        offerCurrency={appState.offerCurrency}
+                    />
 
-               <InstallationSection 
-                  data={data.installation} 
-                  suppliers={data.suppliers}
-                  onChange={(val) => updateCalculationData({ installation: val })}
-                  exchangeRate={appState.exchangeRate}
-                  offerCurrency={appState.offerCurrency}
-               />
-               
-               {/* VARIANTS SECTION - Moved to Bottom (Only in Initial Mode) */}
-               <VariantsSection 
-                    data={data}
-                    onChange={(updated) => updateCalculationData(updated)}
-                    exchangeRate={appState.exchangeRate}
-                    offerCurrency={appState.offerCurrency}
-                    onConfirm={triggerConfirm}
-               />
+                    <InstallationSection 
+                        data={data.installation} 
+                        suppliers={data.suppliers}
+                        onChange={(val) => updateCalculationData({ installation: val })}
+                        exchangeRate={appState.exchangeRate}
+                        offerCurrency={appState.offerCurrency}
+                    />
+                    
+                    {/* VARIANTS SECTION - Moved to Bottom (Only in Initial Mode) */}
+                    <VariantsSection 
+                            data={data}
+                            onChange={(updated) => updateCalculationData(updated)}
+                            exchangeRate={appState.exchangeRate}
+                            offerCurrency={appState.offerCurrency}
+                            onConfirm={triggerConfirm}
+                    />
 
-               <SummarySection 
-                  appState={appState} 
-                  onUpdateState={(updates) => setAppState(prev => ({ ...prev, ...updates }))}
-                  data={data}
-               />
-             </>
-           )}
-        </div>
+                    <SummarySection 
+                        appState={appState} 
+                        onUpdateState={(updates) => setAppState(prev => ({ ...prev, ...updates }))}
+                        data={data}
+                    />
+                    </>
+                )}
+            </div>
+        )}
 
         {/* FULL SCREEN MODES */}
         {appState.viewMode === ViewMode.LOGISTICS && (
@@ -466,9 +469,9 @@ const App: React.FC = () => {
             </div>
         )}
 
-        {/* RIGHT COLUMN (Summary & Navigation) */}
+        {/* RIGHT COLUMN (Summary & Navigation) - Hidden on mobile/tablet (xl:block) */}
         {appState.viewMode === ViewMode.CALCULATOR && (
-            <div className="xl:col-span-3 space-y-6">
+            <div className="hidden xl:block xl:col-span-3 space-y-6 sticky top-0">
                 <SidePanel 
                     appState={appState} 
                     onUndo={handleUndo} 
@@ -480,6 +483,9 @@ const App: React.FC = () => {
         )}
 
       </main>
+
+      {/* Floating Summary - Visible ONLY on small screens (xl:hidden) */}
+      <FloatingSummary data={data} appState={appState} />
 
       {/* Modals & Overlays */}
       {showComparison && (

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { AppState, CalculationMode, Currency, CalculationData } from '../types';
 import { Package, Truck, Receipt, Wrench, Undo2, Redo2, EyeOff } from 'lucide-react';
@@ -98,7 +99,7 @@ export const SidePanel: React.FC<Props> = ({ appState, onUndo, onRedo, canUndo, 
   const currencyLabel = appState.offerCurrency;
 
   return (
-    <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 p-4 sticky top-20 transition-colors">
+    <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 p-4 transition-colors">
       <div className="flex justify-between items-center mb-4 border-b border-yellow-500 pb-2">
           <h3 className="text-zinc-800 dark:text-zinc-100 font-bold">Podsumowanie ({currencyLabel})</h3>
       </div>
