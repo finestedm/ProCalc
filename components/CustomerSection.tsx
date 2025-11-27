@@ -199,38 +199,40 @@ export const CustomerSection: React.FC<Props> = ({ data, onChange, readOnly }) =
             </div>
         </div>
         
-        {isOpen && (
-            <div className="p-6 border-t border-zinc-100 dark:border-zinc-700 grid grid-cols-1 md:grid-cols-3 gap-6">
-                {readOnly && (
-                    <div className="col-span-1 md:col-span-3 bg-yellow-50 text-yellow-800 text-sm p-3 rounded border border-yellow-200 flex items-center gap-2">
-                        <Lock size={16}/> Dane teleadresowe są dziedziczone z Kalkulacji Wstępnej.
-                    </div>
-                )}
-                <AddressForm
-                    title="Płatnik"
-                    value={data.payer}
-                    onChange={(val) => onChange('payer', val)}
-                    readOnly={readOnly}
-                />
-                <AddressForm
-                    title="Odbiorca"
-                    value={data.recipient}
-                    onChange={(val) => onChange('recipient', val)}
-                    onCopyFrom={() => handleCopy(data.payer, 'recipient')}
-                    copyLabel="Kopiuj z Płatnika"
-                    readOnly={readOnly}
-                    showContactFields={true}
-                />
-                <AddressForm
-                    title="Zleceniodawca"
-                    value={data.orderingParty}
-                    onChange={(val) => onChange('orderingParty', val)}
-                    onCopyFrom={() => handleCopy(data.payer, 'orderingParty')}
-                    copyLabel="Kopiuj z Płatnika"
-                    readOnly={readOnly}
-                />
+        <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+            <div className="overflow-hidden">
+                <div className="p-6 border-t border-zinc-100 dark:border-zinc-700 grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {readOnly && (
+                        <div className="col-span-1 md:col-span-3 bg-yellow-50 text-yellow-800 text-sm p-3 rounded border border-yellow-200 flex items-center gap-2">
+                            <Lock size={16}/> Dane teleadresowe są dziedziczone z Kalkulacji Wstępnej.
+                        </div>
+                    )}
+                    <AddressForm
+                        title="Płatnik"
+                        value={data.payer}
+                        onChange={(val) => onChange('payer', val)}
+                        readOnly={readOnly}
+                    />
+                    <AddressForm
+                        title="Odbiorca"
+                        value={data.recipient}
+                        onChange={(val) => onChange('recipient', val)}
+                        onCopyFrom={() => handleCopy(data.payer, 'recipient')}
+                        copyLabel="Kopiuj z Płatnika"
+                        readOnly={readOnly}
+                        showContactFields={true}
+                    />
+                    <AddressForm
+                        title="Zleceniodawca"
+                        value={data.orderingParty}
+                        onChange={(val) => onChange('orderingParty', val)}
+                        onCopyFrom={() => handleCopy(data.payer, 'orderingParty')}
+                        copyLabel="Kopiuj z Płatnika"
+                        readOnly={readOnly}
+                    />
+                </div>
             </div>
-        )}
+        </div>
     </div>
   );
 };

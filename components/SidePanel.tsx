@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { AppState, CalculationMode, Currency, CalculationData } from '../types';
 import { Package, Truck, Receipt, Wrench, Undo2, Redo2, EyeOff } from 'lucide-react';
@@ -36,7 +35,7 @@ const CostPieChart = ({
     };
 
     return (
-        <div className="flex flex-col items-center mt-4 mb-2">
+        <div className="flex flex-col items-center mt-4 mb-2 animate-scaleIn">
             <svg viewBox="-1 -1 2 2" className="w-32 h-32 transform -rotate-90">
                 {activeData.map((item, i) => {
                     const percent = item.value / total;

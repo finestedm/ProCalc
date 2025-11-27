@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { OtherCostItem, Currency } from '../types';
 import { Receipt, Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
@@ -68,56 +69,58 @@ export const OtherCostsSection: React.FC<Props> = ({ costs, onChange, exchangeRa
         </div>
       </div>
 
-      {isOpen && (
-        <div className="border-t border-zinc-100 dark:border-zinc-700">
-             <div className="flex justify-end p-2 bg-zinc-50 dark:bg-zinc-800/30 border-b dark:border-zinc-700">
-                 <button onClick={addCost} className="text-[10px] bg-zinc-200 dark:bg-zinc-700 hover:bg-yellow-400 hover:text-black dark:text-zinc-200 px-3 py-1 rounded flex items-center gap-1 transition-colors font-semibold">
-                    <Plus size={12} /> Dodaj Koszt
-                 </button>
-             </div>
+      <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+        <div className="overflow-hidden">
+            <div className="border-t border-zinc-100 dark:border-zinc-700">
+                <div className="flex justify-end p-2 bg-zinc-50 dark:bg-zinc-800/30 border-b dark:border-zinc-700">
+                    <button onClick={addCost} className="text-[10px] bg-zinc-200 dark:bg-zinc-700 hover:bg-yellow-400 hover:text-black dark:text-zinc-200 px-3 py-1 rounded flex items-center gap-1 transition-colors font-semibold">
+                        <Plus size={12} /> Dodaj Koszt
+                    </button>
+                </div>
 
-            <div className="overflow-x-auto min-h-[150px]">
-                <table className="w-full text-sm text-left border-collapse min-w-[600px]">
-                    <thead>
-                        <tr>
-                            <th className={`${headerClass} w-10 text-center`}>#</th>
-                            <th className={`${headerClass} text-left`}>Opis kosztu</th>
-                            <th className={`${headerClass} text-right w-40`}>Wartość</th>
-                            <th className={`${headerClass} w-32`}>Waluta</th>
-                            <th className={`${headerClass} w-10`}></th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white dark:bg-zinc-800">
-                        {costs.length === 0 && (
+                <div className="overflow-x-auto min-h-[150px]">
+                    <table className="w-full text-sm text-left border-collapse min-w-[600px]">
+                        <thead>
                             <tr>
-                                <td colSpan={5} className="p-8 text-center text-zinc-400 italic">Brak dodatkowych kosztów.</td>
+                                <th className={`${headerClass} w-10 text-center`}>#</th>
+                                <th className={`${headerClass} text-left`}>Opis kosztu</th>
+                                <th className={`${headerClass} text-right w-40`}>Wartość</th>
+                                <th className={`${headerClass} w-32`}>Waluta</th>
+                                <th className={`${headerClass} w-10`}></th>
                             </tr>
-                        )}
-                        {costs.map((cost, idx) => (
-                            <tr key={cost.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                                <td className={`${cellClass} text-center text-zinc-400`}>{idx + 1}</td>
-                                <td className={cellClass}>
-                                    <input type="text" placeholder="np. Hotel, Paliwo" className={textInputClass} value={cost.description} onChange={(e) => updateCost(idx, 'description', e.target.value)} />
-                                </td>
-                                <td className={cellClass}>
-                                    <input type="number" min="0" step="0.01" className={inputClass} value={cost.price} onChange={(e) => updateCost(idx, 'price', parseFloat(e.target.value) || 0)} />
-                                </td>
-                                <td className={cellClass}>
-                                    <select className={selectClass} value={cost.currency} onChange={(e) => updateCost(idx, 'currency', e.target.value)}>
-                                        <option value={Currency.PLN}>PLN</option>
-                                        <option value={Currency.EUR}>EUR</option>
-                                    </select>
-                                </td>
-                                <td className={`${cellClass} text-center`}>
-                                    <button onClick={() => removeCost(idx)} className="text-zinc-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="bg-white dark:bg-zinc-800">
+                            {costs.length === 0 && (
+                                <tr>
+                                    <td colSpan={5} className="p-8 text-center text-zinc-400 italic">Brak dodatkowych kosztów.</td>
+                                </tr>
+                            )}
+                            {costs.map((cost, idx) => (
+                                <tr key={cost.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                                    <td className={`${cellClass} text-center text-zinc-400`}>{idx + 1}</td>
+                                    <td className={cellClass}>
+                                        <input type="text" placeholder="np. Hotel, Paliwo" className={textInputClass} value={cost.description} onChange={(e) => updateCost(idx, 'description', e.target.value)} />
+                                    </td>
+                                    <td className={cellClass}>
+                                        <input type="number" min="0" step="0.01" className={inputClass} value={cost.price} onChange={(e) => updateCost(idx, 'price', parseFloat(e.target.value) || 0)} />
+                                    </td>
+                                    <td className={cellClass}>
+                                        <select className={selectClass} value={cost.currency} onChange={(e) => updateCost(idx, 'currency', e.target.value)}>
+                                            <option value={Currency.PLN}>PLN</option>
+                                            <option value={Currency.EUR}>EUR</option>
+                                        </select>
+                                    </td>
+                                    <td className={`${cellClass} text-center`}>
+                                        <button onClick={() => removeCost(idx)} className="text-zinc-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

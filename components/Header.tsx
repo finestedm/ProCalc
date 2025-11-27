@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { AppState, CalculationMode, ViewMode } from '../types';
-import { Calculator as CalcIcon, Scale, LayoutDashboard, Undo2, Redo2, Menu, NotebookPen, FileText } from 'lucide-react';
+import { Calculator as CalcIcon, Scale, LayoutDashboard, Undo2, Redo2, Menu, NotebookPen, FileText, HardDrive } from 'lucide-react';
 import { DropdownMenu } from './DropdownMenu';
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
     canUndo: boolean;
     canRedo: boolean;
     onShowComparison: () => void;
+    onShowProjectManager: () => void;
     menuItems: any[];
     projectInputRef: React.RefObject<HTMLInputElement>;
     handleImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -24,6 +26,7 @@ export const Header: React.FC<Props> = ({
     canUndo, 
     canRedo, 
     onShowComparison, 
+    onShowProjectManager,
     menuItems,
     projectInputRef,
     handleImport
@@ -111,6 +114,15 @@ export const Header: React.FC<Props> = ({
                             </button>
                         </div>
                     )}
+
+                    {/* Quick Access to Project Manager */}
+                    <button 
+                         onClick={onShowProjectManager}
+                         className="hidden sm:flex p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+                         title="Menedżer Projektów"
+                    >
+                         <HardDrive size={18} />
+                    </button>
 
                      {/* Comparison Button */}
                      {appState.viewMode === ViewMode.CALCULATOR && (

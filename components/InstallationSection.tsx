@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { InstallationData, CustomInstallationItem, Currency, Supplier, InstallationStage, LinkedSource } from '../types';
 import { Wrench, Plus, Trash2, ChevronUp, ChevronDown, Eye, EyeOff, Link, Search, X, Box, Package, Clock, Users, Combine, Info, RefreshCw, Settings, Truck, Edit2, Lock, Unlock, CheckSquare, Square, AlertCircle } from 'lucide-react';
@@ -365,298 +364,292 @@ export const InstallationSection: React.FC<Props> = ({ data, onChange, exchangeR
                </div>
 
                {/* STAGE CONTENT (COLLAPSIBLE) */}
-               {!isCollapsed && (
-                   <div className="p-4 animate-slideUp">
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            {/* Col 1: Suppliers Linking */}
-                            <div className="bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded border border-zinc-100 dark:border-zinc-700">
-                                <div className="text-xs font-bold text-zinc-500 mb-2 flex items-center gap-2">
-                                    <Combine size={14}/> Powiązani Dostawcy (ORM)
+               <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${isCollapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}>
+                   <div className="overflow-hidden">
+                        <div className="p-4">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                {/* Col 1: Suppliers Linking */}
+                                <div className="bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded border border-zinc-100 dark:border-zinc-700">
+                                    <div className="text-xs font-bold text-zinc-500 mb-2 flex items-center gap-2">
+                                        <Combine size={14}/> Powiązani Dostawcy (ORM)
+                                    </div>
+                                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                                        {suppliers.map(s => {
+                                            const isLinked = stage.linkedSupplierIds?.includes(s.id);
+                                            const linkedElsewhere = !isLinked && stages.some(os => os.linkedSupplierIds?.includes(s.id));
+                                            
+                                            return (
+                                                <button 
+                                                        key={s.id}
+                                                        onClick={() => toggleSupplierInStage(stage.id, s.id)}
+                                                        className={`w-full text-left px-2 py-1.5 rounded text-xs flex justify-between items-center border transition-colors ${
+                                                            isLinked 
+                                                            ? 'bg-blue-100 border-blue-200 text-blue-800 font-bold' 
+                                                            : linkedElsewhere 
+                                                                ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 border-transparent opacity-50' 
+                                                                : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-yellow-400'
+                                                        }`}
+                                                >
+                                                    <span className="truncate">{s.customTabName || s.name}</span>
+                                                    {isLinked && <CheckLink size={12}/>}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
-                                <div className="space-y-1 max-h-32 overflow-y-auto">
-                                    {suppliers.map(s => {
-                                        const isLinked = stage.linkedSupplierIds?.includes(s.id);
-                                        const linkedElsewhere = !isLinked && stages.some(os => os.linkedSupplierIds?.includes(s.id));
+
+                                {/* Col 2 & 3: Method & Details */}
+                                <div className="lg:col-span-2 space-y-4">
+                                    <div className="flex gap-2 mb-2">
+                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'PALLETS' })} className={`flex-1 py-1 text-xs font-bold rounded border transition-colors ${stage.calcMethod === 'PALLETS' ? 'bg-yellow-100 border-yellow-300 text-yellow-900' : 'bg-white dark:bg-zinc-700 border-zinc-200 dark:border-zinc-600'}`}>Miejsca Paletowe</button>
+                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'TIME' })} className={`flex-1 py-1 text-xs font-bold rounded border transition-colors ${stage.calcMethod === 'TIME' ? 'bg-blue-100 border-blue-300 text-blue-900' : 'bg-white dark:bg-zinc-700 border-zinc-200 dark:border-zinc-600'}`}>Roboczogodziny (ORM)</button>
+                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'BOTH' })} className={`flex-1 py-1 text-xs font-bold rounded border transition-colors ${stage.calcMethod === 'BOTH' ? 'bg-purple-100 border-purple-300 text-purple-900' : 'bg-white dark:bg-zinc-700 border-zinc-200 dark:border-zinc-600'}`}>Łączona (Palety + Czas)</button>
+                                    </div>
+
+                                    {(stage.calcMethod === 'PALLETS' || stage.calcMethod === 'BOTH') && (
+                                        <div className="grid grid-cols-3 gap-3 animate-fadeIn">
+                                            {stage.calcMethod === 'BOTH' && <div className="col-span-3 text-[10px] font-bold text-yellow-600 uppercase border-b border-yellow-100 mb-1">Część 1: Miejsca Paletowe</div>}
+                                            <div><label className="block text-[10px] font-bold text-zinc-500 uppercase">Ilość Miejsc</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.palletSpots} onChange={(e) => updateStage(stage.id, { palletSpots: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div><label className="block text-[10px] font-bold text-zinc-500 uppercase">Wydajność (szt/dzień)</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.palletSpotsPerDay} onChange={(e) => updateStage(stage.id, { palletSpotsPerDay: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div><label className="block text-[10px] font-bold text-zinc-500 uppercase">Cena / Miejsce</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.palletSpotPrice} onChange={(e) => updateStage(stage.id, { palletSpotPrice: parseFloat(e.target.value) || 0 })} /></div>
+                                        </div>
+                                    )}
+
+                                    {(stage.calcMethod === 'TIME' || stage.calcMethod === 'BOTH') && (
+                                        <div className="grid grid-cols-4 gap-3 animate-fadeIn">
+                                            {stage.calcMethod === 'BOTH' && <div className="col-span-4 text-[10px] font-bold text-blue-600 uppercase border-b border-blue-100 mb-1 mt-2">Część 2: Roboczogodziny</div>}
+                                            <div className="col-span-4 bg-blue-50 dark:bg-blue-900/20 p-2 rounded flex justify-between items-center text-xs text-blue-800 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
+                                                <span>ORM: <strong>{stageHours.toFixed(1)}h</strong></span>
+                                                <span>+ Manual: <input type="number" className="w-16 p-1 text-center border rounded bg-white dark:bg-zinc-800 ml-1" value={stage.manualLaborHours} onChange={(e) => updateStage(stage.id, { manualLaborHours: parseFloat(e.target.value) || 0 })} /> h</span>
+                                                <span>= <strong>{stageTotalHours.toFixed(1)}h</strong></span>
+                                            </div>
+                                            <div><label className="block text-[10px] font-bold text-zinc-500 uppercase">Osoby</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.installersCount} onChange={(e) => updateStage(stage.id, { installersCount: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div><label className="block text-[10px] font-bold text-zinc-500 uppercase">h/Dzień</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.workDayHours} onChange={(e) => updateStage(stage.id, { workDayHours: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div className="col-span-2"><label className="block text-[10px] font-bold text-zinc-500 uppercase">Stawka (osobodzień)</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.manDayRate} onChange={(e) => updateStage(stage.id, { manDayRate: parseFloat(e.target.value) || 0 })} /></div>
+                                        </div>
+                                    )}
+                                    
+                                    <div className="text-right text-xs text-zinc-500">Estymowany czas: <strong className="text-zinc-800 dark:text-zinc-200">{stageDuration} dni</strong></div>
+                                </div>
+                            </div>
+
+                            {/* --- EQUIPMENT FOR THIS STAGE --- */}
+                            <div className="mt-4 pt-4 border-t dark:border-zinc-700">
+                                    <h4 className="text-xs font-bold text-zinc-500 uppercase mb-2 flex items-center gap-2"><Truck size={12}/> Sprzęt dla etapu</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {/* Forklift */}
+                                        <div className="bg-zinc-50 dark:bg-zinc-900 p-2 rounded border border-zinc-100 dark:border-zinc-700">
+                                            <div className="flex justify-between mb-2"><span className="text-xs font-semibold">Wózek Widłowy</span></div>
+                                            <div className="grid grid-cols-3 gap-2 text-[10px] text-zinc-500 font-bold uppercase mb-1">
+                                                <div>Stawka dzienna</div>
+                                                <div>Ilość Dni</div>
+                                                <div>Koszt Transportu</div>
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <input type="number" placeholder="0.00" className="p-1 border rounded text-xs" value={stage.forkliftDailyRate} onChange={e => updateStage(stage.id, { forkliftDailyRate: parseFloat(e.target.value) || 0 })} />
+                                                <div className="relative">
+                                                    <input type="number" placeholder="0" className={`p-1 border rounded text-xs w-full ${stage.forkliftDays !== stageDuration ? 'border-orange-300' : ''}`} value={stage.forkliftDays} onChange={e => updateStage(stage.id, { forkliftDays: parseFloat(e.target.value) || 0 })} />
+                                                    {stage.forkliftDays !== stageDuration && stageDuration > 0 && (
+                                                        <button onClick={() => updateStage(stage.id, { forkliftDays: stageDuration })} className="absolute right-1 top-1 text-blue-500 hover:text-blue-700" title="Sync"><RefreshCw size={10}/></button>
+                                                    )}
+                                                </div>
+                                                <input type="number" placeholder="0.00" className="p-1 border rounded text-xs" value={stage.forkliftTransportPrice} onChange={e => updateStage(stage.id, { forkliftTransportPrice: parseFloat(e.target.value) || 0 })} />
+                                            </div>
+                                        </div>
+                                        {/* Scissor Lift */}
+                                        <div className="bg-zinc-50 dark:bg-zinc-900 p-2 rounded border border-zinc-100 dark:border-zinc-700">
+                                            <div className="flex justify-between mb-2"><span className="text-xs font-semibold">Podnośnik</span></div>
+                                            <div className="grid grid-cols-3 gap-2 text-[10px] text-zinc-500 font-bold uppercase mb-1">
+                                                <div>Stawka dzienna</div>
+                                                <div>Ilość Dni</div>
+                                                <div>Koszt Transportu</div>
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <input type="number" placeholder="0.00" className="p-1 border rounded text-xs" value={stage.scissorLiftDailyRate} onChange={e => updateStage(stage.id, { scissorLiftDailyRate: parseFloat(e.target.value) || 0 })} />
+                                                <div className="relative">
+                                                    <input type="number" placeholder="0" className={`p-1 border rounded text-xs w-full ${stage.scissorLiftDays !== stageDuration ? 'border-orange-300' : ''}`} value={stage.scissorLiftDays} onChange={e => updateStage(stage.id, { scissorLiftDays: parseFloat(e.target.value) || 0 })} />
+                                                    {stage.scissorLiftDays !== stageDuration && stageDuration > 0 && (
+                                                        <button onClick={() => updateStage(stage.id, { scissorLiftDays: stageDuration })} className="absolute right-1 top-1 text-blue-500 hover:text-blue-700" title="Sync"><RefreshCw size={10}/></button>
+                                                    )}
+                                                </div>
+                                                <input type="number" placeholder="0.00" className="p-1 border rounded text-xs" value={stage.scissorLiftTransportPrice} onChange={e => updateStage(stage.id, { scissorLiftTransportPrice: parseFloat(e.target.value) || 0 })} />
+                                            </div>
+                                        </div>
+                                    </div>
+                            </div>
+
+                            {/* --- CUSTOM ITEMS FOR THIS STAGE --- */}
+                            <div className="mt-4 pt-2 border-t dark:border-zinc-700">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h4 className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-2"><Settings size={12}/> Dodatki / Inne</h4>
+                                        <button onClick={addCustomItem} className="text-[10px] bg-zinc-100 hover:bg-zinc-200 px-2 py-0.5 rounded flex items-center gap-1"><Plus size={10}/> Dodaj</button>
+                                    </div>
+                                    
+                                    {stage.customItems.map((item, idx) => {
+                                        const linkedCount = item.linkedSources?.length || 0;
+                                        const isLinked = linkedCount > 0;
+                                        const isAuto = !!item.isAutoQuantity;
                                         
                                         return (
-                                            <button 
-                                                    key={s.id}
-                                                    onClick={() => toggleSupplierInStage(stage.id, s.id)}
-                                                    className={`w-full text-left px-2 py-1.5 rounded text-xs flex justify-between items-center border transition-colors ${
-                                                        isLinked 
-                                                        ? 'bg-blue-100 border-blue-200 text-blue-800 font-bold' 
-                                                        : linkedElsewhere 
-                                                            ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 border-transparent opacity-50' 
-                                                            : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-yellow-400'
-                                                    }`}
-                                            >
-                                                <span className="truncate">{s.customTabName || s.name}</span>
-                                                {isLinked && <CheckLink size={12}/>}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Col 2 & 3: Method & Details */}
-                            <div className="lg:col-span-2 space-y-4">
-                                <div className="flex gap-2 mb-2">
-                                    <button onClick={() => updateStage(stage.id, { calcMethod: 'PALLETS' })} className={`flex-1 py-1 text-xs font-bold rounded border transition-colors ${stage.calcMethod === 'PALLETS' ? 'bg-yellow-100 border-yellow-300 text-yellow-900' : 'bg-white dark:bg-zinc-700 border-zinc-200 dark:border-zinc-600'}`}>Miejsca Paletowe</button>
-                                    <button onClick={() => updateStage(stage.id, { calcMethod: 'TIME' })} className={`flex-1 py-1 text-xs font-bold rounded border transition-colors ${stage.calcMethod === 'TIME' ? 'bg-blue-100 border-blue-300 text-blue-900' : 'bg-white dark:bg-zinc-700 border-zinc-200 dark:border-zinc-600'}`}>Roboczogodziny (ORM)</button>
-                                    <button onClick={() => updateStage(stage.id, { calcMethod: 'BOTH' })} className={`flex-1 py-1 text-xs font-bold rounded border transition-colors ${stage.calcMethod === 'BOTH' ? 'bg-purple-100 border-purple-300 text-purple-900' : 'bg-white dark:bg-zinc-700 border-zinc-200 dark:border-zinc-600'}`}>Łączona (Palety + Czas)</button>
-                                </div>
-
-                                {(stage.calcMethod === 'PALLETS' || stage.calcMethod === 'BOTH') && (
-                                    <div className="grid grid-cols-3 gap-3 animate-fadeIn">
-                                        {stage.calcMethod === 'BOTH' && <div className="col-span-3 text-[10px] font-bold text-yellow-600 uppercase border-b border-yellow-100 mb-1">Część 1: Miejsca Paletowe</div>}
-                                        <div><label className="block text-[10px] font-bold text-zinc-500 uppercase">Ilość Miejsc</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.palletSpots} onChange={(e) => updateStage(stage.id, { palletSpots: parseFloat(e.target.value) || 0 })} /></div>
-                                        <div><label className="block text-[10px] font-bold text-zinc-500 uppercase">Wydajność (szt/dzień)</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.palletSpotsPerDay} onChange={(e) => updateStage(stage.id, { palletSpotsPerDay: parseFloat(e.target.value) || 0 })} /></div>
-                                        <div><label className="block text-[10px] font-bold text-zinc-500 uppercase">Cena / Miejsce</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.palletSpotPrice} onChange={(e) => updateStage(stage.id, { palletSpotPrice: parseFloat(e.target.value) || 0 })} /></div>
-                                    </div>
-                                )}
-
-                                {(stage.calcMethod === 'TIME' || stage.calcMethod === 'BOTH') && (
-                                    <div className="grid grid-cols-4 gap-3 animate-fadeIn">
-                                        {stage.calcMethod === 'BOTH' && <div className="col-span-4 text-[10px] font-bold text-blue-600 uppercase border-b border-blue-100 mb-1 mt-2">Część 2: Roboczogodziny</div>}
-                                        <div className="col-span-4 bg-blue-50 dark:bg-blue-900/20 p-2 rounded flex justify-between items-center text-xs text-blue-800 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
-                                            <span>ORM: <strong>{stageHours.toFixed(1)}h</strong></span>
-                                            <span>+ Manual: <input type="number" className="w-16 p-1 text-center border rounded bg-white dark:bg-zinc-800 ml-1" value={stage.manualLaborHours} onChange={(e) => updateStage(stage.id, { manualLaborHours: parseFloat(e.target.value) || 0 })} /> h</span>
-                                            <span>= <strong>{stageTotalHours.toFixed(1)}h</strong></span>
-                                        </div>
-                                        <div><label className="block text-[10px] font-bold text-zinc-500 uppercase">Osoby</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.installersCount} onChange={(e) => updateStage(stage.id, { installersCount: parseFloat(e.target.value) || 0 })} /></div>
-                                        <div><label className="block text-[10px] font-bold text-zinc-500 uppercase">h/Dzień</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.workDayHours} onChange={(e) => updateStage(stage.id, { workDayHours: parseFloat(e.target.value) || 0 })} /></div>
-                                        <div className="col-span-2"><label className="block text-[10px] font-bold text-zinc-500 uppercase">Stawka (osobodzień)</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.manDayRate} onChange={(e) => updateStage(stage.id, { manDayRate: parseFloat(e.target.value) || 0 })} /></div>
-                                    </div>
-                                )}
-                                
-                                <div className="text-right text-xs text-zinc-500">Estymowany czas: <strong className="text-zinc-800 dark:text-zinc-200">{stageDuration} dni</strong></div>
-                            </div>
-                        </div>
-
-                        {/* --- EQUIPMENT FOR THIS STAGE --- */}
-                        <div className="mt-4 pt-4 border-t dark:border-zinc-700">
-                                <h4 className="text-xs font-bold text-zinc-500 uppercase mb-2 flex items-center gap-2"><Truck size={12}/> Sprzęt dla etapu</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {/* Forklift */}
-                                    <div className="bg-zinc-50 dark:bg-zinc-900 p-2 rounded border border-zinc-100 dark:border-zinc-700">
-                                        <div className="flex justify-between mb-2"><span className="text-xs font-semibold">Wózek Widłowy</span></div>
-                                        <div className="grid grid-cols-3 gap-2 text-[10px] text-zinc-500 font-bold uppercase mb-1">
-                                            <div>Stawka dzienna</div>
-                                            <div>Ilość Dni</div>
-                                            <div>Koszt Transportu</div>
-                                        </div>
-                                        <div className="grid grid-cols-3 gap-2">
-                                            <input type="number" placeholder="0.00" className="p-1 border rounded text-xs" value={stage.forkliftDailyRate} onChange={e => updateStage(stage.id, { forkliftDailyRate: parseFloat(e.target.value) || 0 })} />
-                                            <div className="relative">
-                                                <input type="number" placeholder="0" className={`p-1 border rounded text-xs w-full ${stage.forkliftDays !== stageDuration ? 'border-orange-300' : ''}`} value={stage.forkliftDays} onChange={e => updateStage(stage.id, { forkliftDays: parseFloat(e.target.value) || 0 })} />
-                                                {stage.forkliftDays !== stageDuration && stageDuration > 0 && (
-                                                    <button onClick={() => updateStage(stage.id, { forkliftDays: stageDuration })} className="absolute right-1 top-1 text-blue-500 hover:text-blue-700" title="Sync"><RefreshCw size={10}/></button>
+                                        <div key={item.id} className={`flex gap-2 items-center mb-1 relative ${item.isExcluded ? 'opacity-50' : ''}`}>
+                                            <div className="relative flex-1">
+                                                <input 
+                                                    type="text" 
+                                                    className={`w-full p-1 border rounded text-xs ${isLinked ? 'pl-6' : ''}`}
+                                                    value={item.description} 
+                                                    onChange={e => updateCustomItem(idx, 'description', e.target.value)} 
+                                                    placeholder="Opis..." 
+                                                />
+                                                {isLinked && (
+                                                    <button 
+                                                        onClick={() => handleUnlinkAll(idx)}
+                                                        className="absolute left-1 top-1/2 -translate-y-1/2 text-blue-500 hover:text-red-500"
+                                                        title={`Połączono z ${linkedCount} elementami. Kliknij aby odłączyć.`}
+                                                    >
+                                                        <Link size={12} />
+                                                    </button>
                                                 )}
                                             </div>
-                                            <input type="number" placeholder="0.00" className="p-1 border rounded text-xs" value={stage.forkliftTransportPrice} onChange={e => updateStage(stage.id, { forkliftTransportPrice: parseFloat(e.target.value) || 0 })} />
-                                        </div>
-                                    </div>
-                                    {/* Scissor Lift */}
-                                    <div className="bg-zinc-50 dark:bg-zinc-900 p-2 rounded border border-zinc-100 dark:border-zinc-700">
-                                        <div className="flex justify-between mb-2"><span className="text-xs font-semibold">Podnośnik</span></div>
-                                        <div className="grid grid-cols-3 gap-2 text-[10px] text-zinc-500 font-bold uppercase mb-1">
-                                            <div>Stawka dzienna</div>
-                                            <div>Ilość Dni</div>
-                                            <div>Koszt Transportu</div>
-                                        </div>
-                                        <div className="grid grid-cols-3 gap-2">
-                                            <input type="number" placeholder="0.00" className="p-1 border rounded text-xs" value={stage.scissorLiftDailyRate} onChange={e => updateStage(stage.id, { scissorLiftDailyRate: parseFloat(e.target.value) || 0 })} />
-                                            <div className="relative">
-                                                <input type="number" placeholder="0" className={`p-1 border rounded text-xs w-full ${stage.scissorLiftDays !== stageDuration ? 'border-orange-300' : ''}`} value={stage.scissorLiftDays} onChange={e => updateStage(stage.id, { scissorLiftDays: parseFloat(e.target.value) || 0 })} />
-                                                {stage.scissorLiftDays !== stageDuration && stageDuration > 0 && (
-                                                    <button onClick={() => updateStage(stage.id, { scissorLiftDays: stageDuration })} className="absolute right-1 top-1 text-blue-500 hover:text-blue-700" title="Sync"><RefreshCw size={10}/></button>
-                                                )}
-                                            </div>
-                                            <input type="number" placeholder="0.00" className="p-1 border rounded text-xs" value={stage.scissorLiftTransportPrice} onChange={e => updateStage(stage.id, { scissorLiftTransportPrice: parseFloat(e.target.value) || 0 })} />
-                                        </div>
-                                    </div>
-                                </div>
-                        </div>
-
-                        {/* --- CUSTOM ITEMS FOR THIS STAGE --- */}
-                        <div className="mt-4 pt-2 border-t dark:border-zinc-700">
-                                <div className="flex justify-between items-center mb-2">
-                                    <h4 className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-2"><Settings size={12}/> Dodatki / Inne</h4>
-                                    <button onClick={addCustomItem} className="text-[10px] bg-zinc-100 hover:bg-zinc-200 px-2 py-0.5 rounded flex items-center gap-1"><Plus size={10}/> Dodaj</button>
-                                </div>
-                                
-                                {stage.customItems.map((item, idx) => {
-                                    const linkedCount = item.linkedSources?.length || 0;
-                                    const isLinked = linkedCount > 0;
-                                    const isAuto = !!item.isAutoQuantity;
-                                    
-                                    return (
-                                    <div key={item.id} className={`flex gap-2 items-center mb-1 relative ${item.isExcluded ? 'opacity-50' : ''}`}>
-                                        <div className="relative flex-1">
-                                            <input 
-                                                type="text" 
-                                                className={`w-full p-1 border rounded text-xs ${isLinked ? 'pl-6' : ''}`}
-                                                value={item.description} 
-                                                onChange={e => updateCustomItem(idx, 'description', e.target.value)} 
-                                                placeholder="Opis..." 
-                                            />
-                                            {isLinked && (
-                                                <button 
-                                                    onClick={() => handleUnlinkAll(idx)}
-                                                    className="absolute left-1 top-1/2 -translate-y-1/2 text-blue-500 hover:text-red-500"
-                                                    title={`Połączono z ${linkedCount} elementami. Kliknij aby odłączyć.`}
-                                                >
-                                                    <Link size={12} />
-                                                </button>
-                                            )}
-                                        </div>
-                                        
-                                        {/* Quantity Input with Link Logic */}
-                                        <div className="relative w-20">
-                                             <input 
-                                                type="number" 
-                                                className={`w-full p-1 border rounded text-xs text-center ${isAuto ? 'bg-blue-50 text-blue-800 font-bold' : ''}`} 
-                                                value={item.quantity} 
-                                                onChange={e => updateCustomItem(idx, 'quantity', parseFloat(e.target.value) || 0)} 
-                                            />
-                                            {isAuto && (
-                                                 <Lock size={8} className="absolute right-1 top-1 text-blue-400" />
-                                            )}
-                                            {!isAuto && isLinked && (
-                                                 <button 
-                                                    onClick={() => handleSyncItem(idx)}
-                                                    className="absolute right-1 top-1 text-orange-400 hover:text-blue-600"
-                                                    title="Przywróć synchronizację ilości (Suma zaznaczonych)"
-                                                 >
-                                                     <RefreshCw size={8} />
-                                                 </button>
-                                            )}
-                                        </div>
-
-                                        <input type="number" className="w-20 p-1 border rounded text-xs text-right" value={item.unitPrice} onChange={e => updateCustomItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)} />
-                                        
-                                        {/* Link Button */}
-                                        <div className="relative">
-                                            <button 
-                                                onClick={() => setLinkMenuOpen({ stageId: stage.id, itemIdx: idx })}
-                                                className={`p-1 rounded text-zinc-400 hover:text-blue-500 ${linkMenuOpen?.stageId === stage.id && linkMenuOpen.itemIdx === idx ? 'bg-blue-100 text-blue-600' : ''}`}
-                                                title="Wybierz elementy/grupy do zsumowania"
-                                            >
-                                                <Link size={14}/>
-                                            </button>
                                             
-                                            {/* Link Menu Dropdown */}
-                                            {linkMenuOpen?.stageId === stage.id && linkMenuOpen.itemIdx === idx && (
-                                                <div ref={linkMenuRef} className="absolute right-0 top-full mt-1 bg-white dark:bg-zinc-800 border dark:border-zinc-600 shadow-xl rounded z-50 w-80 max-h-80 overflow-y-auto flex flex-col">
-                                                     <div className="p-2 border-b dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800 z-10">
-                                                          <div className="relative">
-                                                              <Search size={12} className="absolute left-2 top-2 text-zinc-400"/>
-                                                              <input 
-                                                                  type="text"
-                                                                  autoFocus
-                                                                  className="w-full pl-7 p-1 text-xs border rounded bg-zinc-50 dark:bg-zinc-900 focus:border-blue-400 outline-none"
-                                                                  placeholder="Szukaj..."
-                                                                  value={linkSearchTerm}
-                                                                  onChange={(e) => setLinkSearchTerm(e.target.value)}
-                                                              />
-                                                          </div>
-                                                     </div>
-                                                     
-                                                     <div className="overflow-y-auto">
-                                                        {filteredLinkOptions.map(opt => {
-                                                            const isSelectedInCurrent = item.linkedSources?.some(s => s.id === opt.id && s.type === opt.type);
-                                                            
-                                                            // Global Validation Logic
-                                                            let isDisabled = false;
-                                                            let disabledReason = '';
-                                                            
-                                                            // Logic:
-                                                            // 1. Group is disabled if:
-                                                            //    - Group ID is already used as ORM in ANY stage or as LINK elsewhere.
-                                                            //    - ANY item of this group is used individually elsewhere.
-                                                            // 2. Item is disabled if:
-                                                            //    - Item ID is already used.
-                                                            //    - Parent Group ID is used elsewhere.
-                                                            
-                                                            if (opt.type === 'GROUP') {
-                                                                if (usedGroups.has(opt.id) && !isSelectedInCurrent) {
-                                                                    isDisabled = true;
-                                                                    disabledReason = 'Grupa/Dostawca już wykorzystany (Montaż lub ORM)';
+                                            {/* Quantity Input with Link Logic */}
+                                            <div className="relative w-20">
+                                                <input 
+                                                    type="number" 
+                                                    className={`w-full p-1 border rounded text-xs text-center ${isAuto ? 'bg-blue-50 text-blue-800 font-bold' : ''}`} 
+                                                    value={item.quantity} 
+                                                    onChange={e => updateCustomItem(idx, 'quantity', parseFloat(e.target.value) || 0)} 
+                                                />
+                                                {isAuto && (
+                                                    <Lock size={8} className="absolute right-1 top-1 text-blue-400" />
+                                                )}
+                                                {!isAuto && isLinked && (
+                                                    <button 
+                                                        onClick={() => handleSyncItem(idx)}
+                                                        className="absolute right-1 top-1 text-orange-400 hover:text-blue-600"
+                                                        title="Przywróć synchronizację ilości (Suma zaznaczonych)"
+                                                    >
+                                                        <RefreshCw size={8} />
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <input type="number" className="w-20 p-1 border rounded text-xs text-right" value={item.unitPrice} onChange={e => updateCustomItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)} />
+                                            
+                                            {/* Link Button */}
+                                            <div className="relative">
+                                                <button 
+                                                    onClick={() => setLinkMenuOpen({ stageId: stage.id, itemIdx: idx })}
+                                                    className={`p-1 rounded text-zinc-400 hover:text-blue-500 ${linkMenuOpen?.stageId === stage.id && linkMenuOpen.itemIdx === idx ? 'bg-blue-100 text-blue-600' : ''}`}
+                                                    title="Wybierz elementy/grupy do zsumowania"
+                                                >
+                                                    <Link size={14}/>
+                                                </button>
+                                                
+                                                {/* Link Menu Dropdown */}
+                                                {linkMenuOpen?.stageId === stage.id && linkMenuOpen.itemIdx === idx && (
+                                                    <div ref={linkMenuRef} className="absolute right-0 top-full mt-1 bg-white dark:bg-zinc-800 border dark:border-zinc-600 shadow-xl rounded z-50 w-80 max-h-80 overflow-y-auto flex flex-col">
+                                                        <div className="p-2 border-b dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800 z-10">
+                                                            <div className="relative">
+                                                                <Search size={12} className="absolute left-2 top-2 text-zinc-400"/>
+                                                                <input 
+                                                                    type="text"
+                                                                    autoFocus
+                                                                    className="w-full pl-7 p-1 text-xs border rounded bg-zinc-50 dark:bg-zinc-900 focus:border-blue-400 outline-none"
+                                                                    placeholder="Szukaj..."
+                                                                    value={linkSearchTerm}
+                                                                    onChange={(e) => setLinkSearchTerm(e.target.value)}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <div className="overflow-y-auto">
+                                                            {filteredLinkOptions.map(opt => {
+                                                                const isSelectedInCurrent = item.linkedSources?.some(s => s.id === opt.id && s.type === opt.type);
+                                                                
+                                                                // Global Validation Logic
+                                                                let isDisabled = false;
+                                                                let disabledReason = '';
+                                                                
+                                                                if (opt.type === 'GROUP') {
+                                                                    if (usedGroups.has(opt.id) && !isSelectedInCurrent) {
+                                                                        isDisabled = true;
+                                                                        disabledReason = 'Grupa/Dostawca już wykorzystany (Montaż lub ORM)';
+                                                                    } else {
+                                                                        // Check if any child item is used
+                                                                        const supplier = suppliers.find(s => s.id === opt.id);
+                                                                        if (supplier && supplier.items.some(i => usedItems.has(i.id))) {
+                                                                            isDisabled = true;
+                                                                            disabledReason = 'Część elementów z tej grupy jest już wykorzystana';
+                                                                        }
+                                                                    }
                                                                 } else {
-                                                                    // Check if any child item is used
-                                                                    const supplier = suppliers.find(s => s.id === opt.id);
-                                                                    if (supplier && supplier.items.some(i => usedItems.has(i.id))) {
-                                                                         isDisabled = true;
-                                                                         disabledReason = 'Część elementów z tej grupy jest już wykorzystana';
+                                                                    // ITEM
+                                                                    if (usedItems.has(opt.id) && !isSelectedInCurrent) {
+                                                                        isDisabled = true;
+                                                                        disabledReason = 'Element już wykorzystany';
+                                                                    } else if (usedGroups.has(opt.supplierId)) {
+                                                                        isDisabled = true;
+                                                                        disabledReason = 'Cała grupa (Dostawca) jest już wykorzystana';
                                                                     }
                                                                 }
-                                                            } else {
-                                                                // ITEM
-                                                                if (usedItems.has(opt.id) && !isSelectedInCurrent) {
-                                                                    isDisabled = true;
-                                                                    disabledReason = 'Element już wykorzystany';
-                                                                } else if (usedGroups.has(opt.supplierId)) {
-                                                                    isDisabled = true;
-                                                                     disabledReason = 'Cała grupa (Dostawca) jest już wykorzystana';
-                                                                }
-                                                            }
-                                                            
-                                                            // Can always deselect self
-                                                            if (isSelectedInCurrent) isDisabled = false;
+                                                                
+                                                                // Can always deselect self
+                                                                if (isSelectedInCurrent) isDisabled = false;
 
-                                                            return (
-                                                                <button
-                                                                    key={`${opt.type}-${opt.id}`}
-                                                                    className={`w-full text-left p-2 border-b last:border-0 text-xs flex justify-between items-center group transition-colors relative
-                                                                        ${isSelectedInCurrent ? 'bg-blue-50 dark:bg-blue-900/20' : ''}
-                                                                        ${isDisabled ? 'bg-zinc-50 dark:bg-zinc-800/80 cursor-not-allowed' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700'}
-                                                                    `}
-                                                                    onClick={() => !isDisabled && toggleLinkItem(idx, opt)}
-                                                                    disabled={isDisabled}
-                                                                    title={disabledReason}
-                                                                >
-                                                                    <div className={`flex items-center gap-2 overflow-hidden ${isDisabled ? 'opacity-50' : ''}`}>
-                                                                        <div className={`w-3 h-3 border rounded flex items-center justify-center shrink-0 ${isSelectedInCurrent ? 'bg-blue-500 border-blue-500' : 'border-zinc-300'}`}>
-                                                                            {isSelectedInCurrent && <CheckSquare size={10} className="text-white"/>}
+                                                                return (
+                                                                    <button
+                                                                        key={`${opt.type}-${opt.id}`}
+                                                                        className={`w-full text-left p-2 border-b last:border-0 text-xs flex justify-between items-center group transition-colors relative
+                                                                            ${isSelectedInCurrent ? 'bg-blue-50 dark:bg-blue-900/20' : ''}
+                                                                            ${isDisabled ? 'bg-zinc-50 dark:bg-zinc-800/80 cursor-not-allowed' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700'}
+                                                                        `}
+                                                                        onClick={() => !isDisabled && toggleLinkItem(idx, opt)}
+                                                                        disabled={isDisabled}
+                                                                        title={disabledReason}
+                                                                    >
+                                                                        <div className={`flex items-center gap-2 overflow-hidden ${isDisabled ? 'opacity-50' : ''}`}>
+                                                                            <div className={`w-3 h-3 border rounded flex items-center justify-center shrink-0 ${isSelectedInCurrent ? 'bg-blue-500 border-blue-500' : 'border-zinc-300'}`}>
+                                                                                {isSelectedInCurrent && <CheckSquare size={10} className="text-white"/>}
+                                                                            </div>
+                                                                            <div className="truncate">
+                                                                                <div className="truncate font-medium text-zinc-700 dark:text-zinc-200">{opt.label}</div>
+                                                                                {opt.subLabel && <div className="truncate text-[10px] text-zinc-400">{opt.subLabel}</div>}
+                                                                            </div>
                                                                         </div>
-                                                                        <div className="truncate">
-                                                                            <div className="truncate font-medium text-zinc-700 dark:text-zinc-200">{opt.label}</div>
-                                                                            {opt.subLabel && <div className="truncate text-[10px] text-zinc-400">{opt.subLabel}</div>}
+                                                                        <div className="flex items-center gap-2">
+                                                                            {isDisabled && <AlertCircle size={12} className="text-red-300"/>}
+                                                                            <div className={`bg-zinc-100 text-zinc-600 px-1.5 rounded font-mono text-[10px] shrink-0 ml-2 ${isDisabled ? 'opacity-50' : 'group-hover:bg-blue-100 group-hover:text-blue-700'}`}>
+                                                                                {opt.qty}
+                                                                            </div>
                                                                         </div>
-                                                                    </div>
-                                                                    <div className="flex items-center gap-2">
-                                                                        {isDisabled && <AlertCircle size={12} className="text-red-300"/>}
-                                                                        <div className={`bg-zinc-100 text-zinc-600 px-1.5 rounded font-mono text-[10px] shrink-0 ml-2 ${isDisabled ? 'opacity-50' : 'group-hover:bg-blue-100 group-hover:text-blue-700'}`}>
-                                                                            {opt.qty}
-                                                                        </div>
-                                                                    </div>
-                                                                </button>
-                                                            );
-                                                        })}
-                                                        {filteredLinkOptions.length === 0 && (
-                                                            <div className="p-4 text-center text-xs text-zinc-400 italic">Brak wyników.</div>
-                                                        )}
-                                                     </div>
-                                                     <div className="p-2 border-t dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-right">
-                                                         <button 
-                                                            onClick={() => setLinkMenuOpen(null)}
-                                                            className="text-xs bg-blue-600 text-white px-3 py-1 rounded font-bold hover:bg-blue-700"
-                                                         >
-                                                             Gotowe
-                                                         </button>
-                                                     </div>
-                                                </div>
-                                            )}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                            {filteredLinkOptions.length === 0 && (
+                                                                <div className="p-4 text-center text-xs text-zinc-400 italic">Brak wyników.</div>
+                                                            )}
+                                                        </div>
+                                                        <div className="p-2 border-t dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-right">
+                                                            <button 
+                                                                onClick={() => setLinkMenuOpen(null)}
+                                                                className="text-xs bg-blue-600 text-white px-3 py-1 rounded font-bold hover:bg-blue-700"
+                                                            >
+                                                                Gotowe
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <button onClick={() => updateCustomItem(idx, 'isExcluded', !item.isExcluded)} className="text-zinc-400 hover:text-zinc-600">{item.isExcluded ? <EyeOff size={12}/> : <Eye size={12}/>}</button>
+                                            <button onClick={() => removeCustomItem(idx)} className="text-zinc-300 hover:text-red-500"><Trash2 size={12}/></button>
                                         </div>
-
-                                        <button onClick={() => updateCustomItem(idx, 'isExcluded', !item.isExcluded)} className="text-zinc-400 hover:text-zinc-600">{item.isExcluded ? <EyeOff size={12}/> : <Eye size={12}/>}</button>
-                                        <button onClick={() => removeCustomItem(idx)} className="text-zinc-300 hover:text-red-500"><Trash2 size={12}/></button>
-                                    </div>
-                                    );
-                                })}
+                                        );
+                                    })}
+                            </div>
                         </div>
                    </div>
-               )}
+               </div>
           </div>
       );
   };

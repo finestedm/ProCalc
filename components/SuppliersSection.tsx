@@ -11,8 +11,8 @@ import { convert } from '../services/calculationService';
 
 interface Props {
   suppliers: Supplier[];
-  transport: TransportItem[]; // Added for validation
-  installation: InstallationData; // Added for validation
+  transport: TransportItem[];
+  installation: InstallationData;
   onChange: (suppliers: Supplier[]) => void;
   onBatchChange?: (updates: { suppliers: Supplier[], transport: TransportItem[] }) => void;
   onOpenComparison: () => void;
@@ -377,6 +377,12 @@ export const SuppliersSection: React.FC<Props> = ({ suppliers, transport, instal
       { label: 'Usuń dostawcę', icon: <Trash2 size={16} />, onClick: () => removeSupplier(activeTab), danger: true }
   ];
 
+  // --- Add Button Dropdown Items ---
+  const addButtonMenuItems = [
+      { label: 'Importuj ORM (Excel)', icon: <FileSpreadsheet size={16} className="text-green-600" />, onClick: () => newOrmInputRef.current?.click() },
+      { label: 'Inteligentny Import (PDF)', icon: <Sparkles size={16} className="text-purple-500" />, onClick: () => pdfInputRef.current?.click() }
+  ];
+
   const handleAddNotes = () => {
       // Just ensure notes string is initialized so the textarea renders
       updateSupplier(activeTab, 'notes', ' ');
@@ -412,267 +418,297 @@ export const SuppliersSection: React.FC<Props> = ({ suppliers, transport, instal
         </div>
       </div>
 
-      {isOpen && (
-        <div className="border-t border-zinc-100 dark:border-zinc-700">
-            {/* Top Padded Section for Tabs and Header Controls */}
-            <div className="p-4 bg-zinc-50/50 dark:bg-zinc-800/30">
-                {/* TABS */}
-                <div className="flex overflow-x-auto gap-2 mb-4 border-b dark:border-zinc-700 pb-1 items-end">
-                    {suppliers.map((s, idx) => (
-                        <button
-                            key={s.id}
-                            onClick={() => setActiveTab(idx)}
-                            className={`px-4 py-2 rounded-t-lg text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
-                                activeTab === idx
-                                ? `bg-white dark:bg-zinc-700 border-yellow-500 text-zinc-900 dark:text-white shadow-sm ${s.isIncluded === false ? 'opacity-50' : ''}`
-                                : `bg-transparent border-transparent text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 ${s.isIncluded === false ? 'opacity-40' : ''}`
-                            } ${s.status === SupplierStatus.ORDERED ? 'border-t-4 border-t-green-400' : 'border-t-4 border-t-orange-400'}`}
+      <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+        <div className="overflow-hidden">
+            <div className="border-t border-zinc-100 dark:border-zinc-700">
+                {/* Top Padded Section for Tabs and Header Controls */}
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-800">
+                    
+                    {/* NEW TAB NAVIGATION LAYOUT */}
+                    <div className="flex items-end border-b border-zinc-300 dark:border-zinc-600">
+                        {/* 1. Scrollable Tabs Area */}
+                        <div 
+                            className="flex-1 flex overflow-x-auto items-end gap-1 mb-0 [&::-webkit-scrollbar]:hidden" 
+                            style={{ scrollbarWidth: 'none' }}
                         >
-                            {/* Display Custom Tab Name or Default Name */}
-                            {s.customTabName || s.name}
-                        </button>
-                    ))}
-
-                    {/* Dedicated Nameplate Tab */}
-                    <button
-                        onClick={() => setActiveTab(NAMEPLATE_TAB_INDEX)}
-                        className={`px-4 py-2 rounded-t-lg text-sm font-medium whitespace-nowrap transition-colors border-b-2 flex items-center gap-2 ${
-                            isNameplateTab
-                            ? 'bg-white dark:bg-zinc-700 border-yellow-500 text-zinc-900 dark:text-white shadow-sm'
-                            : 'bg-transparent border-transparent text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700'
-                        }`}
-                    >
-                        <Tag size={14} className={isNameplateTab ? "text-yellow-600" : ""} /> Tabliczki
-                    </button>
-
-                    <div className="flex items-center gap-1 border-l pl-2 ml-1 border-zinc-300 dark:border-zinc-600">
-                         {/* Import New ORM Button */}
-                        <button
-                            onClick={() => newOrmInputRef.current?.click()}
-                            className="px-3 py-2 rounded-t-lg text-sm font-medium whitespace-nowrap transition-colors border-b-2 border-transparent bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 flex items-center justify-center gap-1"
-                            title="Importuj jako nowy dostawca ORM"
-                        >
-                            <FileSpreadsheet size={16} /> <span className="hidden sm:inline text-xs ml-1">Importuj listę materiałową dostawcy ORM</span>
-                        </button>
-
-                        {/* Add Supplier Tab Button */}
-                        <button
-                            onClick={addSupplier}
-                            className="px-3 py-2 rounded-t-lg text-sm font-medium whitespace-nowrap transition-colors border-b-2 border-transparent bg-transparent text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-yellow-600 flex items-center justify-center"
-                            title="Dodaj pustego Dostawcę"
-                        >
-                            <Plus size={18} />
-                        </button>
-                    </div>
-                </div>
-
-                {/* --- SUPPLIER HEADER CONTROLS --- */}
-                {!isNameplateTab && currentSupplier && (
-                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4 mb-2">
-                        {/* Tab Name Editing */}
-                        <div className="col-span-1 md:col-span-2">
-                             <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1 flex items-center gap-1">
-                                <Edit3 size={10} /> Nazwa Zakładki
-                             </label>
-                             <input
-                                type="text"
-                                className="w-full p-2 border rounded text-sm focus:border-yellow-400 outline-none bg-white dark:bg-zinc-800 font-bold"
-                                value={currentSupplier.customTabName || currentSupplier.name}
-                                onChange={(e) => updateSupplier(activeTab, 'customTabName', e.target.value)}
-                                placeholder="Nazwa widoczna na zakładce"
-                             />
-                        </div>
-
-                        {/* Supplier Name (Official) */}
-                        <div className="col-span-1 md:col-span-2">
-                            <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1">Dostawca (w systemie)</label>
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    className={`w-full p-2 border rounded text-sm focus:border-yellow-400 outline-none ${!isCurrentIncluded ? 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800' : 'bg-white dark:bg-zinc-800'}`}
-                                    value={currentSupplier.name}
-                                    onChange={(e) => updateSupplier(activeTab, 'name', e.target.value)}
-                                    disabled={!isCurrentIncluded}
-                                    placeholder="Oficjalna nazwa dostawcy"
-                                />
-                                <button 
-                                    onClick={() => updateSupplier(activeTab, 'isIncluded', !isCurrentIncluded)}
-                                    className={`p-2 rounded border flex-shrink-0 transition-colors ${
-                                        isCurrentIncluded 
-                                        ? 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-red-500' 
-                                        : 'bg-red-50 text-red-600'
-                                    }`}
-                                    style={{ pointerEvents: 'auto' }} 
-                                >
-                                    {isCurrentIncluded ? <Eye size={18}/> : <EyeOff size={18}/>}
-                                </button>
-                                <button
-                                    onClick={() => setDetailViewIndex(activeTab)}
-                                    className="p-2 rounded border bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-yellow-600 hover:border-yellow-400 transition-colors"
-                                    title="Rozszerz / Edytuj szczegóły"
-                                >
-                                    <Maximize2 size={18} />
-                                </button>
-                                <DropdownMenu items={supplierMenuItems} />
-                            </div>
-                            {currentSupplier.isOrm && <span className="text-[10px] text-green-600 dark:text-green-400 font-bold ml-1">ORM</span>}
-                        </div>
-                        
-                        <div className={`contents transition-opacity duration-200 ${isCurrentIncluded ? 'opacity-100' : 'opacity-30 grayscale pointer-events-none select-none'}`}>
-                            {/* Currency Selector */}
-                            <div>
-                                <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1">Waluta</label>
-                                <div className="relative">
-                                    <Euro className="absolute left-2 top-2.5 text-zinc-400" size={14}/>
-                                    <select
-                                        className="w-full pl-8 p-2 border rounded text-sm outline-none focus:border-yellow-400 bg-white dark:bg-zinc-800 disabled:bg-zinc-100 dark:disabled:bg-zinc-700"
-                                        value={currentSupplier.currency}
-                                        onChange={(e) => updateSupplier(activeTab, 'currency', e.target.value)}
-                                        disabled={currentSupplier.isOrm}
+                            {suppliers.map((s, idx) => {
+                                const isActive = activeTab === idx;
+                                return (
+                                    <button
+                                        key={s.id}
+                                        onClick={() => setActiveTab(idx)}
+                                        className={`relative px-4 py-2 rounded-t-lg text-sm font-bold transition-all border-x border-t whitespace-nowrap min-w-[120px] max-w-[200px] truncate
+                                            ${isActive 
+                                                ? 'bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white border-zinc-300 dark:border-zinc-600 border-b-zinc-50 dark:border-b-zinc-800 z-10 mb-[-1px] pb-2.5' 
+                                                : 'bg-zinc-100 dark:bg-zinc-900/50 text-zinc-500 dark:text-zinc-400 border-transparent border-b-zinc-300 dark:border-b-zinc-600 hover:bg-zinc-200 dark:hover:bg-zinc-800'
+                                            }
+                                            ${s.isIncluded === false ? 'opacity-50' : ''}
+                                        `}
                                     >
-                                        <option value={Currency.PLN}>PLN</option>
-                                        <option value={Currency.EUR}>EUR</option>
-                                    </select>
+                                        {/* Color Stripe indicator */}
+                                        <div className={`absolute top-0 left-0 right-0 h-[3px] rounded-t-lg ${s.isOrm ? 'bg-green-500' : 'bg-yellow-500'} ${!isActive ? 'opacity-50' : ''}`}></div>
+                                        <span className="relative z-10">{s.customTabName || s.name}</span>
+                                    </button>
+                                );
+                            })}
+
+                            {/* Dedicated Nameplate Tab */}
+                            <button
+                                onClick={() => setActiveTab(NAMEPLATE_TAB_INDEX)}
+                                className={`relative px-4 py-2 rounded-t-lg text-sm font-bold transition-all border-x border-t flex items-center gap-2 whitespace-nowrap
+                                    ${isNameplateTab 
+                                        ? 'bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white border-zinc-300 dark:border-zinc-600 border-b-zinc-50 dark:border-b-zinc-800 z-10 mb-[-1px] pb-2.5' 
+                                        : 'bg-zinc-100 dark:bg-zinc-900/50 text-zinc-500 dark:text-zinc-400 border-transparent border-b-zinc-300 dark:border-b-zinc-600 hover:bg-zinc-200 dark:hover:bg-zinc-800'
+                                    }
+                                `}
+                            >
+                                <div className={`absolute top-0 left-0 right-0 h-[3px] rounded-t-lg bg-zinc-400 ${!isNameplateTab ? 'opacity-50' : ''}`}></div>
+                                <Tag size={14} className={isNameplateTab ? "text-yellow-600" : ""} /> Tabliczki
+                            </button>
+                        </div>
+
+                        {/* 2. Separator */}
+                        <div className="w-px h-5 bg-zinc-300 dark:bg-zinc-600 mx-2 mb-2 shrink-0"></div>
+
+                        {/* 3. Add Button (Separated from Scroll) */}
+                        <div className="shrink-0 mb-[-1px] relative z-20">
+                            <div className="flex items-center bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-t-lg shadow-sm hover:border-yellow-400 transition-colors h-[34px]">
+                                {/* Primary Action: Add Empty */}
+                                <button
+                                    onClick={addSupplier}
+                                    className="px-3 h-full text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-700 rounded-tl-lg transition-colors flex items-center justify-center gap-1"
+                                    title="Dodaj pustą kartę dostawcy"
+                                >
+                                    <Plus size={14} /> 
+                                    <span className="text-[10px] font-bold uppercase">Nowa</span>
+                                </button>
+                                
+                                <div className="w-[1px] h-3 bg-zinc-200 dark:bg-zinc-600"></div>
+                                
+                                {/* Secondary Action: Dropdown */}
+                                <DropdownMenu 
+                                    items={addButtonMenuItems}
+                                    trigger={
+                                        <div className="px-1.5 h-full flex items-center justify-center hover:bg-zinc-50 dark:hover:bg-zinc-700 rounded-tr-lg cursor-pointer text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors">
+                                            <ChevronDown size={12} />
+                                        </div>
+                                    }
+                                    align="right"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* --- SUPPLIER HEADER CONTROLS --- */}
+                    <div className="bg-zinc-50 dark:bg-zinc-800 p-4 border-x border-b border-zinc-200 dark:border-zinc-700 rounded-b-lg">
+                        {!isNameplateTab && currentSupplier && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4 mb-2 animate-fadeIn">
+                                {/* Tab Name Editing */}
+                                <div className="col-span-1 md:col-span-2">
+                                    <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1 flex items-center gap-1">
+                                        <Edit3 size={10} /> Nazwa Zakładki
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="w-full p-2 border rounded text-sm focus:border-yellow-400 outline-none bg-white dark:bg-zinc-900 font-bold"
+                                        value={currentSupplier.customTabName || currentSupplier.name}
+                                        onChange={(e) => updateSupplier(activeTab, 'customTabName', e.target.value)}
+                                        placeholder="Nazwa widoczna na zakładce"
+                                    />
+                                </div>
+
+                                {/* Supplier Name (Official) */}
+                                <div className="col-span-1 md:col-span-2">
+                                    <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1">Dostawca (w systemie)</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            className={`w-full p-2 border rounded text-sm focus:border-yellow-400 outline-none ${!isCurrentIncluded ? 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800' : 'bg-white dark:bg-zinc-900'}`}
+                                            value={currentSupplier.name}
+                                            onChange={(e) => updateSupplier(activeTab, 'name', e.target.value)}
+                                            disabled={!isCurrentIncluded}
+                                            placeholder="Oficjalna nazwa dostawcy"
+                                        />
+                                        <button 
+                                            onClick={() => updateSupplier(activeTab, 'isIncluded', !isCurrentIncluded)}
+                                            className={`p-2 rounded border flex-shrink-0 transition-colors ${
+                                                isCurrentIncluded 
+                                                ? 'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:text-red-500' 
+                                                : 'bg-red-50 text-red-600'
+                                            }`}
+                                            style={{ pointerEvents: 'auto' }} 
+                                        >
+                                            {isCurrentIncluded ? <Eye size={18}/> : <EyeOff size={18}/>}
+                                        </button>
+                                        <button
+                                            onClick={() => setDetailViewIndex(activeTab)}
+                                            className="p-2 rounded border bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:text-yellow-600 hover:border-yellow-400 transition-colors"
+                                            title="Rozszerz / Edytuj szczegóły"
+                                        >
+                                            <Maximize2 size={18} />
+                                        </button>
+                                        <DropdownMenu items={supplierMenuItems} />
+                                    </div>
+                                    {currentSupplier.isOrm && <span className="text-[10px] text-green-600 dark:text-green-400 font-bold ml-1">ORM</span>}
+                                </div>
+                                
+                                <div className={`contents transition-opacity duration-200 ${isCurrentIncluded ? 'opacity-100' : 'opacity-30 grayscale pointer-events-none select-none'}`}>
+                                    {/* Currency Selector */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1">Waluta</label>
+                                        <div className="relative">
+                                            <Euro className="absolute left-2 top-2.5 text-zinc-400" size={14}/>
+                                            <select
+                                                className="w-full pl-8 p-2 border rounded text-sm outline-none focus:border-yellow-400 bg-white dark:bg-zinc-900 disabled:bg-zinc-100 dark:disabled:bg-zinc-700"
+                                                value={currentSupplier.currency}
+                                                onChange={(e) => updateSupplier(activeTab, 'currency', e.target.value)}
+                                                disabled={currentSupplier.isOrm}
+                                            >
+                                                <option value={Currency.PLN}>PLN</option>
+                                                <option value={Currency.EUR}>EUR</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="col-span-1 lg:col-span-2">
+                                        <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1">
+                                            Dostawa <span className="text-[10px] font-normal text-zinc-500">{getWeeksRemaining(currentSupplier.deliveryDate)}</span>
+                                        </label>
+                                        <div className="flex gap-1 items-center flex-nowrap">
+                                            <div className="relative flex-1 min-w-0">
+                                                <Calendar className="absolute left-2 top-2.5 text-zinc-400" size={14}/>
+                                                <input
+                                                    type="date"
+                                                    className="w-full pl-8 p-2 border rounded text-sm focus:border-yellow-400 outline-none bg-white dark:bg-zinc-900 disabled:bg-zinc-100 dark:disabled:bg-zinc-700 disabled:text-zinc-400"
+                                                    value={currentSupplier.deliveryDate === 'ASAP' ? '' : currentSupplier.deliveryDate}
+                                                    onChange={(e) => updateSupplier(activeTab, 'deliveryDate', e.target.value)}
+                                                    disabled={currentSupplier.deliveryDate === 'ASAP'}
+                                                />
+                                            </div>
+                                            <button 
+                                                onClick={() => updateSupplier(activeTab, 'deliveryDate', currentSupplier.deliveryDate === 'ASAP' ? '' : 'ASAP')}
+                                                className={`px-2 py-2 rounded text-[10px] font-bold border transition-colors flex-shrink-0 whitespace-nowrap h-[38px] ${currentSupplier.deliveryDate === 'ASAP' ? 'bg-red-500 text-white border-red-600' : 'bg-white dark:bg-zinc-900 text-zinc-500 border-zinc-200 dark:border-zinc-700 hover:border-red-400 hover:text-red-500'}`}
+                                                title="Ustaw ASAP"
+                                            >
+                                                ASAP
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
+                        )}
 
-                            <div className="col-span-1 lg:col-span-2">
-                                <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-1">
-                                    Dostawa <span className="text-[10px] font-normal text-zinc-500">{getWeeksRemaining(currentSupplier.deliveryDate)}</span>
-                                </label>
-                                <div className="flex gap-1 items-center flex-nowrap">
-                                    <div className="relative flex-1 min-w-0">
-                                        <Calendar className="absolute left-2 top-2.5 text-zinc-400" size={14}/>
-                                        <input
-                                            type="date"
-                                            className="w-full pl-8 p-2 border rounded text-sm focus:border-yellow-400 outline-none bg-white dark:bg-zinc-800 disabled:bg-zinc-100 dark:disabled:bg-zinc-700 disabled:text-zinc-400"
-                                            value={currentSupplier.deliveryDate === 'ASAP' ? '' : currentSupplier.deliveryDate}
-                                            onChange={(e) => updateSupplier(activeTab, 'deliveryDate', e.target.value)}
-                                            disabled={currentSupplier.deliveryDate === 'ASAP'}
+                        {/* --- NAMEPLATE VIEW --- */}
+                        {isNameplateTab && (
+                            <div className="bg-zinc-50 dark:bg-zinc-800 p-8 animate-fadeIn flex flex-col items-center text-center border-t border-zinc-200 dark:border-zinc-700">
+                                <div className="bg-yellow-100 dark:bg-yellow-900/30 p-4 rounded-full mb-4">
+                                    <Tag size={40} className="text-yellow-600 dark:text-yellow-500" />
+                                </div>
+                                <h3 className="text-xl font-bold text-zinc-800 dark:text-zinc-100 mb-2">Tabliczki Znamionowe</h3>
+                                <p className="text-zinc-500 dark:text-zinc-400 text-sm mb-6 max-w-md">
+                                    Wprowadź ilość tabliczek znamionowych wymaganych dla tego projektu. 
+                                    Koszt jednostkowy jest stały i wynosi 19 PLN.
+                                </p>
+
+                                <div className="bg-white dark:bg-zinc-900 p-6 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 flex flex-col md:flex-row items-center gap-8">
+                                    <div className="text-center">
+                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Cena Jedn.</label>
+                                        <div className="text-xl font-bold text-zinc-400">19.00 PLN</div>
+                                    </div>
+                                    <div className="text-2xl text-zinc-300 dark:text-zinc-600 font-light">×</div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Ilość Sztuk</label>
+                                        <input 
+                                            type="number" 
+                                            min="0" 
+                                            value={nameplateQty || 0} 
+                                            onChange={(e) => onNameplateChange(parseFloat(e.target.value) || 0)} 
+                                            className="w-32 p-3 text-center text-2xl font-bold border-2 rounded-lg border-zinc-200 focus:border-yellow-400 outline-none bg-transparent" 
                                         />
                                     </div>
-                                    <button 
-                                        onClick={() => updateSupplier(activeTab, 'deliveryDate', currentSupplier.deliveryDate === 'ASAP' ? '' : 'ASAP')}
-                                        className={`px-2 py-2 rounded text-[10px] font-bold border transition-colors flex-shrink-0 whitespace-nowrap h-[38px] ${currentSupplier.deliveryDate === 'ASAP' ? 'bg-red-500 text-white border-red-600' : 'bg-white dark:bg-zinc-800 text-zinc-500 border-zinc-200 dark:border-zinc-700 hover:border-red-400 hover:text-red-500'}`}
-                                        title="Ustaw ASAP"
-                                    >
-                                        ASAP
-                                    </button>
+                                    <div className="text-2xl text-zinc-300 dark:text-zinc-600 font-light">=</div>
+                                    <div className="text-center">
+                                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Koszt Całkowity</label>
+                                        <div className="text-3xl font-mono font-bold text-yellow-600 dark:text-yellow-500">
+                                            {(nameplateQty * 19).toFixed(2)} PLN
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                )}
-            </div>
+                        )}
 
-            {/* --- NAMEPLATE VIEW --- */}
-            {isNameplateTab && (
-                <div className="bg-zinc-50 dark:bg-zinc-900 p-8 animate-fadeIn flex flex-col items-center text-center">
-                    <div className="bg-yellow-100 dark:bg-yellow-900/30 p-4 rounded-full mb-4">
-                        <Tag size={40} className="text-yellow-600 dark:text-yellow-500" />
-                    </div>
-                    <h3 className="text-xl font-bold text-zinc-800 dark:text-zinc-100 mb-2">Tabliczki Znamionowe</h3>
-                    <p className="text-zinc-500 dark:text-zinc-400 text-sm mb-6 max-w-md">
-                        Wprowadź ilość tabliczek znamionowych wymaganych dla tego projektu. 
-                        Koszt jednostkowy jest stały i wynosi 19 PLN.
-                    </p>
+                        {/* --- SUPPLIER DETAIL VIEW (DataGrid) --- */}
+                        {!isNameplateTab && currentSupplier && (
+                            <div className={`transition-opacity duration-200 ${isCurrentIncluded ? 'opacity-100' : 'opacity-30 grayscale pointer-events-none select-none'}`}>
+                                
+                                {/* Flush DataGrid Implementation */}
+                                <div className="border-t border-zinc-200 dark:border-zinc-700">
+                                    <DataGrid 
+                                        items={currentSupplier.items}
+                                        currency={currentSupplier.currency}
+                                        isOrm={currentSupplier.isOrm}
+                                        onUpdateItem={(id, field, value) => updateItem(activeTab, id, field, value)}
+                                        onDeleteItem={(id) => removeItem(activeTab, id)}
+                                        onAddItem={() => addItem(activeTab)}
+                                        onMoveItem={(idx, dir) => moveItemManual(activeTab, idx, dir)}
+                                        className="max-h-[70vh] border-0 rounded-none shadow-none" 
+                                    />
+                                </div>
 
-                    <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 flex flex-col md:flex-row items-center gap-8">
-                        <div className="text-center">
-                            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Cena Jedn.</label>
-                            <div className="text-xl font-bold text-zinc-400">19.00 PLN</div>
-                        </div>
-                        <div className="text-2xl text-zinc-300 dark:text-zinc-600 font-light">×</div>
-                        <div>
-                            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Ilość Sztuk</label>
-                            <input 
-                                type="number" 
-                                min="0" 
-                                value={nameplateQty || 0} 
-                                onChange={(e) => onNameplateChange(parseFloat(e.target.value) || 0)} 
-                                className="w-32 p-3 text-center text-2xl font-bold border-2 rounded-lg border-zinc-200 focus:border-yellow-400 outline-none bg-transparent" 
-                            />
-                        </div>
-                        <div className="text-2xl text-zinc-300 dark:text-zinc-600 font-light">=</div>
-                        <div className="text-center">
-                            <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Koszt Całkowity</label>
-                            <div className="text-3xl font-mono font-bold text-yellow-600 dark:text-yellow-500">
-                                {(nameplateQty * 19).toFixed(2)} PLN
+                                {/* Footer Summary Bar for the Table */}
+                                <div className="bg-yellow-50 dark:bg-yellow-900/10 px-4 py-2 flex justify-between items-center border-t border-yellow-100 dark:border-yellow-900/30">
+                                    <div className="text-xs text-zinc-500 dark:text-zinc-400 italic">
+                                        Suma pozycji dla "{currentSupplier.customTabName || currentSupplier.name}"
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                        <div className="text-xs text-zinc-500">
+                                            Suma: <span className="font-mono">{activeSupplierSubtotal.toFixed(2)}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-zinc-500 font-bold uppercase">Rabat (%)</span>
+                                            <input 
+                                                type="number" 
+                                                min="0" 
+                                                max="100" 
+                                                className="w-16 p-1 border rounded text-center text-sm focus:border-yellow-400 outline-none font-bold bg-white dark:bg-zinc-900" 
+                                                value={currentSupplier.discount} 
+                                                onChange={(e) => updateSupplier(activeTab, 'discount', parseFloat(e.target.value) || 0)} 
+                                            />
+                                        </div>
+                                        <div className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
+                                            = {activeSupplierTotal.toFixed(2)} {currentSupplier.currency}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="p-4 bg-zinc-50 dark:bg-zinc-800 border-t border-zinc-200 dark:border-zinc-700">
+                                    <label className="block text-xs font-bold text-zinc-500 mb-2 flex items-center gap-1">
+                                        <StickyNote size={12}/> Dodatkowe Uwagi (do zamówienia)
+                                    </label>
+                                    
+                                    {!currentSupplier.notes ? (
+                                        <button 
+                                            onClick={handleAddNotes}
+                                            className="text-xs flex items-center gap-1 text-zinc-500 hover:text-yellow-600 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 px-3 py-2 rounded hover:border-yellow-400 transition-all"
+                                        >
+                                            <MessageSquarePlus size={14}/> Dodaj uwagi
+                                        </button>
+                                    ) : (
+                                        <textarea 
+                                            className="w-full p-3 border rounded text-sm min-h-[80px] focus:border-yellow-400 outline-none bg-white dark:bg-zinc-900 animate-fadeIn" 
+                                            placeholder="Wpisz uwagi..." 
+                                            value={currentSupplier.notes || ''} 
+                                            onChange={(e) => updateSupplier(activeTab, 'notes', e.target.value)} 
+                                        />
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* --- SUPPLIER DETAIL VIEW (DataGrid) --- */}
-            {!isNameplateTab && currentSupplier && (
-                <div className={`transition-opacity duration-200 ${isCurrentIncluded ? 'opacity-100' : 'opacity-30 grayscale pointer-events-none select-none'}`}>
-                    
-                    {/* Flush DataGrid Implementation */}
-                    <div className="border-t border-zinc-200 dark:border-zinc-700">
-                        <DataGrid 
-                            items={currentSupplier.items}
-                            currency={currentSupplier.currency}
-                            isOrm={currentSupplier.isOrm}
-                            onUpdateItem={(id, field, value) => updateItem(activeTab, id, field, value)}
-                            onDeleteItem={(id) => removeItem(activeTab, id)}
-                            onAddItem={() => addItem(activeTab)}
-                            onMoveItem={(idx, dir) => moveItemManual(activeTab, idx, dir)}
-                            className="max-h-[70vh] border-0 rounded-none shadow-none" 
-                        />
-                    </div>
-
-                    {/* Footer Summary Bar for the Table */}
-                    <div className="bg-yellow-50 dark:bg-yellow-900/10 px-4 py-2 flex justify-between items-center border-t border-yellow-100 dark:border-yellow-900/30">
-                        <div className="text-xs text-zinc-500 dark:text-zinc-400 italic">
-                            Suma pozycji dla "{currentSupplier.customTabName || currentSupplier.name}"
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <div className="text-xs text-zinc-500">
-                                Suma: <span className="font-mono">{activeSupplierSubtotal.toFixed(2)}</span>
-                            </div>
-                             <div className="flex items-center gap-2">
-                                <span className="text-xs text-zinc-500 font-bold uppercase">Rabat (%)</span>
-                                <input 
-                                    type="number" 
-                                    min="0" 
-                                    max="100" 
-                                    className="w-16 p-1 border rounded text-center text-sm focus:border-yellow-400 outline-none font-bold bg-white dark:bg-zinc-800" 
-                                    value={currentSupplier.discount} 
-                                    onChange={(e) => updateSupplier(activeTab, 'discount', parseFloat(e.target.value) || 0)} 
-                                />
-                            </div>
-                            <div className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
-                                = {activeSupplierTotal.toFixed(2)} {currentSupplier.currency}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="p-4 bg-zinc-50 dark:bg-zinc-800 border-t border-zinc-200 dark:border-zinc-700">
-                        <label className="block text-xs font-bold text-zinc-500 mb-2 flex items-center gap-1">
-                            <StickyNote size={12}/> Dodatkowe Uwagi (do zamówienia)
-                        </label>
-                        
-                        {!currentSupplier.notes ? (
-                             <button 
-                                onClick={handleAddNotes}
-                                className="text-xs flex items-center gap-1 text-zinc-500 hover:text-yellow-600 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 px-3 py-2 rounded hover:border-yellow-400 transition-all"
-                             >
-                                 <MessageSquarePlus size={14}/> Dodaj uwagi
-                             </button>
-                        ) : (
-                            <textarea 
-                                className="w-full p-3 border rounded text-sm min-h-[80px] focus:border-yellow-400 outline-none bg-white dark:bg-zinc-900 animate-fadeIn" 
-                                placeholder="Wpisz uwagi..." 
-                                value={currentSupplier.notes || ''} 
-                                onChange={(e) => updateSupplier(activeTab, 'notes', e.target.value)} 
-                            />
                         )}
                     </div>
                 </div>
-            )}
+            </div>
         </div>
-      )}
+      </div>
 
       {detailViewIndex !== null && suppliers[detailViewIndex] && (
         <SupplierDetailModal 

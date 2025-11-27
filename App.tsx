@@ -30,8 +30,9 @@ import { DocumentsView } from './components/DocumentsView';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { Header } from './components/Header';
 import { FloatingSummary } from './components/FloatingSummary';
+import { ProjectManagerModal } from './components/ProjectManagerModal';
 import { fetchEurRate } from './services/currencyService';
-import { Moon, Sun, History, Download, Upload, FilePlus } from 'lucide-react';
+import { Moon, Sun, History, Download, Upload, FilePlus, HardDrive } from 'lucide-react';
 
 const STORAGE_KEY = 'procalc_data_v1';
 const THEME_KEY = 'procalc_theme';
@@ -53,7 +54,11 @@ const App: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showProjectManager, setShowProjectManager] = useState(false);
   
+  // File System Handle State (Persisted during session)
+  const [dirHandle, setDirHandle] = useState<any>(null);
+
   // --- Dialog State ---
   const [dialogConfig, setDialogConfig] = useState<{
       isOpen: boolean;
@@ -259,6 +264,29 @@ const App: React.FC = () => {
       showSnackbar("Projekt został pobrany");
   };
 
+  // Generic loader function used by File Input and Project Manager
+  const loadProjectFromObject = (parsed: any) => {
+      try {
+          if (parsed.appState) {
+               if(parsed.appState.initial && !parsed.appState.initial.variants) parsed.appState.initial.variants = [];
+               if(parsed.appState.final && !parsed.appState.final.variants) parsed.appState.final.variants = [];
+
+               setAppState(parsed.appState);
+               if (parsed.historyLog) setHistoryLog(parsed.historyLog);
+               if (parsed.past) setPast(parsed.past);
+               if (parsed.future) setFuture(parsed.future);
+          } else {
+               const merged = { ...appState, ...parsed };
+                if(merged.initial && !merged.initial.variants) merged.initial.variants = [];
+               setAppState(merged);
+          }
+          showSnackbar("Projekt wczytany pomyślnie");
+      } catch (err) {
+          console.error(err);
+          showSnackbar("Błąd struktury pliku projektu.");
+      }
+  };
+
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -268,21 +296,7 @@ const App: React.FC = () => {
           try {
               const text = ev.target?.result as string;
               const parsed = JSON.parse(text);
-
-              if (parsed.appState) {
-                   if(parsed.appState.initial && !parsed.appState.initial.variants) parsed.appState.initial.variants = [];
-                   if(parsed.appState.final && !parsed.appState.final.variants) parsed.appState.final.variants = [];
-
-                   setAppState(parsed.appState);
-                   if (parsed.historyLog) setHistoryLog(parsed.historyLog);
-                   if (parsed.past) setPast(parsed.past);
-                   if (parsed.future) setFuture(parsed.future);
-              } else {
-                   const merged = { ...appState, ...parsed };
-                    if(merged.initial && !merged.initial.variants) merged.initial.variants = [];
-                   setAppState(merged);
-              }
-              showSnackbar("Projekt wczytany pomyślnie");
+              loadProjectFromObject(parsed);
           } catch (err) {
               console.error(err);
               alert("Błąd odczytu pliku projektu. Upewnij się, że to poprawny plik JSON.");
@@ -327,6 +341,7 @@ const App: React.FC = () => {
 
   const menuItems = [
     { label: 'Nowy Projekt', icon: <FilePlus size={16}/>, onClick: handleNewProject, danger: true },
+    { label: 'Otwórz Menedżer Projektów', icon: <HardDrive size={16}/>, onClick: () => setShowProjectManager(true) },
     { label: 'Pobierz Projekt (.json)', icon: <Download size={16}/>, onClick: handleExport },
     { label: 'Wczytaj Projekt (.json)', icon: <Upload size={16}/>, onClick: () => projectInputRef.current?.click() },
     { label: 'Historia Zmian', icon: <History size={16}/>, onClick: () => setShowHistory(true) },
@@ -346,6 +361,7 @@ const App: React.FC = () => {
          canUndo={past.length > 0}
          canRedo={future.length > 0}
          onShowComparison={() => setShowComparison(true)}
+         onShowProjectManager={() => setShowProjectManager(true)}
          menuItems={menuItems}
          projectInputRef={projectInputRef}
          handleImport={handleImport}
@@ -356,7 +372,7 @@ const App: React.FC = () => {
         
         {/* LEFT COLUMN (Forms) */}
         {appState.viewMode === ViewMode.CALCULATOR && (
-            <div className="xl:col-span-9 space-y-6">
+            <div className="xl:col-span-9 space-y-6 animate-slideInRight">
                 {/* If in Final Mode, show Comparison Header or specific Final View */}
                 {isFinal ? (
                     <FinalCalculationView 
@@ -433,7 +449,7 @@ const App: React.FC = () => {
 
         {/* FULL SCREEN MODES */}
         {appState.viewMode === ViewMode.LOGISTICS && (
-            <div className="xl:col-span-12 animate-fadeIn">
+            <div className="xl:col-span-12 animate-slideInRight">
                  <LogisticsView data={data} onUpdateSupplier={(id, updates) => {
                      const updatedSuppliers = data.suppliers.map(s => s.id === id ? { ...s, ...updates } : s);
                      updateCalculationData({ suppliers: updatedSuppliers });
@@ -442,7 +458,7 @@ const App: React.FC = () => {
         )}
 
         {appState.viewMode === ViewMode.COMPARISON && (
-            <div className="xl:col-span-12 animate-fadeIn">
+            <div className="xl:col-span-12 animate-slideInRight">
                 <ComparisonView 
                     suppliers={data.suppliers} 
                     onBack={() => setAppState(prev => ({...prev, viewMode: ViewMode.CALCULATOR}))} 
@@ -451,7 +467,7 @@ const App: React.FC = () => {
         )}
         
         {appState.viewMode === ViewMode.NOTES && (
-             <div className="xl:col-span-12 animate-fadeIn">
+             <div className="xl:col-span-12 animate-slideInRight">
                 <ProjectNotesView 
                     data={data} 
                     onChange={(updates) => updateCalculationData(updates)}
@@ -461,7 +477,7 @@ const App: React.FC = () => {
         )}
 
         {appState.viewMode === ViewMode.DOCUMENTS && (
-             <div className="xl:col-span-12 animate-fadeIn">
+             <div className="xl:col-span-12 animate-slideInRight">
                 <DocumentsView 
                     data={data} 
                     onBack={() => setAppState(prev => ({...prev, viewMode: ViewMode.CALCULATOR}))} 
@@ -502,6 +518,21 @@ const App: React.FC = () => {
              historyLog={historyLog}
              onRestore={handleHistoryRestore}
              onClose={() => setShowHistory(false)}
+          />
+      )}
+
+      {showProjectManager && (
+          <ProjectManagerModal 
+              isOpen={showProjectManager}
+              onClose={() => setShowProjectManager(false)}
+              appState={appState}
+              historyLog={historyLog}
+              past={past}
+              future={future}
+              onLoadProject={loadProjectFromObject}
+              showSnackbar={showSnackbar}
+              currentDirHandle={dirHandle}
+              onSetDirHandle={setDirHandle}
           />
       )}
 

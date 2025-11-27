@@ -249,132 +249,165 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
         </div>
       </div>
 
-      {isOpen && (
-        <div className="border-t border-zinc-100 dark:border-zinc-700">
-            {/* Consolidation Notifications */}
-            {potentialMerges.length > 0 && (
-                <div className="bg-blue-50 dark:bg-blue-900/20 p-2 border-b border-blue-100 dark:border-blue-900/30 flex flex-wrap gap-4 items-center justify-center">
-                    <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 text-xs font-bold">
-                        <Info size={14}/> Wykryto możliwość łączenia transportów:
+      <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+        <div className="overflow-hidden">
+            <div className="border-t border-zinc-100 dark:border-zinc-700">
+                {/* Consolidation Notifications */}
+                {potentialMerges.length > 0 && (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-2 border-b border-blue-100 dark:border-blue-900/30 flex flex-wrap gap-4 items-center justify-center">
+                        <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 text-xs font-bold">
+                            <Info size={14}/> Wykryto możliwość łączenia transportów:
+                        </div>
+                        {potentialMerges.map(name => (
+                            <button 
+                                key={name}
+                                onClick={() => handleMergeTransport(name)}
+                                className="bg-white dark:bg-zinc-800 border border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 px-3 py-1 rounded-full text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center gap-1 transition-colors shadow-sm"
+                            >
+                                <Combine size={12}/> Scal transporty dla "{name}"
+                            </button>
+                        ))}
                     </div>
-                    {potentialMerges.map(name => (
-                        <button 
-                            key={name}
-                            onClick={() => handleMergeTransport(name)}
-                            className="bg-white dark:bg-zinc-800 border border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 px-3 py-1 rounded-full text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center gap-1 transition-colors shadow-sm"
-                        >
-                            <Combine size={12}/> Scal transporty dla "{name}"
-                        </button>
-                    ))}
+                )}
+
+                {/* Toolbar */}
+                <div className="flex justify-end p-2 bg-zinc-50 dark:bg-zinc-800/30 border-b dark:border-zinc-700">
+                    <button type="button" onClick={addManualTransport} className="text-[10px] bg-zinc-200 dark:bg-zinc-700 hover:bg-yellow-400 hover:text-black dark:text-zinc-200 px-3 py-1 rounded flex items-center gap-1 transition-colors font-semibold">
+                        <Plus size={12}/> Dodaj ręczny transport
+                    </button>
                 </div>
-            )}
 
-            {/* Toolbar */}
-             <div className="flex justify-end p-2 bg-zinc-50 dark:bg-zinc-800/30 border-b dark:border-zinc-700">
-                <button type="button" onClick={addManualTransport} className="text-[10px] bg-zinc-200 dark:bg-zinc-700 hover:bg-yellow-400 hover:text-black dark:text-zinc-200 px-3 py-1 rounded flex items-center gap-1 transition-colors font-semibold">
-                    <Plus size={12}/> Dodaj ręczny transport
-                </button>
-            </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left border-collapse min-w-[800px]">
+                        <thead>
+                            <tr>
+                                <th className={`${headerClass} text-left`}>Dostawca / Nazwa</th>
+                                <th className={`${headerClass} text-center`}>Waga</th>
+                                <th className={`${headerClass} text-center`}>Org. Dostawcy?</th>
+                                <th className={`${headerClass} text-center w-24`}>Tryb</th>
+                                <th className={`${headerClass} text-center`}>Ilość Aut</th>
+                                <th className={`${headerClass} text-right`}>Cena / Auto</th>
+                                <th className={`${headerClass} text-center`}>Waluta</th>
+                                <th className={`${headerClass} text-right`}>Suma</th>
+                                <th className={`${headerClass} w-10`}></th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white dark:bg-zinc-800">
+                            
+                            {/* 1. Individual Suppliers (Unmerged) */}
+                            {unmergedSuppliers.map((supplier) => {
+                                const tItem = getTransportItemForSupplier(supplier.id);
+                                const weight = supplier.items.reduce((s, i) => s + (i.weight * i.quantity), 0);
+                                const isOrgBySupplier = tItem.isSupplierOrganized;
+                                const isManual = tItem.isManualOverride;
 
-            <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left border-collapse min-w-[800px]">
-                    <thead>
-                        <tr>
-                            <th className={`${headerClass} text-left`}>Dostawca / Nazwa</th>
-                            <th className={`${headerClass} text-center`}>Waga</th>
-                            <th className={`${headerClass} text-center`}>Org. Dostawcy?</th>
-                            <th className={`${headerClass} text-center w-24`}>Tryb</th>
-                            <th className={`${headerClass} text-center`}>Ilość Aut</th>
-                            <th className={`${headerClass} text-right`}>Cena / Auto</th>
-                            <th className={`${headerClass} text-center`}>Waluta</th>
-                            <th className={`${headerClass} text-right`}>Suma</th>
-                            <th className={`${headerClass} w-10`}></th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white dark:bg-zinc-800">
-                        
-                        {/* 1. Individual Suppliers (Unmerged) */}
-                        {unmergedSuppliers.map((supplier) => {
-                            const tItem = getTransportItemForSupplier(supplier.id);
-                            const weight = supplier.items.reduce((s, i) => s + (i.weight * i.quantity), 0);
-                            const isOrgBySupplier = tItem.isSupplierOrganized;
-                            const isManual = tItem.isManualOverride;
+                                return (
+                                    <tr key={supplier.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 group transition-colors">
+                                        <td className={cellClass}>
+                                            <div className="font-bold text-zinc-800 dark:text-zinc-200">{supplier.name}</div>
+                                            {supplier.isOrm && <span className="text-[10px] bg-green-600 text-white px-1.5 rounded border border-green-200">ORM</span>}
+                                        </td>
+                                        <td className={`${cellClass} text-center font-mono text-zinc-600 dark:text-zinc-400`}>{weight > 0 ? `${weight.toLocaleString()} kg` : '-'}</td>
+                                        <td className={`${cellClass} text-center`}>
+                                            <button type="button" onClick={() => updateSupplierTransport(supplier.id, { isSupplierOrganized: !isOrgBySupplier })} className={`flex items-center justify-center gap-2 mx-auto px-2 py-1 rounded border transition-all ${isOrgBySupplier ? 'bg-zinc-100 border-zinc-300 text-zinc-700' : 'bg-white border-zinc-200 text-zinc-400 hover:border-zinc-300'}`}>
+                                                {isOrgBySupplier ? <CheckSquare size={16}/> : <Square size={16}/>}
+                                            </button>
+                                        </td>
+                                        <td className={`${cellClass} text-center`}>
+                                            {!isOrgBySupplier && supplier.isOrm ? (
+                                                <div className="flex items-center justify-center">
+                                                    <button 
+                                                        onClick={(e) => handleToggleAutoManual(e, supplier)} 
+                                                        className={`px-2 py-0.5 rounded text-[10px] font-bold border ${isManual ? 'bg-zinc-200 text-zinc-600 border-zinc-300' : 'bg-yellow-400 text-zinc-900 border-yellow-500'}`}
+                                                        title={isManual ? "Kliknij, aby włączyć automat" : "Kliknij, aby włączyć ręczny"}
+                                                    >
+                                                        {isManual ? 'MAN' : 'AUTO'}
+                                                    </button>
+                                                </div>
+                                            ) : <span className="text-zinc-300 text-center block">-</span>}
+                                        </td>
+                                        <td className={cellClass}>
+                                            <input type="number" min="0" className={`${inputClass} text-center`} value={tItem.trucksCount} onChange={(e) => handleManualInputChange(supplier.id, parseFloat(e.target.value) || 0)} disabled={isOrgBySupplier || (!isManual && supplier.isOrm)} />
+                                        </td>
+                                        <td className={cellClass}>
+                                            <input type="number" min="0" className={inputClass} value={tItem.pricePerTruck} onChange={(e) => updateSupplierTransport(supplier.id, { pricePerTruck: parseFloat(e.target.value) || 0 })} disabled={isOrgBySupplier} />
+                                        </td>
+                                        <td className={cellClass}>
+                                            <select className={selectClass} value={tItem.currency} onChange={(e) => updateSupplierTransport(supplier.id, { currency: e.target.value as Currency })} disabled={isOrgBySupplier}>
+                                                <option value={Currency.PLN}>PLN</option>
+                                                <option value={Currency.EUR}>EUR</option>
+                                            </select>
+                                        </td>
+                                        <td className={`${cellClass} text-right font-bold text-zinc-800 dark:text-zinc-200 font-mono`}>
+                                            {isOrgBySupplier ? <span className="text-xs text-zinc-500 font-normal italic">W cenie dost.</span> : `${tItem.totalPrice.toFixed(2)}`}
+                                        </td>
+                                        <td className={cellClass}></td>
+                                    </tr>
+                                );
+                            })}
 
-                            return (
-                                <tr key={supplier.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 group transition-colors">
-                                    <td className={cellClass}>
-                                        <div className="font-bold text-zinc-800 dark:text-zinc-200">{supplier.name}</div>
-                                        {supplier.isOrm && <span className="text-[10px] bg-green-600 text-white px-1.5 rounded border border-green-200">ORM</span>}
-                                    </td>
-                                    <td className={`${cellClass} text-center font-mono text-zinc-600 dark:text-zinc-400`}>{weight > 0 ? `${weight.toLocaleString()} kg` : '-'}</td>
-                                    <td className={`${cellClass} text-center`}>
-                                        <button type="button" onClick={() => updateSupplierTransport(supplier.id, { isSupplierOrganized: !isOrgBySupplier })} className={`flex items-center justify-center gap-2 mx-auto px-2 py-1 rounded border transition-all ${isOrgBySupplier ? 'bg-zinc-100 border-zinc-300 text-zinc-700' : 'bg-white border-zinc-200 text-zinc-400 hover:border-zinc-300'}`}>
-                                            {isOrgBySupplier ? <CheckSquare size={16}/> : <Square size={16}/>}
-                                        </button>
-                                    </td>
-                                    <td className={`${cellClass} text-center`}>
-                                        {!isOrgBySupplier && supplier.isOrm ? (
-                                            <div className="flex items-center justify-center">
-                                                <button 
-                                                    onClick={(e) => handleToggleAutoManual(e, supplier)} 
-                                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border ${isManual ? 'bg-zinc-200 text-zinc-600 border-zinc-300' : 'bg-yellow-400 text-zinc-900 border-yellow-500'}`}
-                                                    title={isManual ? "Kliknij, aby włączyć automat" : "Kliknij, aby włączyć ręczny"}
-                                                >
-                                                    {isManual ? 'MAN' : 'AUTO'}
-                                                </button>
+                            {/* 2. Consolidated Transports */}
+                            {mergedItems.map(item => {
+                                const ids = item.linkedSupplierIds || [];
+                                const mergedSuppliers = suppliers.filter(s => ids.includes(s.id));
+                                const totalWeight = mergedSuppliers.reduce((sum, s) => sum + s.items.reduce((iSum, i) => iSum + (i.weight * i.quantity), 0), 0);
+                                
+                                return (
+                                    <tr key={item.id} className="bg-blue-50/50 hover:bg-blue-50 dark:bg-blue-900/10 dark:hover:bg-blue-900/20 transition-colors border-l-4 border-l-blue-400">
+                                        <td className={cellClass}>
+                                            <div className="font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
+                                                <Combine size={14} className="text-blue-500"/>
+                                                {item.name}
                                             </div>
-                                        ) : <span className="text-zinc-300 text-center block">-</span>}
-                                    </td>
-                                    <td className={cellClass}>
-                                        <input type="number" min="0" className={`${inputClass} text-center`} value={tItem.trucksCount} onChange={(e) => handleManualInputChange(supplier.id, parseFloat(e.target.value) || 0)} disabled={isOrgBySupplier || (!isManual && supplier.isOrm)} />
-                                    </td>
-                                    <td className={cellClass}>
-                                        <input type="number" min="0" className={inputClass} value={tItem.pricePerTruck} onChange={(e) => updateSupplierTransport(supplier.id, { pricePerTruck: parseFloat(e.target.value) || 0 })} disabled={isOrgBySupplier} />
-                                    </td>
-                                    <td className={cellClass}>
-                                        <select className={selectClass} value={tItem.currency} onChange={(e) => updateSupplierTransport(supplier.id, { currency: e.target.value as Currency })} disabled={isOrgBySupplier}>
-                                            <option value={Currency.PLN}>PLN</option>
-                                            <option value={Currency.EUR}>EUR</option>
-                                        </select>
-                                    </td>
-                                    <td className={`${cellClass} text-right font-bold text-zinc-800 dark:text-zinc-200 font-mono`}>
-                                        {isOrgBySupplier ? <span className="text-xs text-zinc-500 font-normal italic">W cenie dost.</span> : `${tItem.totalPrice.toFixed(2)}`}
-                                    </td>
-                                    <td className={cellClass}></td>
-                                </tr>
-                            );
-                        })}
+                                            <div className="text-[10px] text-zinc-500">
+                                                Łączy: {mergedSuppliers.map(s => s.customTabName || s.name).join(', ')}
+                                            </div>
+                                        </td>
+                                        <td className={`${cellClass} text-center font-mono text-zinc-600 dark:text-zinc-400`}>
+                                            {totalWeight.toLocaleString()} kg
+                                        </td>
+                                        <td className={`${cellClass} text-center text-zinc-300`}>-</td>
+                                        <td className={`${cellClass} text-center`}>
+                                            <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded">AUTO</span>
+                                        </td>
+                                        <td className={cellClass}>
+                                            <input type="number" min="0" className={`${inputClass} text-center`} value={item.trucksCount} onChange={(e) => updateById(item.id, { trucksCount: parseFloat(e.target.value) || 0 })} />
+                                        </td>
+                                        <td className={cellClass}>
+                                            <input type="number" min="0" className={inputClass} value={item.pricePerTruck} onChange={(e) => updateById(item.id, { pricePerTruck: parseFloat(e.target.value) || 0 })} />
+                                        </td>
+                                        <td className={cellClass}>
+                                            <select className={selectClass} value={item.currency} onChange={(e) => updateById(item.id, { currency: e.target.value as Currency })}>
+                                                <option value={Currency.PLN}>PLN</option>
+                                                <option value={Currency.EUR}>EUR</option>
+                                            </select>
+                                        </td>
+                                        <td className={`${cellClass} text-right font-bold text-zinc-800 dark:text-zinc-200 font-mono`}>{item.totalPrice.toFixed(2)}</td>
+                                        <td className={`${cellClass} text-center`}>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => handleUnmerge(item.id)} 
+                                                className="text-zinc-400 hover:text-red-500 transition-colors"
+                                                title="Rozdziel transporty"
+                                            >
+                                                <Unplug size={16}/>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
 
-                        {/* 2. Consolidated Transports */}
-                        {mergedItems.map(item => {
-                             const ids = item.linkedSupplierIds || [];
-                             const mergedSuppliers = suppliers.filter(s => ids.includes(s.id));
-                             const totalWeight = mergedSuppliers.reduce((sum, s) => sum + s.items.reduce((iSum, i) => iSum + (i.weight * i.quantity), 0), 0);
-                             
-                             return (
-                                <tr key={item.id} className="bg-blue-50/50 hover:bg-blue-50 dark:bg-blue-900/10 dark:hover:bg-blue-900/20 transition-colors border-l-4 border-l-blue-400">
+                            {/* 3. Manual Items */}
+                            {manualItems.map(item => (
+                                <tr key={item.id} className="bg-yellow-50/20 hover:bg-yellow-50/50 transition-colors">
                                     <td className={cellClass}>
-                                        <div className="font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
-                                            <Combine size={14} className="text-blue-500"/>
-                                            {item.name}
-                                        </div>
-                                        <div className="text-[10px] text-zinc-500">
-                                            Łączy: {mergedSuppliers.map(s => s.customTabName || s.name).join(', ')}
-                                        </div>
-                                    </td>
-                                    <td className={`${cellClass} text-center font-mono text-zinc-600 dark:text-zinc-400`}>
-                                        {totalWeight.toLocaleString()} kg
+                                        <input type="text" className={textInputClass} placeholder="Nazwa transportu" value={item.name || ''} onChange={(e) => updateById(item.id, { name: e.target.value })} />
                                     </td>
                                     <td className={`${cellClass} text-center text-zinc-300`}>-</td>
-                                    <td className={`${cellClass} text-center`}>
-                                        <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded">AUTO</span>
-                                    </td>
-                                    <td className={cellClass}>
-                                        <input type="number" min="0" className={`${inputClass} text-center`} value={item.trucksCount} onChange={(e) => updateById(item.id, { trucksCount: parseFloat(e.target.value) || 0 })} />
-                                    </td>
-                                    <td className={cellClass}>
-                                        <input type="number" min="0" className={inputClass} value={item.pricePerTruck} onChange={(e) => updateById(item.id, { pricePerTruck: parseFloat(e.target.value) || 0 })} />
-                                    </td>
+                                    <td className={`${cellClass} text-center text-zinc-300`}>-</td>
+                                    <td className={`${cellClass} text-center text-zinc-300`}>-</td>
+                                    <td className={cellClass}><input type="number" min="0" className={`${inputClass} text-center`} value={item.trucksCount} onChange={(e) => updateById(item.id, { trucksCount: parseFloat(e.target.value) || 0 })} /></td>
+                                    <td className={cellClass}><input type="number" min="0" className={inputClass} value={item.pricePerTruck} onChange={(e) => updateById(item.id, { pricePerTruck: parseFloat(e.target.value) || 0 })} /></td>
                                     <td className={cellClass}>
                                         <select className={selectClass} value={item.currency} onChange={(e) => updateById(item.id, { currency: e.target.value as Currency })}>
                                             <option value={Currency.PLN}>PLN</option>
@@ -382,46 +415,15 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
                                         </select>
                                     </td>
                                     <td className={`${cellClass} text-right font-bold text-zinc-800 dark:text-zinc-200 font-mono`}>{item.totalPrice.toFixed(2)}</td>
-                                    <td className={`${cellClass} text-center`}>
-                                        <button 
-                                            type="button" 
-                                            onClick={() => handleUnmerge(item.id)} 
-                                            className="text-zinc-400 hover:text-red-500 transition-colors"
-                                            title="Rozdziel transporty"
-                                        >
-                                            <Unplug size={16}/>
-                                        </button>
-                                    </td>
+                                    <td className={`${cellClass} text-center`}><button type="button" onClick={() => removeTransport(item.id)} className="text-zinc-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button></td>
                                 </tr>
-                             );
-                        })}
-
-                        {/* 3. Manual Items */}
-                        {manualItems.map(item => (
-                            <tr key={item.id} className="bg-yellow-50/20 hover:bg-yellow-50/50 transition-colors">
-                                <td className={cellClass}>
-                                    <input type="text" className={textInputClass} placeholder="Nazwa transportu" value={item.name || ''} onChange={(e) => updateById(item.id, { name: e.target.value })} />
-                                </td>
-                                <td className={`${cellClass} text-center text-zinc-300`}>-</td>
-                                <td className={`${cellClass} text-center text-zinc-300`}>-</td>
-                                <td className={`${cellClass} text-center text-zinc-300`}>-</td>
-                                <td className={cellClass}><input type="number" min="0" className={`${inputClass} text-center`} value={item.trucksCount} onChange={(e) => updateById(item.id, { trucksCount: parseFloat(e.target.value) || 0 })} /></td>
-                                <td className={cellClass}><input type="number" min="0" className={inputClass} value={item.pricePerTruck} onChange={(e) => updateById(item.id, { pricePerTruck: parseFloat(e.target.value) || 0 })} /></td>
-                                <td className={cellClass}>
-                                    <select className={selectClass} value={item.currency} onChange={(e) => updateById(item.id, { currency: e.target.value as Currency })}>
-                                        <option value={Currency.PLN}>PLN</option>
-                                        <option value={Currency.EUR}>EUR</option>
-                                    </select>
-                                </td>
-                                <td className={`${cellClass} text-right font-bold text-zinc-800 dark:text-zinc-200 font-mono`}>{item.totalPrice.toFixed(2)}</td>
-                                <td className={`${cellClass} text-center`}><button type="button" onClick={() => removeTransport(item.id)} className="text-zinc-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button></td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
