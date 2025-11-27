@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProCalc - Kalkulator Ceny Projektu</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+                sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            },
+            colors: {
+              // Header Color (Teal)
+              cyan: {
+                500: '#009697', 
+                600: '#007A7A',
+                700: '#006161',
+                800: '#004747',
+                900: '#003333',
+              },
+              // Main Accent Color (Jungheinrich Yellow)
+              yellow: {
+                50: '#FFFDF5',
+                100: '#FFFBE0',
+                200: '#FFF4B8',
+                300: '#FFED90',
+                400: '#FFE668',
+                500: '#FFCC00',
+                600: '#D9AD00',
+                700: '#B38F00',
+                800: '#8C7000',
+                900: '#665200',
+              },
+              // Neutral Slate/Zinc
+              zinc: {
+                50: '#f8fafc',
+                100: '#f1f5f9',
+                200: '#e2e8f0',
+                300: '#cbd5e1',
+                400: '#94a3b8',
+                500: '#64748b',
+                600: '#475569',
+                700: '#334155',
+                800: '#1e293b',
+                900: '#0f172a',
+                950: '#020617',
+              }
+            },
+            animation: {
+                fadeIn: 'fadeIn 0.2s ease-out',
+                slideUp: 'slideUp 0.3s ease-out',
+            },
+            keyframes: {
+                fadeIn: {
+                    '0%': { opacity: '0' },
+                    '100%': { opacity: '1' },
+                },
+                slideUp: {
+                    '0%': { transform: 'translateY(100%)', opacity: '0' },
+                    '100%': { transform: 'translateY(0)', opacity: '1' },
+                }
+            }
+          }
+        }
+      }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        background-color: #f1f5f9;
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+          background: transparent; 
+      }
+      ::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+      }
+      
+      .dark ::-webkit-scrollbar-thumb {
+          background: #475569;
+      }
+
+      /* Global Dark Mode Overrides */
+      .dark body {
+        background-color: #0f172a;
+        color: #e2e8f0;
+      }
+      
+      .dark .bg-white {
+        background-color: #1e293b !important;
+        border-color: #334155 !important;
+        color: #e2e8f0 !important;
+      }
+      
+      /* Inputs - Consistent Backgrounds */
+      input[type="text"], input[type="number"], input[type="date"], input[type="email"], select, textarea {
+        background-color: #ffffff;
+        border-color: #e2e8f0;
+        color: #0f172a;
+      }
+
+      input.bg-transparent {
+        background-color: transparent !important;
+      }
+
+      .dark input[type="text"], .dark input[type="number"], .dark input[type="date"], .dark input[type="email"], .dark select, .dark textarea {
+        background-color: #334155 !important;
+        border-color: #475569 !important;
+        color: #f1f5f9 !important;
+      }
+      
+      .dark input:focus, .dark select:focus, .dark textarea:focus {
+        border-color: #FFCC00 !important;
+        background-color: #334155 !important;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs"
+  }
+}
+</script>
+</head>
+  <body class="bg-zinc-100 transition-colors duration-200">
+    <div id="root"></div>
+  </body>
+</html>
