@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   AppState, 
@@ -264,7 +265,6 @@ const App: React.FC = () => {
       showSnackbar("Projekt został pobrany");
   };
 
-  // Generic loader function used by File Input and Project Manager
   const loadProjectFromObject = (parsed: any) => {
       try {
           if (parsed.appState) {
@@ -367,8 +367,8 @@ const App: React.FC = () => {
          handleImport={handleImport}
       />
 
-      {/* Main Layout - Standard padding now that header is part of flow */}
-      <main className="flex-1 overflow-y-auto w-full max-w-[1600px] mx-auto p-4 md:p-6 grid grid-cols-1 xl:grid-cols-12 gap-8 items-start pt-6">
+      {/* Main Layout - Clean light background, refined padding */}
+      <main className="flex-1 overflow-y-auto w-full max-w-[1600px] mx-auto p-4 md:px-6 md:pb-6 md:pt-3 grid grid-cols-1 xl:grid-cols-12 gap-8 items-start pt-6">
         
         {/* LEFT COLUMN (Forms) */}
         {appState.viewMode === ViewMode.CALCULATOR && (

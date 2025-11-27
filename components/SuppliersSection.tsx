@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Supplier, SupplierItem, Currency, Language, SupplierStatus, TransportItem, InstallationData } from '../types';
-import { Package, Plus, Trash2, Calendar, FileSpreadsheet, Copy, Eye, EyeOff, StickyNote, Tag, Loader2, Sparkles, Euro, Maximize2, ArrowUp, ArrowDown, Search, ArrowUpDown, ChevronDown, ChevronUp, GripVertical, Settings2, ArrowLeft, ArrowRight, Zap, FolderPlus, Edit3, MessageSquarePlus } from 'lucide-react';
+import { Package, Plus, Trash2, Calendar, FileSpreadsheet, Copy, Eye, EyeOff, StickyNote, Tag, Loader2, Sparkles, Euro, Maximize2, ArrowUp, ArrowDown, Search, ArrowUpDown, ChevronDown, ChevronUp, GripVertical, Settings2, ArrowLeft, ArrowRight, Zap, FolderPlus, Edit3, MessageSquarePlus, SplitSquareHorizontal } from 'lucide-react';
 import { DropdownMenu } from './DropdownMenu';
 import * as XLSX from 'xlsx';
 import { extractDataFromOffer } from '../services/aiService';
@@ -371,6 +371,7 @@ export const SuppliersSection: React.FC<Props> = ({ suppliers, transport, instal
   const activeSupplierTotal = activeSupplierSubtotal * (1 - (currentSupplier?.discount || 0) / 100);
 
   const supplierMenuItems = [
+      { label: 'Porównaj Dostawców', icon: <SplitSquareHorizontal size={16} />, onClick: onOpenComparison },
       { label: 'Importuj Excel (Dołącz do aktywnej)', icon: <FileSpreadsheet size={16} />, onClick: () => fileInputRef.current?.click() },
       { label: 'Inteligentny Import (PDF/Img)', icon: <Sparkles size={16} />, onClick: () => pdfInputRef.current?.click() },
       { label: 'Duplikuj', icon: <Copy size={16} />, onClick: () => duplicateSupplier(activeTab), disabled: currentSupplier?.isOrm },

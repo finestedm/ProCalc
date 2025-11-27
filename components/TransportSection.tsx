@@ -220,41 +220,47 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
   }, 0);
 
   // Styling Constants (DataGrid Look)
-  const headerClass = "p-2 border-b dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-semibold uppercase text-xs tracking-wider sticky top-0 z-10";
-  const cellClass = "p-2 border-b dark:border-zinc-800/50 text-sm align-top";
-  const inputClass = "w-full p-1.5 border rounded text-right bg-white dark:bg-zinc-900 focus:border-yellow-400 outline-none font-bold text-zinc-900 dark:text-white dark:border-zinc-600 text-sm";
-  const textInputClass = "w-full p-1.5 bg-transparent border-b border-transparent focus:border-yellow-400 outline-none text-sm text-zinc-800 dark:text-zinc-200 placeholder-zinc-400";
-  const selectClass = "w-full p-1.5 bg-white dark:bg-zinc-900 border rounded text-xs outline-none focus:border-yellow-400 dark:border-zinc-600";
+  const headerClass = "p-3 border-b border-zinc-100 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-bold uppercase text-[10px] tracking-wider sticky top-0 z-10";
+  const cellClass = "p-3 border-b border-zinc-100 dark:border-zinc-800/50 text-sm align-middle";
+  const inputClass = "w-full p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-right bg-white dark:bg-zinc-900 focus:border-yellow-400 outline-none font-bold text-zinc-800 dark:text-white text-sm";
+  const textInputClass = "w-full p-2 bg-transparent border-b border-transparent focus:border-yellow-400 outline-none text-sm text-zinc-800 dark:text-zinc-200 placeholder-zinc-400";
+  const selectClass = "w-full p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs outline-none focus:border-yellow-400 cursor-pointer";
 
   return (
-    <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 mb-8 overflow-hidden transition-colors">
+    <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 mb-8 overflow-hidden transition-colors">
       <div 
-          className="p-4 flex justify-between items-center cursor-pointer bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors"
+          className="p-5 flex justify-between items-center cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
           onClick={() => setIsOpen(!isOpen)}
       >
-        <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-            <Truck className="text-yellow-500" size={20} /> Transport
-        </h2>
+        <div className="flex items-center gap-3">
+            <div className="bg-blue-100 p-2 rounded-lg text-blue-600">
+                <Truck size={20} />
+            </div>
+            <div>
+                <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-tight">Transport</h2>
+                <p className="text-xs text-zinc-500 mt-0.5">Koszty logistyczne</p>
+            </div>
+        </div>
         
         <div className="flex items-center gap-4">
              <div className="text-right">
                 <span className="text-[10px] uppercase font-bold text-zinc-400 block leading-none mb-1">Suma</span>
-                <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">
+                <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200 text-lg">
                     {transportTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {offerCurrency}
                 </span>
              </div>
-             <button className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300">
-                {isOpen ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}
+             <button className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-transform duration-300" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                <ChevronDown size={20}/>
             </button>
         </div>
       </div>
 
-      <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+      <div className={`grid transition-[grid-template-rows] duration-500 ease-in-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
         <div className="overflow-hidden">
-            <div className="border-t border-zinc-100 dark:border-zinc-700">
+            <div className="border-t border-transparent">
                 {/* Consolidation Notifications */}
                 {potentialMerges.length > 0 && (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 p-2 border-b border-blue-100 dark:border-blue-900/30 flex flex-wrap gap-4 items-center justify-center">
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-3 border-b border-blue-100 dark:border-blue-900/30 flex flex-wrap gap-4 items-center justify-center">
                         <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 text-xs font-bold">
                             <Info size={14}/> Wykryto możliwość łączenia transportów:
                         </div>
@@ -262,7 +268,7 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
                             <button 
                                 key={name}
                                 onClick={() => handleMergeTransport(name)}
-                                className="bg-white dark:bg-zinc-800 border border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 px-3 py-1 rounded-full text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center gap-1 transition-colors shadow-sm"
+                                className="bg-white dark:bg-zinc-800 border border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 px-3 py-1.5 rounded-full text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center gap-1 transition-colors shadow-sm"
                             >
                                 <Combine size={12}/> Scal transporty dla "{name}"
                             </button>
@@ -271,8 +277,8 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
                 )}
 
                 {/* Toolbar */}
-                <div className="flex justify-end p-2 bg-zinc-50 dark:bg-zinc-800/30 border-b dark:border-zinc-700">
-                    <button type="button" onClick={addManualTransport} className="text-[10px] bg-zinc-200 dark:bg-zinc-700 hover:bg-yellow-400 hover:text-black dark:text-zinc-200 px-3 py-1 rounded flex items-center gap-1 transition-colors font-semibold">
+                <div className="flex justify-end p-3 bg-zinc-50/50 dark:bg-zinc-800/30 border-b border-zinc-100 dark:border-zinc-700">
+                    <button type="button" onClick={addManualTransport} className="text-[10px] bg-zinc-200 dark:bg-zinc-700 hover:bg-yellow-400 hover:text-black dark:text-zinc-200 px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors font-bold">
                         <Plus size={12}/> Dodaj ręczny transport
                     </button>
                 </div>
@@ -281,14 +287,14 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
                     <table className="w-full text-sm text-left border-collapse min-w-[800px]">
                         <thead>
                             <tr>
-                                <th className={`${headerClass} text-left`}>Dostawca / Nazwa</th>
+                                <th className={`${headerClass} text-left pl-6`}>Dostawca / Nazwa</th>
                                 <th className={`${headerClass} text-center`}>Waga</th>
                                 <th className={`${headerClass} text-center`}>Org. Dostawcy?</th>
                                 <th className={`${headerClass} text-center w-24`}>Tryb</th>
                                 <th className={`${headerClass} text-center`}>Ilość Aut</th>
                                 <th className={`${headerClass} text-right`}>Cena / Auto</th>
                                 <th className={`${headerClass} text-center`}>Waluta</th>
-                                <th className={`${headerClass} text-right`}>Suma</th>
+                                <th className={`${headerClass} text-right pr-6`}>Suma</th>
                                 <th className={`${headerClass} w-10`}></th>
                             </tr>
                         </thead>
@@ -303,13 +309,13 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
 
                                 return (
                                     <tr key={supplier.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 group transition-colors">
-                                        <td className={cellClass}>
+                                        <td className={`${cellClass} pl-6`}>
                                             <div className="font-bold text-zinc-800 dark:text-zinc-200">{supplier.name}</div>
-                                            {supplier.isOrm && <span className="text-[10px] bg-green-600 text-white px-1.5 rounded border border-green-200">ORM</span>}
+                                            {supplier.isOrm && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 rounded font-bold">ORM</span>}
                                         </td>
-                                        <td className={`${cellClass} text-center font-mono text-zinc-600 dark:text-zinc-400`}>{weight > 0 ? `${weight.toLocaleString()} kg` : '-'}</td>
+                                        <td className={`${cellClass} text-center font-mono text-zinc-600 dark:text-zinc-400 text-xs`}>{weight > 0 ? `${weight.toLocaleString()} kg` : '-'}</td>
                                         <td className={`${cellClass} text-center`}>
-                                            <button type="button" onClick={() => updateSupplierTransport(supplier.id, { isSupplierOrganized: !isOrgBySupplier })} className={`flex items-center justify-center gap-2 mx-auto px-2 py-1 rounded border transition-all ${isOrgBySupplier ? 'bg-zinc-100 border-zinc-300 text-zinc-700' : 'bg-white border-zinc-200 text-zinc-400 hover:border-zinc-300'}`}>
+                                            <button type="button" onClick={() => updateSupplierTransport(supplier.id, { isSupplierOrganized: !isOrgBySupplier })} className={`flex items-center justify-center gap-2 mx-auto px-2 py-1 rounded-lg border transition-all ${isOrgBySupplier ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-zinc-200 text-zinc-400 hover:border-zinc-300'}`}>
                                                 {isOrgBySupplier ? <CheckSquare size={16}/> : <Square size={16}/>}
                                             </button>
                                         </td>
@@ -318,7 +324,7 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
                                                 <div className="flex items-center justify-center">
                                                     <button 
                                                         onClick={(e) => handleToggleAutoManual(e, supplier)} 
-                                                        className={`px-2 py-0.5 rounded text-[10px] font-bold border ${isManual ? 'bg-zinc-200 text-zinc-600 border-zinc-300' : 'bg-yellow-400 text-zinc-900 border-yellow-500'}`}
+                                                        className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors ${isManual ? 'bg-zinc-100 text-zinc-600 border-zinc-300' : 'bg-yellow-100 text-yellow-800 border-yellow-300'}`}
                                                         title={isManual ? "Kliknij, aby włączyć automat" : "Kliknij, aby włączyć ręczny"}
                                                     >
                                                         {isManual ? 'MAN' : 'AUTO'}
@@ -338,8 +344,8 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
                                                 <option value={Currency.EUR}>EUR</option>
                                             </select>
                                         </td>
-                                        <td className={`${cellClass} text-right font-bold text-zinc-800 dark:text-zinc-200 font-mono`}>
-                                            {isOrgBySupplier ? <span className="text-xs text-zinc-500 font-normal italic">W cenie dost.</span> : `${tItem.totalPrice.toFixed(2)}`}
+                                        <td className={`${cellClass} text-right font-bold text-zinc-800 dark:text-zinc-200 font-mono pr-6`}>
+                                            {isOrgBySupplier ? <span className="text-xs text-zinc-400 font-normal italic">W cenie dost.</span> : `${tItem.totalPrice.toFixed(2)}`}
                                         </td>
                                         <td className={cellClass}></td>
                                     </tr>
@@ -353,17 +359,17 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
                                 const totalWeight = mergedSuppliers.reduce((sum, s) => sum + s.items.reduce((iSum, i) => iSum + (i.weight * i.quantity), 0), 0);
                                 
                                 return (
-                                    <tr key={item.id} className="bg-blue-50/50 hover:bg-blue-50 dark:bg-blue-900/10 dark:hover:bg-blue-900/20 transition-colors border-l-4 border-l-blue-400">
-                                        <td className={cellClass}>
+                                    <tr key={item.id} className="bg-blue-50/30 hover:bg-blue-50/50 dark:bg-blue-900/10 dark:hover:bg-blue-900/20 transition-colors border-l-4 border-l-blue-400">
+                                        <td className={`${cellClass} pl-4`}>
                                             <div className="font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
-                                                <Combine size={14} className="text-blue-500"/>
+                                                <Combine size={16} className="text-blue-500"/>
                                                 {item.name}
                                             </div>
-                                            <div className="text-[10px] text-zinc-500">
+                                            <div className="text-[10px] text-zinc-500 ml-6">
                                                 Łączy: {mergedSuppliers.map(s => s.customTabName || s.name).join(', ')}
                                             </div>
                                         </td>
-                                        <td className={`${cellClass} text-center font-mono text-zinc-600 dark:text-zinc-400`}>
+                                        <td className={`${cellClass} text-center font-mono text-zinc-600 dark:text-zinc-400 text-xs`}>
                                             {totalWeight.toLocaleString()} kg
                                         </td>
                                         <td className={`${cellClass} text-center text-zinc-300`}>-</td>
@@ -382,7 +388,7 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
                                                 <option value={Currency.EUR}>EUR</option>
                                             </select>
                                         </td>
-                                        <td className={`${cellClass} text-right font-bold text-zinc-800 dark:text-zinc-200 font-mono`}>{item.totalPrice.toFixed(2)}</td>
+                                        <td className={`${cellClass} text-right font-bold text-zinc-800 dark:text-zinc-200 font-mono pr-6`}>{item.totalPrice.toFixed(2)}</td>
                                         <td className={`${cellClass} text-center`}>
                                             <button 
                                                 type="button" 
@@ -399,8 +405,8 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
 
                             {/* 3. Manual Items */}
                             {manualItems.map(item => (
-                                <tr key={item.id} className="bg-yellow-50/20 hover:bg-yellow-50/50 transition-colors">
-                                    <td className={cellClass}>
+                                <tr key={item.id} className="bg-amber-50/20 hover:bg-amber-50/40 transition-colors">
+                                    <td className={`${cellClass} pl-6`}>
                                         <input type="text" className={textInputClass} placeholder="Nazwa transportu" value={item.name || ''} onChange={(e) => updateById(item.id, { name: e.target.value })} />
                                     </td>
                                     <td className={`${cellClass} text-center text-zinc-300`}>-</td>
@@ -414,7 +420,7 @@ export const TransportSection: React.FC<Props> = ({ transport, suppliers, onChan
                                             <option value={Currency.EUR}>EUR</option>
                                         </select>
                                     </td>
-                                    <td className={`${cellClass} text-right font-bold text-zinc-800 dark:text-zinc-200 font-mono`}>{item.totalPrice.toFixed(2)}</td>
+                                    <td className={`${cellClass} text-right font-bold text-zinc-800 dark:text-zinc-200 font-mono pr-6`}>{item.totalPrice.toFixed(2)}</td>
                                     <td className={`${cellClass} text-center`}><button type="button" onClick={() => removeTransport(item.id)} className="text-zinc-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button></td>
                                 </tr>
                             ))}

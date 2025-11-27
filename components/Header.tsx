@@ -47,7 +47,7 @@ export const Header: React.FC<Props> = ({
                 
                 {/* 1. LEFT: Logo */}
                 <div className="flex items-center gap-3 shrink-0">
-                    <div className="bg-gradient-to-br from-yellow-400 to-yellow-500 p-1.5 rounded-lg shadow-sm text-zinc-900">
+                    <div className="bg-gradient-to-br from-yellow-400 to-yellow-500 p-1.5 rounded-xl shadow-sm text-zinc-900">
                         <CalcIcon size={18} strokeWidth={2.5} />
                     </div>
                     <div className="flex flex-col">
@@ -60,17 +60,17 @@ export const Header: React.FC<Props> = ({
 
                 {/* 2. CENTER: Navigation (Desktop) - Scrollable on mobile */}
                 <div className="flex-1 flex justify-center overflow-x-auto no-scrollbar mask-gradient px-2">
-                    <div className="flex items-center gap-1 md:gap-2">
+                    <div className="flex items-center gap-1 md:gap-2 p-1 bg-zinc-100/50 dark:bg-zinc-800/50 rounded-full border border-zinc-200/50 dark:border-zinc-700/50">
                         {navItems.map((item) => {
                             const isActive = appState.viewMode === item.mode;
                             return (
                                 <button 
                                     key={item.mode}
                                     onClick={() => setAppState(prev => ({ ...prev, viewMode: item.mode }))}
-                                    className={`relative px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap flex items-center gap-2 ${
+                                    className={`relative px-4 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap flex items-center gap-2 ${
                                         isActive 
-                                        ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm' 
-                                        : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800/50'
+                                        ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm border border-zinc-200 dark:border-zinc-600' 
+                                        : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:text-zinc-200'
                                     }`}
                                 >
                                     <span className={isActive ? "text-yellow-600 dark:text-yellow-400" : "text-zinc-400"}>
@@ -88,12 +88,12 @@ export const Header: React.FC<Props> = ({
                     
                     {/* Mode Switcher - Only in Calculator View */}
                     {appState.viewMode === ViewMode.CALCULATOR && (
-                        <div className="hidden lg:flex bg-zinc-100 dark:bg-zinc-800 p-0.5 rounded-lg items-center border border-zinc-200 dark:border-zinc-700 mr-2">
+                        <div className="hidden lg:flex bg-zinc-100/80 dark:bg-zinc-800 p-1 rounded-full items-center border border-zinc-200 dark:border-zinc-700 mr-2">
                             <button
                                 onClick={() => setAppState(prev => ({ ...prev, mode: CalculationMode.INITIAL }))}
-                                className={`px-2 py-1 rounded-[6px] text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                                className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
                                     !isFinal 
-                                    ? 'bg-white dark:bg-zinc-600 text-zinc-900 dark:text-white shadow-sm' 
+                                    ? 'bg-white dark:bg-zinc-600 text-zinc-900 dark:text-white shadow-sm border border-zinc-200 dark:border-zinc-500' 
                                     : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'
                                 }`}
                             >
@@ -103,9 +103,9 @@ export const Header: React.FC<Props> = ({
                             
                             <button
                                 onClick={() => setAppState(prev => ({ ...prev, mode: CalculationMode.FINAL }))}
-                                className={`px-2 py-1 rounded-[6px] text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                                className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
                                     isFinal 
-                                    ? 'bg-white dark:bg-zinc-600 text-zinc-900 dark:text-white shadow-sm' 
+                                    ? 'bg-white dark:bg-zinc-600 text-zinc-900 dark:text-white shadow-sm border border-zinc-200 dark:border-zinc-500' 
                                     : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'
                                 }`}
                             >
@@ -118,7 +118,7 @@ export const Header: React.FC<Props> = ({
                     {/* Quick Access to Project Manager */}
                     <button 
                          onClick={onShowProjectManager}
-                         className="hidden sm:flex p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+                         className="hidden sm:flex p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full"
                          title="Menedżer Projektów"
                     >
                          <HardDrive size={18} />
@@ -128,7 +128,7 @@ export const Header: React.FC<Props> = ({
                      {appState.viewMode === ViewMode.CALCULATOR && (
                         <button 
                             onClick={onShowComparison} 
-                            className="hidden sm:flex p-2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+                            className="hidden sm:flex p-2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full"
                             title="Porównaj Wersje"
                         >
                             <Scale size={18}/>
@@ -142,7 +142,7 @@ export const Header: React.FC<Props> = ({
                          <button 
                             onClick={onUndo} 
                             disabled={!canUndo} 
-                            className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-30 transition-colors" 
+                            className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-30 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full" 
                             title="Cofnij"
                          >
                              <Undo2 size={18}/>
@@ -150,7 +150,7 @@ export const Header: React.FC<Props> = ({
                          <button 
                             onClick={onRedo} 
                             disabled={!canRedo} 
-                            className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-30 transition-colors" 
+                            className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-30 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full" 
                             title="Ponów"
                          >
                              <Redo2 size={18}/>
@@ -160,7 +160,7 @@ export const Header: React.FC<Props> = ({
                     {/* Menu */}
                     <DropdownMenu 
                         trigger={
-                            <div className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors text-zinc-600 dark:text-zinc-300">
+                            <div className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors text-zinc-600 dark:text-zinc-300">
                                 <Menu size={20} />
                             </div>
                         } 

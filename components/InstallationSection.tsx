@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { InstallationData, CustomInstallationItem, Currency, Supplier, InstallationStage, LinkedSource } from '../types';
 import { Wrench, Plus, Trash2, ChevronUp, ChevronDown, Eye, EyeOff, Link, Search, X, Box, Package, Clock, Users, Combine, Info, RefreshCw, Settings, Truck, Edit2, Lock, Unlock, CheckSquare, Square, AlertCircle } from 'lucide-react';
@@ -329,51 +330,51 @@ export const InstallationSection: React.FC<Props> = ({ data, onChange, exchangeR
 
 
       return (
-          <div key={stage.id} className={`bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg mb-4 relative shadow-sm transition-all ${isExcluded ? 'opacity-50 grayscale' : ''}`}>
-               {isExcluded && <div className="absolute top-0 right-0 left-0 bg-red-500 text-white text-xs font-bold text-center py-0.5 rounded-t-lg z-10">ETAP WYKLUCZONY Z WARIANTU</div>}
+          <div key={stage.id} className={`bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl mb-6 relative shadow-sm transition-all ${isExcluded ? 'opacity-50 grayscale' : ''}`}>
+               {isExcluded && <div className="absolute top-0 right-0 left-0 bg-red-500 text-white text-xs font-bold text-center py-0.5 rounded-t-2xl z-10">ETAP WYKLUCZONY Z WARIANTU</div>}
                
                {/* STAGE HEADER */}
-               <div className="flex justify-between items-center p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-t-lg border-b dark:border-zinc-700">
+               <div className="flex justify-between items-center p-5 bg-zinc-50/50 dark:bg-zinc-800/50 rounded-t-2xl border-b border-zinc-100 dark:border-zinc-700">
                    <div className="flex items-center gap-3 w-full max-w-md">
                        <button 
                            onClick={() => toggleStageCollapse(stage.id)} 
-                           className="bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 p-1 rounded transition-colors text-zinc-600 dark:text-zinc-300"
+                           className="bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 p-1.5 rounded-lg transition-colors text-zinc-500 dark:text-zinc-300"
                        >
-                           {isCollapsed ? <ChevronDown size={14}/> : <ChevronUp size={14}/>}
+                           {isCollapsed ? <ChevronDown size={16}/> : <ChevronUp size={16}/>}
                        </button>
-                       <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-500 font-bold px-2 py-1 rounded text-xs">#{index + 1}</span>
+                       <span className="bg-white dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 text-zinc-500 font-bold px-2 py-1 rounded-lg text-xs">#{index + 1}</span>
                        <div className="relative group flex-1">
                             <input 
                                     type="text" 
-                                    className="font-bold text-zinc-800 dark:text-zinc-100 bg-transparent outline-none border-b-2 border-transparent focus:border-yellow-400 hover:border-zinc-200 dark:hover:border-zinc-600 px-1 py-0.5 rounded transition-all w-full pr-8"
+                                    className="font-bold text-lg text-zinc-800 dark:text-zinc-100 bg-transparent outline-none border-b-2 border-transparent focus:border-yellow-400 hover:border-zinc-200 dark:hover:border-zinc-600 px-1 py-0.5 transition-all w-full pr-8"
                                     value={stage.name}
                                     onChange={(e) => updateStage(stage.id, { name: e.target.value })}
                                     placeholder="Nazwa Etapu (np. Antresola)"
                                     onClick={(e) => e.stopPropagation()}
                             />
-                            <Edit2 size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"/>
+                            <Edit2 size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"/>
                        </div>
                    </div>
-                   <div className="flex items-center gap-4">
+                   <div className="flex items-center gap-6">
                        <div className="text-right">
-                           <span className="text-xs text-zinc-400 uppercase font-bold">Koszt Etapu</span>
-                           <div className="font-mono font-bold text-zinc-800 dark:text-zinc-200">{stageCost.toFixed(2)} PLN</div>
+                           <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Koszt Etapu</span>
+                           <div className="font-mono font-bold text-zinc-800 dark:text-zinc-200 text-lg">{stageCost.toFixed(2)} PLN</div>
                        </div>
-                       <button onClick={() => removeStage(stage.id)} className="text-zinc-300 hover:text-red-500"><Trash2 size={16}/></button>
+                       <button onClick={() => removeStage(stage.id)} className="text-zinc-300 hover:text-red-500 transition-colors"><Trash2 size={20}/></button>
                    </div>
                </div>
 
                {/* STAGE CONTENT (COLLAPSIBLE) */}
                <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${isCollapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}>
                    <div className="overflow-hidden">
-                        <div className="p-4">
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="p-6">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                                 {/* Col 1: Suppliers Linking */}
-                                <div className="bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded border border-zinc-100 dark:border-zinc-700">
-                                    <div className="text-xs font-bold text-zinc-500 mb-2 flex items-center gap-2">
+                                <div className="bg-zinc-50 dark:bg-zinc-900/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-700/50">
+                                    <div className="text-xs font-bold text-zinc-500 mb-3 flex items-center gap-2 uppercase tracking-wider">
                                         <Combine size={14}/> Powiązani Dostawcy (ORM)
                                     </div>
-                                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                                    <div className="space-y-1 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
                                         {suppliers.map(s => {
                                             const isLinked = stage.linkedSupplierIds?.includes(s.id);
                                             const linkedElsewhere = !isLinked && stages.some(os => os.linkedSupplierIds?.includes(s.id));
@@ -382,16 +383,16 @@ export const InstallationSection: React.FC<Props> = ({ data, onChange, exchangeR
                                                 <button 
                                                         key={s.id}
                                                         onClick={() => toggleSupplierInStage(stage.id, s.id)}
-                                                        className={`w-full text-left px-2 py-1.5 rounded text-xs flex justify-between items-center border transition-colors ${
+                                                        className={`w-full text-left px-3 py-2 rounded-lg text-xs flex justify-between items-center border transition-all ${
                                                             isLinked 
-                                                            ? 'bg-blue-100 border-blue-200 text-blue-800 font-bold' 
+                                                            ? 'bg-white border-blue-200 text-blue-700 font-bold shadow-sm' 
                                                             : linkedElsewhere 
-                                                                ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 border-transparent opacity-50' 
-                                                                : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-yellow-400'
+                                                                ? 'bg-transparent text-zinc-400 border-transparent opacity-60' 
+                                                                : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-700'
                                                         }`}
                                                 >
                                                     <span className="truncate">{s.customTabName || s.name}</span>
-                                                    {isLinked && <CheckLink size={12}/>}
+                                                    {isLinked && <CheckLink size={14} className="text-blue-500"/>}
                                                 </button>
                                             );
                                         })}
@@ -399,90 +400,90 @@ export const InstallationSection: React.FC<Props> = ({ data, onChange, exchangeR
                                 </div>
 
                                 {/* Col 2 & 3: Method & Details */}
-                                <div className="lg:col-span-2 space-y-4">
-                                    <div className="flex gap-2 mb-2">
-                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'PALLETS' })} className={`flex-1 py-1 text-xs font-bold rounded border transition-colors ${stage.calcMethod === 'PALLETS' ? 'bg-yellow-100 border-yellow-300 text-yellow-900' : 'bg-white dark:bg-zinc-700 border-zinc-200 dark:border-zinc-600'}`}>Miejsca Paletowe</button>
-                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'TIME' })} className={`flex-1 py-1 text-xs font-bold rounded border transition-colors ${stage.calcMethod === 'TIME' ? 'bg-blue-100 border-blue-300 text-blue-900' : 'bg-white dark:bg-zinc-700 border-zinc-200 dark:border-zinc-600'}`}>Roboczogodziny (ORM)</button>
-                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'BOTH' })} className={`flex-1 py-1 text-xs font-bold rounded border transition-colors ${stage.calcMethod === 'BOTH' ? 'bg-purple-100 border-purple-300 text-purple-900' : 'bg-white dark:bg-zinc-700 border-zinc-200 dark:border-zinc-600'}`}>Łączona (Palety + Czas)</button>
+                                <div className="lg:col-span-2 space-y-6">
+                                    <div className="flex gap-2 bg-zinc-100 dark:bg-zinc-800/50 p-1 rounded-xl">
+                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'PALLETS' })} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${stage.calcMethod === 'PALLETS' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'}`}>Miejsca Paletowe</button>
+                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'TIME' })} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${stage.calcMethod === 'TIME' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'}`}>Roboczogodziny</button>
+                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'BOTH' })} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${stage.calcMethod === 'BOTH' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'}`}>Łączona</button>
                                     </div>
 
                                     {(stage.calcMethod === 'PALLETS' || stage.calcMethod === 'BOTH') && (
-                                        <div className="grid grid-cols-3 gap-3 animate-fadeIn">
-                                            {stage.calcMethod === 'BOTH' && <div className="col-span-3 text-[10px] font-bold text-yellow-600 uppercase border-b border-yellow-100 mb-1">Część 1: Miejsca Paletowe</div>}
-                                            <div><label className="block text-[10px] font-bold text-zinc-500 uppercase">Ilość Miejsc</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.palletSpots} onChange={(e) => updateStage(stage.id, { palletSpots: parseFloat(e.target.value) || 0 })} /></div>
-                                            <div><label className="block text-[10px] font-bold text-zinc-500 uppercase">Wydajność (szt/dzień)</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.palletSpotsPerDay} onChange={(e) => updateStage(stage.id, { palletSpotsPerDay: parseFloat(e.target.value) || 0 })} /></div>
-                                            <div><label className="block text-[10px] font-bold text-zinc-500 uppercase">Cena / Miejsce</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.palletSpotPrice} onChange={(e) => updateStage(stage.id, { palletSpotPrice: parseFloat(e.target.value) || 0 })} /></div>
+                                        <div className="grid grid-cols-3 gap-4 animate-fadeIn bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 p-4 rounded-xl">
+                                            {stage.calcMethod === 'BOTH' && <div className="col-span-3 text-[10px] font-bold text-yellow-600 uppercase border-b border-yellow-100 pb-2 mb-2">Część 1: Miejsca Paletowe</div>}
+                                            <div><label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1.5">Ilość Miejsc</label><input type="number" className="w-full p-2.5 border border-zinc-200 dark:border-zinc-600 rounded-xl text-sm bg-zinc-50 dark:bg-zinc-700/50 outline-none focus:border-yellow-400" value={stage.palletSpots} onChange={(e) => updateStage(stage.id, { palletSpots: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div><label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1.5">Wydajność (szt/dzień)</label><input type="number" className="w-full p-2.5 border border-zinc-200 dark:border-zinc-600 rounded-xl text-sm bg-zinc-50 dark:bg-zinc-700/50 outline-none focus:border-yellow-400" value={stage.palletSpotsPerDay} onChange={(e) => updateStage(stage.id, { palletSpotsPerDay: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div><label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1.5">Cena / Miejsce</label><input type="number" className="w-full p-2.5 border border-zinc-200 dark:border-zinc-600 rounded-xl text-sm bg-zinc-50 dark:bg-zinc-700/50 outline-none focus:border-yellow-400" value={stage.palletSpotPrice} onChange={(e) => updateStage(stage.id, { palletSpotPrice: parseFloat(e.target.value) || 0 })} /></div>
                                         </div>
                                     )}
 
                                     {(stage.calcMethod === 'TIME' || stage.calcMethod === 'BOTH') && (
-                                        <div className="grid grid-cols-4 gap-3 animate-fadeIn">
-                                            {stage.calcMethod === 'BOTH' && <div className="col-span-4 text-[10px] font-bold text-blue-600 uppercase border-b border-blue-100 mb-1 mt-2">Część 2: Roboczogodziny</div>}
-                                            <div className="col-span-4 bg-blue-50 dark:bg-blue-900/20 p-2 rounded flex justify-between items-center text-xs text-blue-800 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
+                                        <div className="grid grid-cols-4 gap-4 animate-fadeIn bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 p-4 rounded-xl">
+                                            {stage.calcMethod === 'BOTH' && <div className="col-span-4 text-[10px] font-bold text-blue-600 uppercase border-b border-blue-100 pb-2 mb-2">Część 2: Roboczogodziny</div>}
+                                            <div className="col-span-4 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl flex justify-between items-center text-xs text-blue-800 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
                                                 <span>ORM: <strong>{stageHours.toFixed(1)}h</strong></span>
-                                                <span>+ Manual: <input type="number" className="w-16 p-1 text-center border rounded bg-white dark:bg-zinc-800 ml-1" value={stage.manualLaborHours} onChange={(e) => updateStage(stage.id, { manualLaborHours: parseFloat(e.target.value) || 0 })} /> h</span>
+                                                <span>+ Manual: <input type="number" className="w-16 p-1 text-center border rounded-lg bg-white dark:bg-zinc-800 ml-1" value={stage.manualLaborHours} onChange={(e) => updateStage(stage.id, { manualLaborHours: parseFloat(e.target.value) || 0 })} /> h</span>
                                                 <span>= <strong>{stageTotalHours.toFixed(1)}h</strong></span>
                                             </div>
-                                            <div><label className="block text-[10px] font-bold text-zinc-500 uppercase">Osoby</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.installersCount} onChange={(e) => updateStage(stage.id, { installersCount: parseFloat(e.target.value) || 0 })} /></div>
-                                            <div><label className="block text-[10px] font-bold text-zinc-500 uppercase">h/Dzień</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.workDayHours} onChange={(e) => updateStage(stage.id, { workDayHours: parseFloat(e.target.value) || 0 })} /></div>
-                                            <div className="col-span-2"><label className="block text-[10px] font-bold text-zinc-500 uppercase">Stawka (osobodzień)</label><input type="number" className="w-full p-2 border rounded text-sm bg-white dark:bg-zinc-800" value={stage.manDayRate} onChange={(e) => updateStage(stage.id, { manDayRate: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div><label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1.5">Osoby</label><input type="number" className="w-full p-2.5 border border-zinc-200 dark:border-zinc-600 rounded-xl text-sm bg-zinc-50 dark:bg-zinc-700/50 outline-none focus:border-blue-400" value={stage.installersCount} onChange={(e) => updateStage(stage.id, { installersCount: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div><label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1.5">h/Dzień</label><input type="number" className="w-full p-2.5 border border-zinc-200 dark:border-zinc-600 rounded-xl text-sm bg-zinc-50 dark:bg-zinc-700/50 outline-none focus:border-blue-400" value={stage.workDayHours} onChange={(e) => updateStage(stage.id, { workDayHours: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div className="col-span-2"><label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1.5">Stawka (osobodzień)</label><input type="number" className="w-full p-2.5 border border-zinc-200 dark:border-zinc-600 rounded-xl text-sm bg-zinc-50 dark:bg-zinc-700/50 outline-none focus:border-blue-400" value={stage.manDayRate} onChange={(e) => updateStage(stage.id, { manDayRate: parseFloat(e.target.value) || 0 })} /></div>
                                         </div>
                                     )}
                                     
-                                    <div className="text-right text-xs text-zinc-500">Estymowany czas: <strong className="text-zinc-800 dark:text-zinc-200">{stageDuration} dni</strong></div>
+                                    <div className="text-right text-xs text-zinc-500">Estymowany czas: <strong className="text-zinc-800 dark:text-zinc-200 bg-zinc-100 dark:bg-zinc-700 px-2 py-1 rounded-lg ml-1">{stageDuration} dni</strong></div>
                                 </div>
                             </div>
 
                             {/* --- EQUIPMENT FOR THIS STAGE --- */}
-                            <div className="mt-4 pt-4 border-t dark:border-zinc-700">
-                                    <h4 className="text-xs font-bold text-zinc-500 uppercase mb-2 flex items-center gap-2"><Truck size={12}/> Sprzęt dla etapu</h4>
+                            <div className="mt-6 pt-6 border-t border-zinc-100 dark:border-zinc-700">
+                                    <h4 className="text-xs font-bold text-zinc-500 uppercase mb-4 flex items-center gap-2"><Truck size={14}/> Sprzęt dla etapu</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {/* Forklift */}
-                                        <div className="bg-zinc-50 dark:bg-zinc-900 p-2 rounded border border-zinc-100 dark:border-zinc-700">
-                                            <div className="flex justify-between mb-2"><span className="text-xs font-semibold">Wózek Widłowy</span></div>
-                                            <div className="grid grid-cols-3 gap-2 text-[10px] text-zinc-500 font-bold uppercase mb-1">
+                                        <div className="bg-zinc-50 dark:bg-zinc-900/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-700/50">
+                                            <div className="flex justify-between mb-3"><span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Wózek Widłowy</span></div>
+                                            <div className="grid grid-cols-3 gap-3 text-[10px] text-zinc-400 font-bold uppercase mb-1">
                                                 <div>Stawka dzienna</div>
                                                 <div>Ilość Dni</div>
                                                 <div>Koszt Transportu</div>
                                             </div>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                <input type="number" placeholder="0.00" className="p-1 border rounded text-xs" value={stage.forkliftDailyRate} onChange={e => updateStage(stage.id, { forkliftDailyRate: parseFloat(e.target.value) || 0 })} />
+                                            <div className="grid grid-cols-3 gap-3">
+                                                <input type="number" placeholder="0.00" className="p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs bg-white dark:bg-zinc-800" value={stage.forkliftDailyRate} onChange={e => updateStage(stage.id, { forkliftDailyRate: parseFloat(e.target.value) || 0 })} />
                                                 <div className="relative">
-                                                    <input type="number" placeholder="0" className={`p-1 border rounded text-xs w-full ${stage.forkliftDays !== stageDuration ? 'border-orange-300' : ''}`} value={stage.forkliftDays} onChange={e => updateStage(stage.id, { forkliftDays: parseFloat(e.target.value) || 0 })} />
+                                                    <input type="number" placeholder="0" className={`p-2 border rounded-lg text-xs w-full bg-white dark:bg-zinc-800 ${stage.forkliftDays !== stageDuration ? 'border-orange-300' : 'border-zinc-200 dark:border-zinc-600'}`} value={stage.forkliftDays} onChange={e => updateStage(stage.id, { forkliftDays: parseFloat(e.target.value) || 0 })} />
                                                     {stage.forkliftDays !== stageDuration && stageDuration > 0 && (
-                                                        <button onClick={() => updateStage(stage.id, { forkliftDays: stageDuration })} className="absolute right-1 top-1 text-blue-500 hover:text-blue-700" title="Sync"><RefreshCw size={10}/></button>
+                                                        <button onClick={() => updateStage(stage.id, { forkliftDays: stageDuration })} className="absolute right-1 top-1 text-blue-500 hover:text-blue-700 p-1" title="Sync"><RefreshCw size={10}/></button>
                                                     )}
                                                 </div>
-                                                <input type="number" placeholder="0.00" className="p-1 border rounded text-xs" value={stage.forkliftTransportPrice} onChange={e => updateStage(stage.id, { forkliftTransportPrice: parseFloat(e.target.value) || 0 })} />
+                                                <input type="number" placeholder="0.00" className="p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs bg-white dark:bg-zinc-800" value={stage.forkliftTransportPrice} onChange={e => updateStage(stage.id, { forkliftTransportPrice: parseFloat(e.target.value) || 0 })} />
                                             </div>
                                         </div>
                                         {/* Scissor Lift */}
-                                        <div className="bg-zinc-50 dark:bg-zinc-900 p-2 rounded border border-zinc-100 dark:border-zinc-700">
-                                            <div className="flex justify-between mb-2"><span className="text-xs font-semibold">Podnośnik</span></div>
-                                            <div className="grid grid-cols-3 gap-2 text-[10px] text-zinc-500 font-bold uppercase mb-1">
+                                        <div className="bg-zinc-50 dark:bg-zinc-900/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-700/50">
+                                            <div className="flex justify-between mb-3"><span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Podnośnik</span></div>
+                                            <div className="grid grid-cols-3 gap-3 text-[10px] text-zinc-400 font-bold uppercase mb-1">
                                                 <div>Stawka dzienna</div>
                                                 <div>Ilość Dni</div>
                                                 <div>Koszt Transportu</div>
                                             </div>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                <input type="number" placeholder="0.00" className="p-1 border rounded text-xs" value={stage.scissorLiftDailyRate} onChange={e => updateStage(stage.id, { scissorLiftDailyRate: parseFloat(e.target.value) || 0 })} />
+                                            <div className="grid grid-cols-3 gap-3">
+                                                <input type="number" placeholder="0.00" className="p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs bg-white dark:bg-zinc-800" value={stage.scissorLiftDailyRate} onChange={e => updateStage(stage.id, { scissorLiftDailyRate: parseFloat(e.target.value) || 0 })} />
                                                 <div className="relative">
-                                                    <input type="number" placeholder="0" className={`p-1 border rounded text-xs w-full ${stage.scissorLiftDays !== stageDuration ? 'border-orange-300' : ''}`} value={stage.scissorLiftDays} onChange={e => updateStage(stage.id, { scissorLiftDays: parseFloat(e.target.value) || 0 })} />
+                                                    <input type="number" placeholder="0" className={`p-2 border rounded-lg text-xs w-full bg-white dark:bg-zinc-800 ${stage.scissorLiftDays !== stageDuration ? 'border-orange-300' : 'border-zinc-200 dark:border-zinc-600'}`} value={stage.scissorLiftDays} onChange={e => updateStage(stage.id, { scissorLiftDays: parseFloat(e.target.value) || 0 })} />
                                                     {stage.scissorLiftDays !== stageDuration && stageDuration > 0 && (
-                                                        <button onClick={() => updateStage(stage.id, { scissorLiftDays: stageDuration })} className="absolute right-1 top-1 text-blue-500 hover:text-blue-700" title="Sync"><RefreshCw size={10}/></button>
+                                                        <button onClick={() => updateStage(stage.id, { scissorLiftDays: stageDuration })} className="absolute right-1 top-1 text-blue-500 hover:text-blue-700 p-1" title="Sync"><RefreshCw size={10}/></button>
                                                     )}
                                                 </div>
-                                                <input type="number" placeholder="0.00" className="p-1 border rounded text-xs" value={stage.scissorLiftTransportPrice} onChange={e => updateStage(stage.id, { scissorLiftTransportPrice: parseFloat(e.target.value) || 0 })} />
+                                                <input type="number" placeholder="0.00" className="p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs bg-white dark:bg-zinc-800" value={stage.scissorLiftTransportPrice} onChange={e => updateStage(stage.id, { scissorLiftTransportPrice: parseFloat(e.target.value) || 0 })} />
                                             </div>
                                         </div>
                                     </div>
                             </div>
 
                             {/* --- CUSTOM ITEMS FOR THIS STAGE --- */}
-                            <div className="mt-4 pt-2 border-t dark:border-zinc-700">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <h4 className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-2"><Settings size={12}/> Dodatki / Inne</h4>
-                                        <button onClick={addCustomItem} className="text-[10px] bg-zinc-100 hover:bg-zinc-200 px-2 py-0.5 rounded flex items-center gap-1"><Plus size={10}/> Dodaj</button>
+                            <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-700">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h4 className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-2"><Settings size={14}/> Dodatki / Inne</h4>
+                                        <button onClick={addCustomItem} className="text-[10px] bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-700 dark:hover:bg-zinc-600 px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors font-bold"><Plus size={12}/> Dodaj</button>
                                     </div>
                                     
                                     {stage.customItems.map((item, idx) => {
@@ -491,11 +492,11 @@ export const InstallationSection: React.FC<Props> = ({ data, onChange, exchangeR
                                         const isAuto = !!item.isAutoQuantity;
                                         
                                         return (
-                                        <div key={item.id} className={`flex gap-2 items-center mb-1 relative ${item.isExcluded ? 'opacity-50' : ''}`}>
+                                        <div key={item.id} className={`flex gap-3 items-center mb-2 relative ${item.isExcluded ? 'opacity-50' : ''}`}>
                                             <div className="relative flex-1">
                                                 <input 
                                                     type="text" 
-                                                    className={`w-full p-1 border rounded text-xs ${isLinked ? 'pl-6' : ''}`}
+                                                    className={`w-full p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs bg-white dark:bg-zinc-800 outline-none focus:border-blue-400 ${isLinked ? 'pl-8' : ''}`}
                                                     value={item.description} 
                                                     onChange={e => updateCustomItem(idx, 'description', e.target.value)} 
                                                     placeholder="Opis..." 
@@ -503,51 +504,51 @@ export const InstallationSection: React.FC<Props> = ({ data, onChange, exchangeR
                                                 {isLinked && (
                                                     <button 
                                                         onClick={() => handleUnlinkAll(idx)}
-                                                        className="absolute left-1 top-1/2 -translate-y-1/2 text-blue-500 hover:text-red-500"
+                                                        className="absolute left-2 top-1/2 -translate-y-1/2 text-blue-500 hover:text-red-500"
                                                         title={`Połączono z ${linkedCount} elementami. Kliknij aby odłączyć.`}
                                                     >
-                                                        <Link size={12} />
+                                                        <Link size={14} />
                                                     </button>
                                                 )}
                                             </div>
                                             
                                             {/* Quantity Input with Link Logic */}
-                                            <div className="relative w-20">
+                                            <div className="relative w-24">
                                                 <input 
                                                     type="number" 
-                                                    className={`w-full p-1 border rounded text-xs text-center ${isAuto ? 'bg-blue-50 text-blue-800 font-bold' : ''}`} 
+                                                    className={`w-full p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs text-center outline-none ${isAuto ? 'bg-blue-50 text-blue-700 font-bold' : 'bg-white dark:bg-zinc-800'}`} 
                                                     value={item.quantity} 
                                                     onChange={e => updateCustomItem(idx, 'quantity', parseFloat(e.target.value) || 0)} 
                                                 />
                                                 {isAuto && (
-                                                    <Lock size={8} className="absolute right-1 top-1 text-blue-400" />
+                                                    <Lock size={10} className="absolute right-1.5 top-2.5 text-blue-300" />
                                                 )}
                                                 {!isAuto && isLinked && (
                                                     <button 
                                                         onClick={() => handleSyncItem(idx)}
-                                                        className="absolute right-1 top-1 text-orange-400 hover:text-blue-600"
+                                                        className="absolute right-1.5 top-2.5 text-orange-400 hover:text-blue-600"
                                                         title="Przywróć synchronizację ilości (Suma zaznaczonych)"
                                                     >
-                                                        <RefreshCw size={8} />
+                                                        <RefreshCw size={10} />
                                                     </button>
                                                 )}
                                             </div>
 
-                                            <input type="number" className="w-20 p-1 border rounded text-xs text-right" value={item.unitPrice} onChange={e => updateCustomItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)} />
+                                            <input type="number" className="w-24 p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs text-right bg-white dark:bg-zinc-800 outline-none focus:border-blue-400" value={item.unitPrice} onChange={e => updateCustomItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)} />
                                             
                                             {/* Link Button */}
                                             <div className="relative">
                                                 <button 
                                                     onClick={() => setLinkMenuOpen({ stageId: stage.id, itemIdx: idx })}
-                                                    className={`p-1 rounded text-zinc-400 hover:text-blue-500 ${linkMenuOpen?.stageId === stage.id && linkMenuOpen.itemIdx === idx ? 'bg-blue-100 text-blue-600' : ''}`}
+                                                    className={`p-2 rounded-lg text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors ${linkMenuOpen?.stageId === stage.id && linkMenuOpen.itemIdx === idx ? 'bg-blue-100 text-blue-600' : ''}`}
                                                     title="Wybierz elementy/grupy do zsumowania"
                                                 >
-                                                    <Link size={14}/>
+                                                    <Link size={16}/>
                                                 </button>
                                                 
                                                 {/* Link Menu Dropdown */}
                                                 {linkMenuOpen?.stageId === stage.id && linkMenuOpen.itemIdx === idx && (
-                                                    <div ref={linkMenuRef} className="absolute right-0 top-full mt-1 bg-white dark:bg-zinc-800 border dark:border-zinc-600 shadow-xl rounded z-50 w-80 max-h-80 overflow-y-auto flex flex-col">
+                                                    <div ref={linkMenuRef} className="absolute right-0 top-full mt-1 bg-white dark:bg-zinc-800 border dark:border-zinc-600 shadow-xl rounded-lg z-50 w-80 max-h-80 overflow-y-auto flex flex-col">
                                                         <div className="p-2 border-b dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800 z-10">
                                                             <div className="relative">
                                                                 <Search size={12} className="absolute left-2 top-2 text-zinc-400"/>
@@ -641,8 +642,8 @@ export const InstallationSection: React.FC<Props> = ({ data, onChange, exchangeR
                                                 )}
                                             </div>
 
-                                            <button onClick={() => updateCustomItem(idx, 'isExcluded', !item.isExcluded)} className="text-zinc-400 hover:text-zinc-600">{item.isExcluded ? <EyeOff size={12}/> : <Eye size={12}/>}</button>
-                                            <button onClick={() => removeCustomItem(idx)} className="text-zinc-300 hover:text-red-500"><Trash2 size={12}/></button>
+                                            <button onClick={() => updateCustomItem(idx, 'isExcluded', !item.isExcluded)} className="text-zinc-400 hover:text-zinc-600">{item.isExcluded ? <EyeOff size={16}/> : <Eye size={16}/>}</button>
+                                            <button onClick={() => removeCustomItem(idx)} className="text-zinc-300 hover:text-red-500"><Trash2 size={16}/></button>
                                         </div>
                                         );
                                     })}
@@ -655,49 +656,70 @@ export const InstallationSection: React.FC<Props> = ({ data, onChange, exchangeR
   };
 
   return (
-    <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 mb-8 transition-colors relative z-10">
+    <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 mb-8 transition-colors relative z-10">
       <div 
-          className="p-4 flex justify-between items-center cursor-pointer bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors"
+          className="p-5 flex justify-between items-center cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors rounded-t-2xl"
           onClick={() => setIsOpen(!isOpen)}
       >
-        <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-            <Wrench className="text-yellow-500" size={20} /> Koszty Montażu (Etapowe)
-        </h2>
+        <div className="flex items-center gap-3">
+            <div className="bg-yellow-100 p-2 rounded-lg text-yellow-600">
+                <Wrench size={20} />
+            </div>
+            <div>
+                <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-tight">Koszty Montażu (Etapowe)</h2>
+                <p className="text-xs text-zinc-500 mt-0.5">{stages.length} zdefiniowanych etapów</p>
+            </div>
+        </div>
+        
         <div className="flex items-center gap-4">
              <div className="text-right">
                 <span className="text-[10px] uppercase font-bold text-zinc-400 block leading-none mb-1">Suma</span>
-                <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">
+                <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200 text-lg">
                     {installationTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {offerCurrency}
                 </span>
              </div>
-             <button className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300">
-                {isOpen ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}
+             <button className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-transform duration-300" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                <ChevronDown size={20}/>
             </button>
         </div>
       </div>
       
-      {isOpen && (
-        <div className="p-6 border-t border-zinc-100 dark:border-zinc-700 bg-zinc-50/30 dark:bg-zinc-900/10">
-            {/* STAGES LIST */}
-            {stages.map((stage, idx) => renderStage(stage, idx))}
-            
-            <div className="mt-4 flex justify-center">
-                 <button 
-                    onClick={addStage}
-                    className="flex items-center gap-2 bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900 px-4 py-2 rounded text-sm font-bold hover:opacity-90 shadow-sm"
-                >
-                    <Plus size={16}/> Dodaj Kolejny Etap
-                </button>
-            </div>
+      <div className={`grid transition-[grid-template-rows] duration-500 ease-in-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+        <div className="overflow-hidden">
+            <div className="p-6 pt-0 border-t border-transparent">
+                {/* STAGES LIST */}
+                {stages.map((stage, idx) => renderStage(stage, idx))}
+                
+                <div className="mt-4 flex justify-center">
+                    <button 
+                        onClick={addStage}
+                        className="flex items-center gap-2 bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-50 hover:border-zinc-300 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 px-6 py-3 rounded-xl text-sm font-bold shadow-sm transition-all"
+                    >
+                        <Plus size={18}/> Dodaj Kolejny Etap
+                    </button>
+                </div>
 
-            <div className="mt-8 pt-4 border-t border-zinc-200 dark:border-zinc-700">
-                <label className="block text-xs font-bold text-zinc-500 mb-1 uppercase">Globalne Koszty Dodatkowe (Ryczałt Projektowy)</label>
-                <input type="number" min="0" value={data.otherInstallationCosts} onChange={(e) => onChange({...data, otherInstallationCosts: parseFloat(e.target.value) || 0})} className="w-full max-w-xs p-2 border rounded bg-white dark:bg-zinc-800 text-sm font-mono" placeholder="0.00" />
+                <div className="mt-8 pt-6 border-t border-dashed border-zinc-200 dark:border-zinc-700">
+                    <div className="flex items-center gap-4 bg-zinc-50 dark:bg-zinc-900/50 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                        <div className="flex-1">
+                            <label className="block text-xs font-bold text-zinc-500 mb-1 uppercase">Globalne Koszty Dodatkowe (Ryczałt Projektowy)</label>
+                            <p className="text-[10px] text-zinc-400">Koszty nieprzypisane do konkretnego etapu (np. dojazd koordynatora).</p>
+                        </div>
+                        <input 
+                            type="number" 
+                            min="0" 
+                            value={data.otherInstallationCosts} 
+                            onChange={(e) => onChange({...data, otherInstallationCosts: parseFloat(e.target.value) || 0})} 
+                            className="w-32 p-3 border border-zinc-200 dark:border-zinc-600 rounded-xl bg-white dark:bg-zinc-800 text-right font-bold focus:border-yellow-400 outline-none" 
+                            placeholder="0.00" 
+                        />
+                    </div>
+                </div>
             </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
 
-const CheckLink = ({size}: {size: number}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>;
+const CheckLink = ({size, className}: {size: number, className?: string}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="20 6 9 17 4 12"/></svg>;

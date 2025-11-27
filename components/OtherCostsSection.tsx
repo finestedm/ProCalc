@@ -38,42 +38,48 @@ export const OtherCostsSection: React.FC<Props> = ({ costs, onChange, exchangeRa
       return total + convert(c.price, c.currency, offerCurrency, exchangeRate);
   }, 0);
 
-  // Styling Constants (DataGrid Look)
-  const headerClass = "p-2 border-b dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-semibold uppercase text-xs tracking-wider sticky top-0 z-10";
-  const cellClass = "p-2 border-b dark:border-zinc-800/50 text-sm align-top";
-  const inputClass = "w-full p-1.5 border rounded text-right bg-white dark:bg-zinc-900 focus:border-yellow-400 outline-none font-bold text-zinc-900 dark:text-white dark:border-zinc-600 text-sm";
-  const textInputClass = "w-full p-1.5 bg-transparent border-b border-transparent focus:border-yellow-400 outline-none text-sm text-zinc-800 dark:text-zinc-200 placeholder-zinc-400";
-  const selectClass = "w-full p-1.5 bg-white dark:bg-zinc-900 border rounded text-xs outline-none focus:border-yellow-400 dark:border-zinc-600";
+  // Styling Constants
+  const headerClass = "p-3 border-b border-zinc-100 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-bold uppercase text-[10px] tracking-wider sticky top-0 z-10";
+  const cellClass = "p-3 border-b border-zinc-100 dark:border-zinc-800/50 text-sm align-middle";
+  const inputClass = "w-full p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-right bg-white dark:bg-zinc-900 focus:border-yellow-400 outline-none font-bold text-zinc-900 dark:text-white text-sm";
+  const textInputClass = "w-full p-2 bg-transparent border-b border-transparent focus:border-yellow-400 outline-none text-sm text-zinc-800 dark:text-zinc-200 placeholder-zinc-400";
+  const selectClass = "w-full p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs outline-none focus:border-yellow-400 cursor-pointer";
 
 
   return (
-    <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 mb-8 overflow-hidden transition-colors">
+    <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 mb-8 overflow-hidden transition-colors">
       <div 
-          className="p-4 flex justify-between items-center cursor-pointer bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors"
+          className="p-5 flex justify-between items-center cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors rounded-t-2xl"
           onClick={() => setIsOpen(!isOpen)}
       >
-        <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-            <Receipt className="text-yellow-500" size={20} /> Inne Koszty
-        </h2>
+        <div className="flex items-center gap-3">
+            <div className="bg-violet-100 p-2 rounded-lg text-violet-600">
+                <Receipt size={20} />
+            </div>
+            <div>
+                <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-tight">Inne Koszty</h2>
+                <p className="text-xs text-zinc-500 mt-0.5">Delegacje, noclegi, inne</p>
+            </div>
+        </div>
         
         <div className="flex items-center gap-4">
              <div className="text-right">
                 <span className="text-[10px] uppercase font-bold text-zinc-400 block leading-none mb-1">Suma</span>
-                <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">
+                <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200 text-lg">
                     {otherTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {offerCurrency}
                 </span>
              </div>
-             <button className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300">
-                {isOpen ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}
+             <button className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-transform duration-300" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                <ChevronDown size={20}/>
             </button>
         </div>
       </div>
 
-      <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+      <div className={`grid transition-[grid-template-rows] duration-500 ease-in-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
         <div className="overflow-hidden">
-            <div className="border-t border-zinc-100 dark:border-zinc-700">
-                <div className="flex justify-end p-2 bg-zinc-50 dark:bg-zinc-800/30 border-b dark:border-zinc-700">
-                    <button onClick={addCost} className="text-[10px] bg-zinc-200 dark:bg-zinc-700 hover:bg-yellow-400 hover:text-black dark:text-zinc-200 px-3 py-1 rounded flex items-center gap-1 transition-colors font-semibold">
+            <div className="border-t border-transparent">
+                <div className="flex justify-end p-3 bg-zinc-50/50 dark:bg-zinc-800/30 border-b border-zinc-100 dark:border-zinc-700">
+                    <button onClick={addCost} className="text-[10px] bg-zinc-200 dark:bg-zinc-700 hover:bg-yellow-400 hover:text-black dark:text-zinc-200 px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors font-bold">
                         <Plus size={12} /> Dodaj Koszt
                     </button>
                 </div>
@@ -97,7 +103,7 @@ export const OtherCostsSection: React.FC<Props> = ({ costs, onChange, exchangeRa
                             )}
                             {costs.map((cost, idx) => (
                                 <tr key={cost.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                                    <td className={`${cellClass} text-center text-zinc-400`}>{idx + 1}</td>
+                                    <td className={`${cellClass} text-center text-zinc-400 text-xs`}>{idx + 1}</td>
                                     <td className={cellClass}>
                                         <input type="text" placeholder="np. Hotel, Paliwo" className={textInputClass} value={cost.description} onChange={(e) => updateCost(idx, 'description', e.target.value)} />
                                     </td>
@@ -106,21 +112,4 @@ export const OtherCostsSection: React.FC<Props> = ({ costs, onChange, exchangeRa
                                     </td>
                                     <td className={cellClass}>
                                         <select className={selectClass} value={cost.currency} onChange={(e) => updateCost(idx, 'currency', e.target.value)}>
-                                            <option value={Currency.PLN}>PLN</option>
-                                            <option value={Currency.EUR}>EUR</option>
-                                        </select>
-                                    </td>
-                                    <td className={`${cellClass} text-center`}>
-                                        <button onClick={() => removeCost(idx)} className="text-zinc-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-      </div>
-    </div>
-  );
-};
+                                            <option value={Currency.PLN}>PLN</option

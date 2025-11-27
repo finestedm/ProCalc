@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { CalculationData, ProjectVariant, VariantItem, VariantItemType, Currency, VariantStatus } from '../types';
-import { Layers, Search, Trash2, Eye, EyeOff, ChevronDown, ChevronUp, Check, X, Crosshair, MinusCircle, Link, ArrowRight, Edit2, Lock } from 'lucide-react';
+import { Layers, Search, Trash2, Eye, EyeOff, ChevronDown, ChevronUp, Check, X, Crosshair, MinusCircle, Link, ArrowRight, Edit2, Lock, Plus } from 'lucide-react';
 import { convert, calculateStageCost } from '../services/calculationService';
 
 interface Props {
@@ -468,252 +468,251 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
       );
   };
 
-  const headerClass = "p-3 border-b dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-semibold uppercase text-xs tracking-wider sticky top-0 z-10 text-left";
-  const cellClass = "p-3 border-b dark:border-zinc-800/50 text-sm align-middle";
+  const headerClass = "p-3 border-b dark:border-zinc-700 bg-zinc-100/50 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-bold uppercase text-[10px] tracking-wider sticky top-0 z-10 text-left";
+  const cellClass = "p-3 border-b border-zinc-100 dark:border-zinc-800/50 text-sm align-middle";
 
   return (
-    <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 mb-8 transition-colors relative z-0">
+    <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 mb-8 transition-colors relative z-0">
       {renderTooltip()}
       
       <div 
-          className="p-4 flex justify-between items-center cursor-pointer bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors"
+          className="p-5 flex justify-between items-center cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors rounded-t-2xl"
           onClick={() => setIsOpen(!isOpen)}
       >
-        <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-            <Layers className="text-yellow-500" size={20} /> Warianty / Symulacje
-        </h2>
-        
-        <div className="flex items-center gap-4">
-             <div className="text-right">
-                <span className="text-[10px] uppercase font-bold text-zinc-400 block leading-none mb-1">Status</span>
-                <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">
-                    {(data.variants || []).some(v => v.status === 'INCLUDED') ? 'WHITELIST (Solo/Include)' : 'BLACKLIST (Standard)'}
-                </span>
-             </div>
-             <button className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300">
-                {isOpen ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}
-            </button>
+        <div className="flex items-center gap-3">
+            <div className="bg-purple-100 p-2 rounded-lg text-purple-600">
+                <Layers size={20} />
+            </div>
+            <div>
+                <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-tight">Warianty / Symulacje</h2>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                    Status: <span className="font-bold text-zinc-700 dark:text-zinc-300">{(data.variants || []).some(v => v.status === 'INCLUDED') ? 'WHITELIST (Solo/Include)' : 'BLACKLIST (Standard)'}</span>
+                </p>
+            </div>
         </div>
+        
+        <button className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-transform duration-300" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+            <ChevronDown size={20}/>
+        </button>
       </div>
 
-      {isOpen && (
-        <div className="p-0 border-t border-zinc-100 dark:border-zinc-700">
-            {/* Add New Variant Toolbar */}
-            <div className="p-4 bg-zinc-50 dark:bg-zinc-800/30 border-b dark:border-zinc-700">
-                <form onSubmit={addVariant} className="flex gap-2">
-                    <input 
-                        type="text" 
-                        placeholder="Nazwa nowego wariantu (np. Opcja A)..."
-                        className="flex-1 p-2 border rounded text-sm bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 focus:border-yellow-400 outline-none"
-                        value={newVariantName}
-                        onChange={(e) => setNewVariantName(e.target.value)}
-                    />
-                    <button type="submit" className="bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900 px-4 py-2 rounded text-sm font-bold hover:opacity-90">
-                        Utwórz
-                    </button>
-                </form>
-            </div>
+      <div className={`grid transition-[grid-template-rows] duration-500 ease-in-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+        <div className="overflow-hidden">
+            <div className="p-0 border-t border-zinc-100 dark:border-zinc-700">
+                {/* Add New Variant Toolbar */}
+                <div className="p-4 bg-zinc-50/50 dark:bg-zinc-800/30 border-b border-zinc-100 dark:border-zinc-700 flex justify-end">
+                    <form onSubmit={addVariant} className="flex gap-2 w-full md:w-auto">
+                        <input 
+                            type="text" 
+                            placeholder="Nazwa wariantu (np. Opcja A)..."
+                            className="flex-1 p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-sm bg-white dark:bg-zinc-900 focus:border-yellow-400 outline-none min-w-[200px]"
+                            value={newVariantName}
+                            onChange={(e) => setNewVariantName(e.target.value)}
+                        />
+                        <button type="submit" className="bg-zinc-800 hover:bg-zinc-700 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2">
+                            <Plus size={16}/> Utwórz
+                        </button>
+                    </form>
+                </div>
 
-            {/* Variants Table */}
-            <div className="overflow-x-auto min-h-[100px]">
-                <table className="w-full text-left border-collapse min-w-[600px]">
-                    <thead>
-                        <tr>
-                            <th className={`${headerClass} w-1/3`}>Nazwa Wariantu</th>
-                            <th className={`${headerClass} text-center`}>Elementy</th>
-                            <th className={`${headerClass} text-right`}>Wartość ({offerCurrency})</th>
-                            <th className={`${headerClass} text-center w-64`}>Akcje (Symulacja)</th>
-                            <th className={`${headerClass} w-16`}></th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white dark:bg-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
-                        {(data.variants || []).length === 0 && (
-                             <tr><td colSpan={5} className="p-6 text-center text-zinc-400 italic">Brak wariantów.</td></tr>
-                        )}
-                        
-                        {(data.variants || []).map(variant => {
-                            const variantCost = calculateVariantTotal(variant);
-                            const isEditing = activeVariantId === variant.id;
+                {/* Variants Table */}
+                <div className="overflow-x-auto min-h-[100px]">
+                    <table className="w-full text-left border-collapse min-w-[600px]">
+                        <thead>
+                            <tr>
+                                <th className={`${headerClass} w-1/3`}>Nazwa Wariantu</th>
+                                <th className={`${headerClass} text-center`}>Elementy</th>
+                                <th className={`${headerClass} text-right`}>Wartość ({offerCurrency})</th>
+                                <th className={`${headerClass} text-center w-64`}>Akcje (Symulacja)</th>
+                                <th className={`${headerClass} w-16`}></th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white dark:bg-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-700">
+                            {(data.variants || []).length === 0 && (
+                                <tr><td colSpan={5} className="p-8 text-center text-zinc-400 italic">Brak wariantów. Dodaj pierwszy wariant powyżej.</td></tr>
+                            )}
+                            
+                            {(data.variants || []).map(variant => {
+                                const variantCost = calculateVariantTotal(variant);
+                                const isEditing = activeVariantId === variant.id;
 
-                            return (
-                                <React.Fragment key={variant.id}>
-                                    <tr className={`transition-colors ${variant.status === 'INCLUDED' ? 'bg-green-50/50 dark:bg-green-900/10' : variant.status === 'EXCLUDED' ? 'bg-red-50/50 dark:bg-red-900/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50'}`}>
-                                        <td className={cellClass}>
-                                            <div className="relative group/edit">
-                                                <input 
-                                                    type="text" 
-                                                    className="w-full bg-transparent border-b border-transparent hover:border-zinc-300 focus:border-yellow-400 outline-none font-bold text-zinc-700 dark:text-zinc-200 transition-colors"
-                                                    value={variant.name}
-                                                    onChange={(e) => updateVariantName(variant.id, e.target.value)}
-                                                />
-                                                <Edit2 size={12} className="absolute right-0 top-1/2 -translate-y-1/2 text-zinc-300 opacity-0 group-hover/edit:opacity-100 pointer-events-none"/>
-                                            </div>
-                                            <div className="text-[10px] text-zinc-400 uppercase font-semibold mt-1">{variant.status}</div>
-                                        </td>
-                                        <td className={`${cellClass} text-center`}>
-                                            <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-2 py-0.5 rounded text-xs font-bold">
-                                                {variant.items.length}
-                                            </span>
-                                        </td>
-                                        <td className={`${cellClass} text-right font-mono font-bold text-zinc-700 dark:text-zinc-300`}>
-                                            {variantCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </td>
-                                        <td className={`${cellClass} text-center`}>
-                                            <div className="flex items-center justify-center gap-1">
-                                                <button onClick={() => handleSoloVariant(variant.id)} className="p-1.5 rounded text-zinc-500 hover:text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20" title="SOLO"><Crosshair size={16}/></button>
-                                                <button onClick={() => setVariantStatus(variant.id, 'EXCLUDED')} className={`p-1.5 rounded ${variant.status === 'EXCLUDED' ? 'bg-red-100 text-red-600' : 'text-zinc-400 hover:text-red-500'}`} title="WYKLUCZ"><EyeOff size={16}/></button>
-                                                <button onClick={() => setVariantStatus(variant.id, 'INCLUDED')} className={`p-1.5 rounded ${variant.status === 'INCLUDED' ? 'bg-green-100 text-green-600' : 'text-zinc-400 hover:text-green-500'}`} title="UWZGLĘDNIJ"><Eye size={16}/></button>
-                                                <button onClick={() => setVariantStatus(variant.id, 'NEUTRAL')} className={`p-1.5 rounded ${variant.status === 'NEUTRAL' ? 'text-zinc-300 cursor-default' : 'text-zinc-400 hover:text-zinc-600'}`} title="RESET"><MinusCircle size={16}/></button>
-                                            </div>
-                                        </td>
-                                        <td className={`${cellClass} text-center`}>
-                                            <div className="flex items-center justify-center gap-1">
-                                                <button onClick={() => {
-                                                    setActiveVariantId(isEditing ? null : variant.id);
-                                                    setShowDropdown(true); // Open dropdown when editing starts
-                                                }} className={`text-xs px-2 py-1 rounded border transition-colors ${isEditing ? 'bg-yellow-100 border-yellow-300 text-yellow-800' : 'bg-white dark:bg-zinc-700'}`}>{isEditing ? 'Zamknij' : 'Edytuj'}</button>
-                                                <button onClick={() => removeVariant(variant.id)} className="text-zinc-300 hover:text-red-500 p-1"><Trash2 size={14}/></button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    
-                                    {isEditing && (
-                                        <tr>
-                                            <td colSpan={5} className="bg-zinc-50 dark:bg-black/20 p-0 border-b dark:border-zinc-700 animate-fadeIn">
-                                                <div className="p-4 relative">
-                                                    <div className="relative z-50 mb-4">
-                                                        <Search className="absolute left-3 top-2.5 text-zinc-400" size={16}/>
-                                                        <input 
-                                                            ref={searchInputRef}
-                                                            type="text" 
-                                                            className="w-full pl-9 p-2 border rounded text-sm outline-none focus:border-yellow-400 dark:bg-zinc-900 dark:border-zinc-600" 
-                                                            placeholder="Szukaj (Etap, Dostawca, Transport)..." 
-                                                            value={searchTerm} 
-                                                            onChange={(e) => {
-                                                                setSearchTerm(e.target.value);
-                                                                setShowDropdown(true);
-                                                            }}
-                                                            onFocus={() => setShowDropdown(true)}
-                                                            autoFocus
-                                                        />
-                                                    </div>
-
-                                                    {/* Fixed Position Dropdown to avoid clipping - Updates on Scroll */}
-                                                    {showDropdown && (searchTerm.length > 0 || searchResults.length > 0) && activeVariantId && dropdownPosition && (
-                                                        <div 
-                                                            ref={dropdownRef}
-                                                            className="fixed bg-white dark:bg-zinc-800 border dark:border-zinc-600 shadow-2xl rounded-md max-h-80 overflow-y-auto z-[9999] flex flex-col"
-                                                            style={{
-                                                                top: dropdownPosition.top,
-                                                                left: dropdownPosition.left,
-                                                                width: dropdownPosition.width
-                                                            }}
-                                                        >
-                                                            <div className="sticky top-0 bg-zinc-100 dark:bg-zinc-700 p-2 flex justify-between items-center text-xs font-bold text-zinc-500 border-b dark:border-zinc-600">
-                                                                <span>WYNIKI WYSZUKIWANIA</span>
-                                                                <button onClick={() => setShowDropdown(false)} className="hover:text-red-500"><X size={14}/></button>
-                                                            </div>
-
-                                                            {searchResults.length === 0 && searchTerm ? (
-                                                                <div className="p-3 text-xs text-zinc-400">Brak wyników.</div>
-                                                            ) : (
-                                                                searchResults.map((res, i) => {
-                                                                    // Check if item is already added
-                                                                    const isExactMatch = variant.items.some(x => x.id === res.id && x.type === res.type);
-
-                                                                    // Check Parent/Child overlap logic
-                                                                    // 1. If I am an item, is my Group already selected?
-                                                                    let isParentGroupSelected = false;
-                                                                    if (res.type === 'SUPPLIER_ITEM' && !res.isGroup && res.groupId) {
-                                                                         isParentGroupSelected = variant.items.some(x => x.id === `group_supp_${res.groupId}` && x.type === 'SUPPLIER_ITEM');
-                                                                    }
-
-                                                                    // 2. If I am a Group, are any of my children selected?
-                                                                    let isChildSelected = false;
-                                                                    if (res.isGroup && res.groupId) {
-                                                                         // Find actual supplier to check items
-                                                                         const supp = data.suppliers.find(s => s.id === res.groupId);
-                                                                         if (supp) {
-                                                                             isChildSelected = supp.items.some(i => variant.items.some(v => v.id === i.id));
-                                                                         }
-                                                                    }
-
-                                                                    const isDisabled = isExactMatch || isParentGroupSelected || isChildSelected;
-
-                                                                    return (
-                                                                        <button 
-                                                                            key={`${res.id}-${i}`} 
-                                                                            onClick={() => !isDisabled && addItemToVariant(variant.id, res)} 
-                                                                            disabled={isDisabled}
-                                                                            className={`w-full text-left p-2.5 text-xs border-b last:border-0 flex justify-between items-center transition-colors 
-                                                                                ${isDisabled 
-                                                                                    ? 'bg-zinc-50 dark:bg-zinc-800/50 opacity-50 cursor-not-allowed' 
-                                                                                    : 'hover:bg-yellow-50 dark:hover:bg-yellow-900/20'
-                                                                                }`}
-                                                                        >
-                                                                            <div>
-                                                                                <div className={`font-bold flex items-center gap-2 ${isDisabled ? 'text-zinc-400' : 'text-zinc-700 dark:text-zinc-200'}`}>
-                                                                                    {res.isRecommended && !isDisabled && <Link size={12} className="text-green-500" />}
-                                                                                    {res.label}
-                                                                                </div>
-                                                                                {res.description && <div className="text-[10px] text-zinc-500">{res.description}</div>}
-                                                                                {isParentGroupSelected && <div className="text-[9px] text-red-400 italic">Grupa nadrzędna już wybrana</div>}
-                                                                                {isChildSelected && <div className="text-[9px] text-red-400 italic">Elementy tej grupy są już wybrane</div>}
-                                                                            </div>
-                                                                            {isDisabled ? (
-                                                                                isExactMatch ? <Check size={14} className="text-green-500"/> : <Lock size={12} className="text-zinc-400"/>
-                                                                            ) : (
-                                                                                res.isRecommended ? <ArrowRight size={14} className="text-green-500 opacity-50"/> : null
-                                                                            )}
-                                                                        </button>
-                                                                    );
-                                                                })
-                                                            )}
-                                                        </div>
-                                                    )}
-
-                                                    <div className="space-y-1 max-h-[200px] overflow-y-auto border rounded bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700">
-                                                        {variant.items.length === 0 && <div className="p-4 text-center text-xs text-zinc-400 italic">Pusty wariant. Dodaj elementy korzystając z wyszukiwarki.</div>}
-                                                        {variant.items.map((item, idx) => {
-                                                            const { val, curr } = getItemValue(item.id, item.type);
-                                                            return (
-                                                                <div 
-                                                                    key={`${item.id}-${idx}`} 
-                                                                    className="flex justify-between items-center p-2 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 border-b last:border-0"
-                                                                    onMouseEnter={(e) => handleMouseEnterItem(e, item.id, item.type)}
-                                                                    onMouseLeave={() => setHoveredItemId(null)}
-                                                                >
-                                                                    <span className="truncate text-xs font-mono text-zinc-600 dark:text-zinc-300 flex items-center gap-2">
-                                                                        {item.type === 'STAGE' && <WrenchIcon size={12}/>}
-                                                                        {item.type === 'TRANSPORT' && <TruckIcon size={12}/>}
-                                                                        {item.originalDescription}
-                                                                        
-                                                                        {val > 0 && (
-                                                                            <span className="ml-2 text-[10px] bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 px-1.5 rounded">
-                                                                                {val.toFixed(2)} {curr}
-                                                                            </span>
-                                                                        )}
-                                                                    </span>
-                                                                    <button onClick={() => removeItemFromVariant(variant.id, item.id, item.type)} className="text-zinc-300 hover:text-red-500"><X size={14}/></button>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
+                                return (
+                                    <React.Fragment key={variant.id}>
+                                        <tr className={`transition-colors ${variant.status === 'INCLUDED' ? 'bg-green-50/50 dark:bg-green-900/10' : variant.status === 'EXCLUDED' ? 'bg-red-50/50 dark:bg-red-900/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50'}`}>
+                                            <td className={cellClass}>
+                                                <div className="relative group/edit">
+                                                    <input 
+                                                        type="text" 
+                                                        className="w-full bg-transparent border-b border-transparent hover:border-zinc-300 focus:border-yellow-400 outline-none font-bold text-zinc-700 dark:text-zinc-200 transition-colors py-1"
+                                                        value={variant.name}
+                                                        onChange={(e) => updateVariantName(variant.id, e.target.value)}
+                                                    />
+                                                    <Edit2 size={12} className="absolute right-0 top-1/2 -translate-y-1/2 text-zinc-300 opacity-0 group-hover/edit:opacity-100 pointer-events-none"/>
+                                                </div>
+                                                <div className="text-[10px] text-zinc-400 uppercase font-semibold mt-1">{variant.status}</div>
+                                            </td>
+                                            <td className={`${cellClass} text-center`}>
+                                                <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-2.5 py-1 rounded-full text-xs font-bold">
+                                                    {variant.items.length}
+                                                </span>
+                                            </td>
+                                            <td className={`${cellClass} text-right font-mono font-bold text-zinc-700 dark:text-zinc-300`}>
+                                                {variantCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </td>
+                                            <td className={`${cellClass} text-center`}>
+                                                <div className="flex items-center justify-center gap-1">
+                                                    <button onClick={() => handleSoloVariant(variant.id)} className="p-2 rounded-lg text-zinc-500 hover:text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-colors" title="SOLO"><Crosshair size={16}/></button>
+                                                    <button onClick={() => setVariantStatus(variant.id, 'EXCLUDED')} className={`p-2 rounded-lg transition-colors ${variant.status === 'EXCLUDED' ? 'bg-red-100 text-red-600' : 'text-zinc-400 hover:text-red-500 hover:bg-red-50'}`} title="WYKLUCZ"><EyeOff size={16}/></button>
+                                                    <button onClick={() => setVariantStatus(variant.id, 'INCLUDED')} className={`p-2 rounded-lg transition-colors ${variant.status === 'INCLUDED' ? 'bg-green-100 text-green-600' : 'text-zinc-400 hover:text-green-500 hover:bg-green-50'}`} title="UWZGLĘDNIJ"><Eye size={16}/></button>
+                                                    <button onClick={() => setVariantStatus(variant.id, 'NEUTRAL')} className={`p-2 rounded-lg transition-colors ${variant.status === 'NEUTRAL' ? 'text-zinc-300 cursor-default' : 'text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100'}`} title="RESET"><MinusCircle size={16}/></button>
+                                                </div>
+                                            </td>
+                                            <td className={`${cellClass} text-center`}>
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <button onClick={() => {
+                                                        setActiveVariantId(isEditing ? null : variant.id);
+                                                        setShowDropdown(true); // Open dropdown when editing starts
+                                                    }} className={`text-xs px-3 py-1.5 rounded-lg border transition-colors font-medium ${isEditing ? 'bg-yellow-50 border-yellow-200 text-yellow-700' : 'bg-white dark:bg-zinc-700 border-zinc-200 dark:border-zinc-600 hover:bg-zinc-50'}`}>{isEditing ? 'Gotowe' : 'Edytuj'}</button>
+                                                    <button onClick={() => removeVariant(variant.id)} className="text-zinc-300 hover:text-red-500 p-1.5 rounded hover:bg-red-50 transition-colors"><Trash2 size={16}/></button>
                                                 </div>
                                             </td>
                                         </tr>
-                                    )}
-                                </React.Fragment>
-                            );
-                        })}
-                    </tbody>
-                </table>
+                                        
+                                        {isEditing && (
+                                            <tr>
+                                                <td colSpan={5} className="bg-zinc-50/50 dark:bg-black/20 p-0 border-b border-zinc-100 dark:border-zinc-700 animate-fadeIn">
+                                                    <div className="p-4 relative">
+                                                        <div className="relative z-50 mb-4">
+                                                            <Search className="absolute left-3 top-2.5 text-zinc-400" size={16}/>
+                                                            <input 
+                                                                ref={searchInputRef}
+                                                                type="text" 
+                                                                className="w-full pl-10 p-2.5 border border-zinc-200 dark:border-zinc-600 rounded-xl text-sm outline-none focus:border-yellow-400 focus:ring-2 focus:ring-yellow-100 dark:bg-zinc-900 dark:text-white transition-all" 
+                                                                placeholder="Wyszukaj elementy do dodania (Etap, Dostawca, Transport)..." 
+                                                                value={searchTerm} 
+                                                                onChange={(e) => {
+                                                                    setSearchTerm(e.target.value);
+                                                                    setShowDropdown(true);
+                                                                }}
+                                                                onFocus={() => setShowDropdown(true)}
+                                                                autoFocus
+                                                            />
+                                                        </div>
+
+                                                        {/* Fixed Position Dropdown to avoid clipping - Updates on Scroll */}
+                                                        {showDropdown && (searchTerm.length > 0 || searchResults.length > 0) && activeVariantId && dropdownPosition && (
+                                                            <div 
+                                                                ref={dropdownRef}
+                                                                className="fixed bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-600 shadow-2xl rounded-xl max-h-80 overflow-y-auto z-[9999] flex flex-col"
+                                                                style={{
+                                                                    top: dropdownPosition.top,
+                                                                    left: dropdownPosition.left,
+                                                                    width: dropdownPosition.width
+                                                                }}
+                                                            >
+                                                                <div className="sticky top-0 bg-zinc-50 dark:bg-zinc-700 p-2 flex justify-between items-center text-[10px] font-bold text-zinc-500 uppercase border-b border-zinc-200 dark:border-zinc-600 tracking-wider">
+                                                                    <span>Wyniki Wyszukiwania</span>
+                                                                    <button onClick={() => setShowDropdown(false)} className="hover:text-red-500 p-1"><X size={14}/></button>
+                                                                </div>
+
+                                                                {searchResults.length === 0 && searchTerm ? (
+                                                                    <div className="p-4 text-xs text-zinc-400 text-center">Brak wyników dla "{searchTerm}".</div>
+                                                                ) : (
+                                                                    searchResults.map((res, i) => {
+                                                                        // Check if item is already added
+                                                                        const isExactMatch = variant.items.some(x => x.id === res.id && x.type === res.type);
+
+                                                                        // Check Parent/Child overlap logic
+                                                                        // 1. If I am an item, is my Group already selected?
+                                                                        let isParentGroupSelected = false;
+                                                                        if (res.type === 'SUPPLIER_ITEM' && !res.isGroup && res.groupId) {
+                                                                            isParentGroupSelected = variant.items.some(x => x.id === `group_supp_${res.groupId}` && x.type === 'SUPPLIER_ITEM');
+                                                                        }
+
+                                                                        // 2. If I am a Group, are any of my children selected?
+                                                                        let isChildSelected = false;
+                                                                        if (res.isGroup && res.groupId) {
+                                                                            // Find actual supplier to check items
+                                                                            const supp = data.suppliers.find(s => s.id === res.groupId);
+                                                                            if (supp) {
+                                                                                isChildSelected = supp.items.some(i => variant.items.some(v => v.id === i.id));
+                                                                            }
+                                                                        }
+
+                                                                        const isDisabled = isExactMatch || isParentGroupSelected || isChildSelected;
+
+                                                                        return (
+                                                                            <button 
+                                                                                key={`${res.id}-${i}`} 
+                                                                                onClick={() => !isDisabled && addItemToVariant(variant.id, res)} 
+                                                                                disabled={isDisabled}
+                                                                                className={`w-full text-left p-3 text-xs border-b border-zinc-100 dark:border-zinc-700 last:border-0 flex justify-between items-center transition-colors 
+                                                                                    ${isDisabled 
+                                                                                        ? 'bg-zinc-50 dark:bg-zinc-800/50 opacity-50 cursor-not-allowed' 
+                                                                                        : 'hover:bg-yellow-50 dark:hover:bg-yellow-900/20'
+                                                                                    }`}
+                                                                            >
+                                                                                <div>
+                                                                                    <div className={`font-bold flex items-center gap-2 ${isDisabled ? 'text-zinc-400' : 'text-zinc-700 dark:text-zinc-200'}`}>
+                                                                                        {res.isRecommended && !isDisabled && <Link size={12} className="text-green-500" />}
+                                                                                        {res.label}
+                                                                                    </div>
+                                                                                    {res.description && <div className="text-[10px] text-zinc-500 mt-0.5">{res.description}</div>}
+                                                                                    {isParentGroupSelected && <div className="text-[9px] text-red-400 italic mt-0.5">Grupa nadrzędna już wybrana</div>}
+                                                                                    {isChildSelected && <div className="text-[9px] text-red-400 italic mt-0.5">Elementy tej grupy są już wybrane</div>}
+                                                                                </div>
+                                                                                {isDisabled ? (
+                                                                                    isExactMatch ? <Check size={14} className="text-green-500"/> : <Lock size={12} className="text-zinc-400"/>
+                                                                                ) : (
+                                                                                    res.isRecommended ? <ArrowRight size={14} className="text-green-500 opacity-50"/> : null
+                                                                                )}
+                                                                            </button>
+                                                                        );
+                                                                    })
+                                                                )}
+                                                            </div>
+                                                        )}
+
+                                                        <div className="space-y-1 max-h-[200px] overflow-y-auto border border-zinc-200 dark:border-zinc-600 rounded-xl bg-white dark:bg-zinc-900">
+                                                            {variant.items.length === 0 && <div className="p-6 text-center text-xs text-zinc-400 italic">Pusty wariant. Dodaj elementy korzystając z wyszukiwarki powyżej.</div>}
+                                                            {variant.items.map((item, idx) => {
+                                                                const { val, curr } = getItemValue(item.id, item.type);
+                                                                return (
+                                                                    <div 
+                                                                        key={`${item.id}-${idx}`} 
+                                                                        className="flex justify-between items-center p-3 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 border-b border-zinc-100 dark:border-zinc-700 last:border-0"
+                                                                        onMouseEnter={(e) => handleMouseEnterItem(e, item.id, item.type)}
+                                                                        onMouseLeave={() => setHoveredItemId(null)}
+                                                                    >
+                                                                        <span className="truncate text-xs font-mono text-zinc-600 dark:text-zinc-300 flex items-center gap-2">
+                                                                            {item.type === 'STAGE' && <div className="p-1 bg-purple-100 text-purple-600 rounded"><Layers size={10}/></div>}
+                                                                            {item.type === 'TRANSPORT' && <div className="p-1 bg-blue-100 text-blue-600 rounded"><Layers size={10}/></div>}
+                                                                            {item.originalDescription}
+                                                                            
+                                                                            {val > 0 && (
+                                                                                <span className="ml-2 text-[10px] bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 rounded">
+                                                                                    {val.toFixed(2)} {curr}
+                                                                                </span>
+                                                                            )}
+                                                                        </span>
+                                                                        <button onClick={() => removeItemFromVariant(variant.id, item.id, item.type)} className="text-zinc-300 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors"><X size={14}/></button>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </React.Fragment>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
-
-const WrenchIcon = ({size}: {size:number}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>;
-const TruckIcon = ({size}: {size:number}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>;
