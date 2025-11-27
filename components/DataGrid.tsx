@@ -148,7 +148,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
     return (
         <div className={`flex flex-col w-full ${className}`}>
             {/* Toolbar */}
-            <div className="flex justify-between items-center mb-2 px-1 gap-2 shrink-0">
+            <div className="flex justify-between items-center mb-2 px-1 gap-2 shrink-0 pt-2">
                 <div className="relative w-64">
                     <Search className="absolute left-2 top-2.5 text-zinc-400" size={16}/>
                     <input 

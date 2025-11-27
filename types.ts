@@ -64,6 +64,7 @@ export interface SupplierItem {
 
 export interface Supplier {
   id: string;
+  groupId?: string; // ID used to group tabs visually (e.g. from same ORM file)
   name: string; // Official Vendor Name
   customTabName?: string; // Custom Display Name for Tab
   offerNumber: string;

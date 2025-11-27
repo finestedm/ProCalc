@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { AppState, CalculationMode } from '../types';
-import { Package, Truck, Receipt, Wrench, EyeOff, BarChart3, TrendingUp } from 'lucide-react';
+import { Package, Truck, Receipt, Wrench, EyeOff, BarChart3, TrendingUp, Landmark } from 'lucide-react';
 import { calculateProjectCosts } from '../services/calculationService';
 
 interface Props {
@@ -108,6 +108,11 @@ export const SidePanel: React.FC<Props> = ({ appState }) => {
       { label: 'Montaż', value: costs.installation, color: '#10B981' }, // Emerald-500
   ];
 
+  // Only add ORM Fee if it exists
+  if (costs.ormFee > 0) {
+      chartData.push({ label: 'Opłata ORM', value: costs.ormFee, color: '#ec4899' }); // Pink-500
+  }
+
   const currencyLabel = appState.offerCurrency;
 
   return (
@@ -156,6 +161,17 @@ export const SidePanel: React.FC<Props> = ({ appState }) => {
                   </span>
                   <span className="font-mono text-zinc-700 dark:text-zinc-300 font-medium">{formatMoney(costs.installation, currencyLabel)}</span>
               </div>
+              
+              {/* ORM Fee Breakdown Item */}
+              {costs.ormFee > 0 && (
+                  <div className="flex justify-between items-center text-sm group">
+                      <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-3 group-hover:text-zinc-800 dark:group-hover:text-zinc-200 transition-colors">
+                          <div className="bg-pink-100 dark:bg-pink-900/30 p-1.5 rounded-lg text-pink-600 dark:text-pink-400"><Landmark size={14}/></div>
+                          Opłata ORM
+                      </span>
+                      <span className="font-mono text-zinc-700 dark:text-zinc-300 font-medium">{formatMoney(costs.ormFee, currencyLabel)}</span>
+                  </div>
+              )}
               
               {/* Excluded Items (What-If) Summary */}
               {costs.excluded > 0 && (

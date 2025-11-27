@@ -1,3 +1,4 @@
+
 import { CalculationData, Currency, CalculationMode, InstallationStage } from '../types';
 
 export const convert = (amount: number, from: Currency, to: Currency, rate: number) => {
@@ -13,6 +14,7 @@ export interface CostBreakdown {
     transport: number;
     other: number;
     installation: number;
+    ormFee: number; // Internal fee for ORM orders
     total: number;
     excluded: number; // Value of excluded items (What-If)
 }
@@ -82,14 +84,21 @@ export const calculateProjectCosts = (
 ): CostBreakdown => {
     const isFinal = mode === CalculationMode.FINAL;
     let excludedTotal = 0;
+    let ormFeeTotal = 0;
 
     // --- SUPPLIERS ---
     const suppliersTotal = data.suppliers.reduce((total, s) => {
         if (s.isIncluded === false) return total;
         
         let cost = 0;
+        let supplierOrmFee = 0;
+
         if (isFinal && s.finalCostOverride !== undefined && s.finalCostOverride !== null) {
              cost = s.finalCostOverride;
+             // Even in final mode, if it was an ORM supplier, we assume the fee applies to the final invoice amount
+             if (s.isOrm) {
+                 supplierOrmFee = cost * 0.016;
+             }
         } else {
             // Standard Calculation
             const sTotal = s.items.reduce((sum, i) => {
@@ -105,7 +114,18 @@ export const calculateProjectCosts = (
 
                 return sum + value;
             }, 0);
+            
             cost = sTotal * (1 - s.discount / 100);
+
+            // Calculate ORM Fee (1.6% of discounted value)
+            if (s.isOrm) {
+                supplierOrmFee = cost * 0.016;
+            }
+        }
+
+        // Add ORM fee to total fee accumulator (converted to target currency)
+        if (supplierOrmFee > 0) {
+            ormFeeTotal += convert(supplierOrmFee, s.currency, targetCurrency, rate);
         }
 
         return total + convert(cost, s.currency, targetCurrency, rate);
@@ -230,7 +250,8 @@ export const calculateProjectCosts = (
         transport: transportTotal,
         other: otherTotal,
         installation: installationTotal,
-        total: suppliersTotal + nameplateCost + transportTotal + otherTotal + installationTotal,
+        ormFee: ormFeeTotal,
+        total: suppliersTotal + nameplateCost + transportTotal + otherTotal + installationTotal + ormFeeTotal,
         excluded: excludedTotal
     };
 };

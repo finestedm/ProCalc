@@ -384,7 +384,7 @@ export const TransportSection: React.FC<Props> = ({
                                 return (
                                     <tr 
                                         key={item.id} 
-                                        className={`${pickingClass} bg-blue-50/30 transition-colors border-l-4 border-l-blue-400`}
+                                        className={`${pickingClass} bg-blue-50/30 dark:bg-blue-900/10 transition-colors border-l-4 border-l-blue-400 dark:border-l-blue-600`}
                                         onClick={(e) => handlePick(e, item)}
                                     >
                                         <td className={`${cellClass} pl-4`}>

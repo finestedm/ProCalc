@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Supplier, SupplierItem, Currency, Language, SupplierStatus, TransportItem, InstallationData, VariantItemType } from '../types';
 import { Package, Plus, Trash2, Calendar, FileSpreadsheet, Copy, Eye, EyeOff, StickyNote, Tag, Loader2, Sparkles, Euro, Maximize2, ArrowUp, ArrowDown, Search, ArrowUpDown, ChevronDown, ChevronUp, GripVertical, Settings2, ArrowLeft, ArrowRight, Zap, FolderPlus, Edit3, MessageSquarePlus, SplitSquareHorizontal, MousePointer2 } from 'lucide-react';
@@ -23,6 +24,11 @@ interface Props {
   // Picking Mode Props
   isPickingMode?: boolean;
   onPick?: (item: { id: string, type: VariantItemType, label: string }, origin?: {x: number, y: number}) => void;
+}
+
+interface OrmSheetResult {
+    sheetName: string;
+    items: SupplierItem[];
 }
 
 export const SuppliersSection: React.FC<Props> = ({ 
@@ -237,36 +243,77 @@ export const SuppliersSection: React.FC<Props> = ({
       return `(za ${diffWeeks} tyg.)`;
   };
 
-  const parseOrmFile = (file: File, callback: (items: SupplierItem[]) => void) => {
+  // Upgraded ORM Parsing to handle multiple sheets AND Date Validation
+  const parseOrmFile = (file: File, callback: (results: OrmSheetResult[], warning?: string) => void) => {
     const reader = new FileReader();
     reader.onload = (event) => {
         const data = new Uint8Array(event.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames.find(name => name.endsWith('Items'));
-        if (!sheetName) { alert('Nie znaleziono arkusza "Items".'); return; }
-        const sheet = workbook.Sheets[sheetName];
-        const newItems: SupplierItem[] = [];
-        let rowIndex = 3; 
-        while (true) {
-            const quantity = sheet['A' + rowIndex]?.v;
-            if (quantity === undefined || quantity === null || quantity === '') break;
-            
-            // Extract Time (Column M, index 12)
-            const timeVal = sheet['M' + rowIndex]?.v;
+        
+        const results: OrmSheetResult[] = [];
+        let expiredWarning = undefined;
 
-            newItems.push({
-                id: Math.random().toString(36).substr(2, 9),
-                itemDescription: String(sheet['B' + rowIndex]?.v || ''),
-                componentNumber: String(sheet['I' + rowIndex]?.v || ''),
-                quantity: parseFloat(quantity as string) || 0,
-                weight: parseFloat(sheet['K' + rowIndex]?.v as string) || 0,
-                unitPrice: parseFloat(sheet['L' + rowIndex]?.v as string) || 0,
-                timeMinutes: parseFloat(timeVal as string) || 0
-            });
-            rowIndex++;
-            if (rowIndex > 5000) break; 
+        // --- 1. Check Date Validity in First Sheet (Cell B4) ---
+        if (workbook.SheetNames.length > 0) {
+            const firstSheetName = workbook.SheetNames[0];
+            const firstSheet = workbook.Sheets[firstSheetName];
+            const cellB4 = firstSheet['B4'];
+            
+            if (cellB4 && typeof cellB4.v === 'string') {
+                // Expected format: "T4A 2025 (01/10/2025 => 31/10/2025)"
+                const text = cellB4.v;
+                const match = text.match(/=>\s*(\d{2}\/\d{2}\/\d{4})/);
+                
+                if (match && match[1]) {
+                    const [day, month, year] = match[1].split('/').map(Number);
+                    const expiryDate = new Date(year, month - 1, day); // Month is 0-indexed
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+
+                    if (expiryDate < today) {
+                        expiredWarning = `UWAGA: Wykryto nieaktualny cennik!\n\nOdczytano datę ważności: ${match[1]}\n(Komórka B4 w arkuszu "${firstSheetName}")\n\nCzy na pewno chcesz kontynuować import?`;
+                    }
+                }
+            }
         }
-        callback(newItems);
+
+        // --- 2. Iterate through ALL sheets, find ones ending in "Items" ---
+        workbook.SheetNames.forEach(sheetName => {
+            if (sheetName.endsWith('Items')) {
+                const sheet = workbook.Sheets[sheetName];
+                const newItems: SupplierItem[] = [];
+                let rowIndex = 3; 
+                while (true) {
+                    const quantity = sheet['A' + rowIndex]?.v;
+                    if (quantity === undefined || quantity === null || quantity === '') break;
+                    
+                    const timeVal = sheet['M' + rowIndex]?.v;
+
+                    newItems.push({
+                        id: Math.random().toString(36).substr(2, 9),
+                        itemDescription: String(sheet['B' + rowIndex]?.v || ''),
+                        componentNumber: String(sheet['I' + rowIndex]?.v || ''),
+                        quantity: parseFloat(quantity as string) || 0,
+                        weight: parseFloat(sheet['K' + rowIndex]?.v as string) || 0,
+                        unitPrice: parseFloat(sheet['L' + rowIndex]?.v as string) || 0,
+                        timeMinutes: parseFloat(timeVal as string) || 0
+                    });
+                    rowIndex++;
+                    if (rowIndex > 5000) break; 
+                }
+                
+                if (newItems.length > 0) {
+                    results.push({ sheetName, items: newItems });
+                }
+            }
+        });
+
+        if (results.length === 0) {
+            alert('Nie znaleziono żadnych arkuszy kończących się na "Items".');
+            return;
+        }
+
+        callback(results, expiredWarning);
     };
     reader.readAsArrayBuffer(file);
   };
@@ -275,18 +322,29 @@ export const SuppliersSection: React.FC<Props> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     
-    parseOrmFile(file, (newItems) => {
-        if (newItems.length > 0) {
-            const updated = [...suppliers];
-            updated[activeTab] = {
-                ...updated[activeTab],
-                items: [...updated[activeTab].items, ...newItems],
-                isOrm: true,
-                currency: Currency.EUR,
-                name: "ORM Import"
-            };
-            checkAutoDiscount(updated, activeTab);
-            onChange(updated);
+    // For appending, we might just grab ALL items from ALL sheets and add to current
+    parseOrmFile(file, (results, warning) => {
+        const processImport = () => {
+            const allNewItems = results.flatMap(r => r.items);
+            
+            if (allNewItems.length > 0) {
+                const updated = [...suppliers];
+                updated[activeTab] = {
+                    ...updated[activeTab],
+                    items: [...updated[activeTab].items, ...allNewItems],
+                    isOrm: true,
+                    currency: Currency.EUR,
+                    name: "ORM Import"
+                };
+                checkAutoDiscount(updated, activeTab);
+                onChange(updated);
+            }
+        };
+
+        if (warning) {
+            onConfirm("Nieaktualny Cennik ORM", warning, processImport, true);
+        } else {
+            processImport();
         }
     });
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -296,30 +354,53 @@ export const SuppliersSection: React.FC<Props> = ({
       const file = e.target.files?.[0];
       if (!file) return;
 
-      parseOrmFile(file, (newItems) => {
-          if (newItems.length > 0) {
-              const fileName = file.name.split('.')[0].substring(0, 15);
-              const newSupplier: Supplier = {
-                  id: Math.random().toString(36).substr(2, 9),
-                  name: `ORM ${fileName}`, // Supplier Name
-                  customTabName: `ORM ${fileName}`, // Default Tab Name
-                  offerNumber: '',
-                  offerDate: '',
-                  deliveryDate: '',
-                  currency: Currency.EUR,
-                  discount: 0,
-                  language: Language.PL,
-                  items: newItems,
-                  isOrm: true,
-                  status: SupplierStatus.TO_ORDER,
-                  isIncluded: true,
-                  notes: ''
-              };
-              
-              const updated = [...suppliers, newSupplier];
-              checkAutoDiscount(updated, updated.length - 1);
-              onChange(updated);
-              setActiveTab(updated.length - 1); // Switch to new tab
+      parseOrmFile(file, (results, warning) => {
+          const processImport = () => {
+              if (results.length > 0) {
+                  const fileName = file.name.split('.')[0];
+                  // Generate a shared Group ID for all tabs from this file
+                  const groupId = `orm_group_${Date.now()}`;
+                  
+                  const newSuppliers: Supplier[] = results.map(res => {
+                      // Clean up name: remove 'Items' suffix for cleaner tab name
+                      const cleanName = res.sheetName.replace(/Items$/, '');
+                      
+                      return {
+                          id: Math.random().toString(36).substr(2, 9),
+                          groupId: groupId, // Link them together
+                          name: `ORM ${cleanName}`, 
+                          customTabName: cleanName, 
+                          offerNumber: '',
+                          offerDate: '',
+                          deliveryDate: '',
+                          currency: Currency.EUR,
+                          discount: 0,
+                          language: Language.PL,
+                          items: res.items,
+                          isOrm: true,
+                          status: SupplierStatus.TO_ORDER,
+                          isIncluded: true,
+                          notes: ''
+                      };
+                  });
+                  
+                  // Add all new suppliers
+                  const updated = [...suppliers, ...newSuppliers];
+                  
+                  // Apply discount check to each
+                  for(let i = suppliers.length; i < updated.length; i++) {
+                      checkAutoDiscount(updated, i);
+                  }
+
+                  onChange(updated);
+                  setActiveTab(suppliers.length); // Switch to first new tab
+              }
+          };
+
+          if (warning) {
+              onConfirm("Nieaktualny Cennik ORM", warning, processImport, true);
+          } else {
+              processImport();
           }
       });
       if (newOrmInputRef.current) newOrmInputRef.current.value = '';
@@ -371,7 +452,12 @@ export const SuppliersSection: React.FC<Props> = ({
         return sum + (i.quantity * price);
     }, 0);
     const discounted = sTotal * (1 - s.discount / 100);
-    return acc + convert(discounted, s.currency, offerCurrency, exchangeRate);
+    
+    // Add ORM Fee to total (internal cost)
+    let ormFee = 0;
+    if (s.isOrm) ormFee = discounted * 0.016;
+
+    return acc + convert(discounted + ormFee, s.currency, offerCurrency, exchangeRate);
   }, 0);
   
   const nameplateCost = convert((nameplateQty || 0) * 19, Currency.PLN, offerCurrency, exchangeRate);
@@ -387,6 +473,9 @@ export const SuppliersSection: React.FC<Props> = ({
       return sum + (i.quantity * price);
   }, 0) : 0;
   const activeSupplierTotal = activeSupplierSubtotal * (1 - (currentSupplier?.discount || 0) / 100);
+  
+  // Calculate ORM Fee for Display (only if active)
+  const activeOrmFee = currentSupplier?.isOrm ? (activeSupplierTotal * 0.016) : 0;
 
   const supplierMenuItems = [
       { label: 'Porównaj Dostawców', icon: <SplitSquareHorizontal size={16} />, onClick: onOpenComparison },
@@ -408,7 +497,7 @@ export const SuppliersSection: React.FC<Props> = ({
   };
 
   return (
-    <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 mb-8 overflow-hidden transition-colors relative">
+    <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 mb-8 overflow-hidden transition-colors relative">
       {isImporting && (
           <div className="absolute inset-0 bg-white/80 dark:bg-zinc-900/80 z-20 flex flex-col items-center justify-center">
               <Loader2 className="animate-spin text-yellow-500 mb-2" size={40} />
@@ -417,22 +506,28 @@ export const SuppliersSection: React.FC<Props> = ({
       )}
       
       <div 
-          className="p-4 flex justify-between items-center cursor-pointer bg-zinc-50 dark:bg-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors"
+          className="p-5 flex justify-between items-center cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
           onClick={() => setIsOpen(!isOpen)}
       >
-        <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-            <Package className="text-yellow-500" size={20} /> Koszty Dostawców
-        </h2>
+        <div className="flex items-center gap-3">
+            <div className="bg-yellow-100 p-2 rounded-lg text-yellow-600">
+                <Package size={20} />
+            </div>
+            <div>
+                <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-tight">Koszty Dostawców</h2>
+                <p className="text-xs text-zinc-500 mt-0.5">Materiały i Produkty</p>
+            </div>
+        </div>
         
         <div className="flex items-center gap-4">
              <div className="text-right">
                 <span className="text-[10px] uppercase font-bold text-zinc-400 block leading-none mb-1">Suma</span>
-                <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">
+                <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200 text-lg">
                     {totalWithNameplate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {offerCurrency}
                 </span>
              </div>
-             <button className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300">
-                {isOpen ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}
+             <button className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-transform duration-300" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                <ChevronDown size={20}/>
             </button>
         </div>
       </div>
@@ -441,22 +536,58 @@ export const SuppliersSection: React.FC<Props> = ({
         <div className="overflow-hidden">
             <div className="border-t border-zinc-100 dark:border-zinc-700">
                 {/* Top Padded Section for Tabs and Header Controls */}
-                <div className="p-4 bg-zinc-50 dark:bg-zinc-800">
+                <div className="pt-4 bg-zinc-50 dark:bg-zinc-800">
                     
                     {/* NEW TAB NAVIGATION LAYOUT */}
-                    <div className="flex items-end border-b border-zinc-300 dark:border-zinc-600">
+                    <div className="flex items-end border-b border-zinc-300 dark:border-zinc-600 px-4">
                         {/* 1. Scrollable Tabs Area */}
                         <div 
-                            className="flex-1 flex overflow-x-auto items-end gap-1 mb-0 [&::-webkit-scrollbar]:hidden" 
+                            className="flex-1 flex overflow-x-auto items-end mb-0 [&::-webkit-scrollbar]:hidden" 
                             style={{ scrollbarWidth: 'none' }}
                         >
                             {suppliers.map((s, idx) => {
                                 const isActive = activeTab === idx;
+                                
+                                // Grouping Logic for visual merging
+                                const prev = suppliers[idx - 1];
+                                const next = suppliers[idx + 1];
+                                
+                                const isGroupStart = s.groupId && (!prev || prev.groupId !== s.groupId);
+                                const isGroupEnd = s.groupId && (!next || next.groupId !== s.groupId);
+                                const isGroupMiddle = s.groupId && !isGroupStart && !isGroupEnd;
+                                
+                                // Check if group only has 1 element (should be standalone visually)
+                                const isSingleItemGroup = s.groupId && isGroupStart && isGroupEnd;
+                                const isStandalone = !s.groupId || isSingleItemGroup;
+
+                                // Base roundness
+                                let roundClass = 'rounded-t-lg mx-1'; // Default standalone
+                                let borderClass = 'border-x border-t';
+
+                                if (!isStandalone && s.groupId) {
+                                    if (isGroupStart) {
+                                        roundClass = 'rounded-tl-lg rounded-tr-none mr-0 ml-1';
+                                        borderClass = 'border-l border-t border-r-0';
+                                    } else if (isGroupEnd) {
+                                        roundClass = 'rounded-tr-lg rounded-tl-none ml-0 mr-1';
+                                        borderClass = 'border-r border-t border-l-0';
+                                    } else if (isGroupMiddle) {
+                                        roundClass = 'rounded-none mx-0';
+                                        borderClass = 'border-t border-x-0';
+                                    }
+                                }
+
+                                // Separator for middle items
+                                const separator = isGroupMiddle || isGroupStart ? 'border-r border-zinc-200 dark:border-zinc-700' : '';
+
                                 return (
                                     <button
                                         key={s.id}
                                         onClick={() => setActiveTab(idx)}
-                                        className={`relative px-4 py-2 rounded-t-lg text-sm font-bold transition-all border-x border-t whitespace-nowrap min-w-[120px] max-w-[200px] truncate group
+                                        className={`relative px-4 py-2 text-sm font-bold transition-all whitespace-nowrap min-w-[80px] max-w-[200px] truncate group
+                                            ${roundClass}
+                                            ${borderClass}
+                                            ${separator}
                                             ${isActive 
                                                 ? 'bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white border-zinc-300 dark:border-zinc-600 border-b-zinc-50 dark:border-b-zinc-800 z-10 mb-[-1px] pb-2.5' 
                                                 : 'bg-zinc-100 dark:bg-zinc-900/50 text-zinc-500 dark:text-zinc-400 border-transparent border-b-zinc-300 dark:border-b-zinc-600 hover:bg-zinc-200 dark:hover:bg-zinc-800'
@@ -466,13 +597,11 @@ export const SuppliersSection: React.FC<Props> = ({
                                         `}
                                     >
                                         {/* Color Stripe indicator */}
-                                        <div className={`absolute top-0 left-0 right-0 h-[3px] rounded-t-lg ${s.isOrm ? 'bg-green-500' : 'bg-yellow-500'} ${!isActive ? 'opacity-50' : ''}`}></div>
+                                        <div className={`absolute top-0 left-0 right-0 h-[3px] ${isGroupStart || isStandalone ? 'rounded-tl-lg' : ''} ${isGroupEnd || isStandalone ? 'rounded-tr-lg' : ''} ${s.isOrm ? 'bg-green-500' : 'bg-yellow-500'} ${!isActive ? 'opacity-50' : ''}`}></div>
                                         <span className="relative z-10 flex items-center gap-1 justify-center">
                                             {isPickingMode && isActive && <MousePointer2 size={12} className="animate-pulse" />}
                                             {s.customTabName || s.name}
                                         </span>
-
-                                        {/* Picking Overlay for Inactive Tabs? No, user must activate tab to pick items, but can pick GROUP from header below */}
                                     </button>
                                 );
                             })}
@@ -480,7 +609,7 @@ export const SuppliersSection: React.FC<Props> = ({
                             {/* Dedicated Nameplate Tab */}
                             <button
                                 onClick={() => setActiveTab(NAMEPLATE_TAB_INDEX)}
-                                className={`relative px-4 py-2 rounded-t-lg text-sm font-bold transition-all border-x border-t flex items-center gap-2 whitespace-nowrap
+                                className={`relative px-4 py-2 rounded-t-lg text-sm font-bold transition-all border-x border-t flex items-center gap-2 whitespace-nowrap ml-1
                                     ${isNameplateTab 
                                         ? 'bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white border-zinc-300 dark:border-zinc-600 border-b-zinc-50 dark:border-b-zinc-800 z-10 mb-[-1px] pb-2.5' 
                                         : 'bg-zinc-100 dark:bg-zinc-900/50 text-zinc-500 dark:text-zinc-400 border-transparent border-b-zinc-300 dark:border-b-zinc-600 hover:bg-zinc-200 dark:hover:bg-zinc-800'
@@ -677,8 +806,8 @@ export const SuppliersSection: React.FC<Props> = ({
                         {!isNameplateTab && currentSupplier && (
                             <div className={`transition-opacity duration-200 ${isCurrentIncluded ? 'opacity-100' : 'opacity-30 grayscale pointer-events-none select-none'}`}>
                                 
-                                {/* Flush DataGrid Implementation */}
-                                <div className="border-t border-zinc-200 dark:border-zinc-700">
+                                {/* Flush DataGrid Implementation with Only Top Padding */}
+                                <div className="border-t border-zinc-200 dark:border-zinc-700 pt-4">
                                     <DataGrid 
                                         items={currentSupplier.items}
                                         currency={currentSupplier.currency}
@@ -707,8 +836,13 @@ export const SuppliersSection: React.FC<Props> = ({
 
                                 {/* Footer Summary Bar for the Table */}
                                 <div className="bg-yellow-50 dark:bg-yellow-900/10 px-4 py-2 flex justify-between items-center border-t border-yellow-100 dark:border-yellow-900/30">
-                                    <div className="text-xs text-zinc-500 dark:text-zinc-400 italic">
+                                    <div className="text-xs text-zinc-500 dark:text-zinc-400 italic flex items-center gap-2">
                                         Suma pozycji dla "{currentSupplier.customTabName || currentSupplier.name}"
+                                        {activeOrmFee > 0 && (
+                                            <span className="text-pink-600 dark:text-pink-400 font-semibold bg-pink-100 dark:bg-pink-900/30 px-1.5 rounded">
+                                                + Opłata ORM (1.6%): {activeOrmFee.toFixed(2)} {currentSupplier.currency}
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="flex items-center gap-4">
                                         <div className="text-xs text-zinc-500">

@@ -42,17 +42,17 @@ const AddressForm: React.FC<{
   };
 
   return (
-    <div className={`p-5 rounded-xl border border-zinc-100 bg-white/50 hover:bg-white transition-colors duration-200 ${readOnly ? 'opacity-80' : ''}`}>
+    <div className={`p-5 rounded-xl border border-zinc-100 dark:border-zinc-700/50 bg-zinc-50 dark:bg-zinc-900/40 hover:bg-white dark:hover:bg-zinc-900/60 transition-colors duration-200 ${readOnly ? 'opacity-80' : ''}`}>
         <div className="flex justify-between items-center mb-4">
-            <h3 className="font-semibold text-zinc-800 flex items-center gap-2 text-sm uppercase tracking-wide">
-                <div className="p-1.5 bg-zinc-100 rounded-md text-zinc-500"><Users size={14} /></div>
+            <h3 className="font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-2 text-sm uppercase tracking-wide">
+                <div className="p-1.5 bg-white dark:bg-zinc-800 rounded-md text-zinc-500 dark:text-zinc-400 border border-zinc-100 dark:border-zinc-700"><Users size={14} /></div>
                 {title} 
                 {readOnly && <Lock size={12} className="text-zinc-400"/>}
             </h3>
             {onCopyFrom && !readOnly && (
                 <button
                 onClick={onCopyFrom}
-                className="text-[10px] flex items-center gap-1 text-zinc-500 hover:text-zinc-900 transition-colors bg-zinc-100 px-2 py-1 rounded-md font-medium"
+                className="text-[10px] flex items-center gap-1 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-2 py-1 rounded-md font-medium"
                 >
                 <Copy size={10} /> {copyLabel}
                 </button>
@@ -63,7 +63,7 @@ const AddressForm: React.FC<{
             <input
                 type="text"
                 placeholder={readOnly ? "Dane zablokowane" : "Nazwa firmy / Imię i Nazwisko"}
-                className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-lg text-sm text-zinc-800 placeholder-zinc-400 focus:bg-white focus:border-zinc-300 focus:ring-4 focus:ring-zinc-100 outline-none transition-all disabled:opacity-50"
+                className="w-full p-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 focus:border-zinc-300 dark:focus:border-zinc-500 focus:ring-4 focus:ring-zinc-100 dark:focus:ring-zinc-800 outline-none transition-all disabled:opacity-50"
                 value={value.name}
                 onChange={(e) => onChange({ ...value, name: e.target.value })}
                 disabled={readOnly}
@@ -72,7 +72,7 @@ const AddressForm: React.FC<{
                 <input
                 type="text"
                 placeholder="Ulica i numer"
-                className="col-span-2 w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-lg text-sm text-zinc-800 placeholder-zinc-400 focus:bg-white focus:border-zinc-300 focus:ring-4 focus:ring-zinc-100 outline-none transition-all disabled:opacity-50"
+                className="col-span-2 w-full p-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 focus:border-zinc-300 dark:focus:border-zinc-500 focus:ring-4 focus:ring-zinc-100 dark:focus:ring-zinc-800 outline-none transition-all disabled:opacity-50"
                 value={value.street}
                 onChange={(e) => onChange({ ...value, street: e.target.value })}
                 disabled={readOnly}
@@ -80,7 +80,7 @@ const AddressForm: React.FC<{
                 <input
                 type="text"
                 placeholder="Kod"
-                className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-lg text-sm text-zinc-800 placeholder-zinc-400 focus:bg-white focus:border-zinc-300 focus:ring-4 focus:ring-zinc-100 outline-none transition-all disabled:opacity-50"
+                className="w-full p-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 focus:border-zinc-300 dark:focus:border-zinc-500 focus:ring-4 focus:ring-zinc-100 dark:focus:ring-zinc-800 outline-none transition-all disabled:opacity-50"
                 value={value.zip}
                 onChange={(e) => onChange({ ...value, zip: e.target.value })}
                 onBlur={handleZipBlur}
@@ -89,7 +89,7 @@ const AddressForm: React.FC<{
                 <input
                 type="text"
                 placeholder="Miasto"
-                className="w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-lg text-sm text-zinc-800 placeholder-zinc-400 focus:bg-white focus:border-zinc-300 focus:ring-4 focus:ring-zinc-100 outline-none transition-all disabled:opacity-50"
+                className="w-full p-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 focus:border-zinc-300 dark:focus:border-zinc-500 focus:ring-4 focus:ring-zinc-100 dark:focus:ring-zinc-800 outline-none transition-all disabled:opacity-50"
                 value={value.city}
                 onChange={(e) => onChange({ ...value, city: e.target.value })}
                 disabled={readOnly}
@@ -102,10 +102,10 @@ const AddressForm: React.FC<{
                 <input
                     type="text"
                     placeholder="NIP"
-                    className={`w-full pl-10 p-2.5 bg-zinc-50 border rounded-lg text-sm outline-none transition-all disabled:opacity-50 ${
+                    className={`w-full pl-10 p-2.5 bg-white dark:bg-zinc-800 border rounded-lg text-sm outline-none transition-all disabled:opacity-50 ${
                         nipError 
                         ? 'border-red-300 focus:ring-4 focus:ring-red-50 text-red-600' 
-                        : 'border-zinc-200 text-zinc-800 placeholder-zinc-400 focus:bg-white focus:border-zinc-300 focus:ring-4 focus:ring-zinc-100'
+                        : 'border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 focus:border-zinc-300 dark:focus:border-zinc-500 focus:ring-4 focus:ring-zinc-100 dark:focus:ring-zinc-800'
                     }`}
                     value={value.nip}
                     onChange={(e) => { onChange({ ...value, nip: e.target.value }); setNipError(false); }}
@@ -116,14 +116,14 @@ const AddressForm: React.FC<{
             </div>
 
             {showContactFields && (
-                <div className="pt-3 border-t border-dashed border-zinc-200 space-y-3 mt-3">
+                <div className="pt-3 border-t border-dashed border-zinc-200 dark:border-zinc-700 space-y-3 mt-3">
                     <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Kontakt</p>
                     <div className="relative group">
                         <User className="absolute left-3 top-3 text-zinc-400 group-focus-within:text-zinc-600" size={16} />
                         <input
                             type="text"
                             placeholder="Imię i Nazwisko"
-                            className="w-full pl-10 p-2.5 bg-zinc-50 border border-zinc-200 rounded-lg text-sm text-zinc-800 placeholder-zinc-400 focus:bg-white focus:border-zinc-300 focus:ring-4 focus:ring-zinc-100 outline-none transition-all disabled:opacity-50"
+                            className="w-full pl-10 p-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 focus:border-zinc-300 dark:focus:border-zinc-500 focus:ring-4 focus:ring-zinc-100 dark:focus:ring-zinc-800 outline-none transition-all disabled:opacity-50"
                             value={value.contactPerson || ''}
                             onChange={(e) => onChange({ ...value, contactPerson: e.target.value })}
                             disabled={readOnly}
@@ -135,7 +135,7 @@ const AddressForm: React.FC<{
                             <input
                                 type="text"
                                 placeholder="Email"
-                                className="w-full pl-10 p-2.5 bg-zinc-50 border border-zinc-200 rounded-lg text-sm text-zinc-800 placeholder-zinc-400 focus:bg-white focus:border-zinc-300 focus:ring-4 focus:ring-zinc-100 outline-none transition-all disabled:opacity-50"
+                                className="w-full pl-10 p-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 focus:border-zinc-300 dark:focus:border-zinc-500 focus:ring-4 focus:ring-zinc-100 dark:focus:ring-zinc-800 outline-none transition-all disabled:opacity-50"
                                 value={value.email || ''}
                                 onChange={(e) => onChange({ ...value, email: e.target.value })}
                                 disabled={readOnly}
@@ -146,7 +146,7 @@ const AddressForm: React.FC<{
                             <input
                                 type="text"
                                 placeholder="Telefon"
-                                className="w-full pl-10 p-2.5 bg-zinc-50 border border-zinc-200 rounded-lg text-sm text-zinc-800 placeholder-zinc-400 focus:bg-white focus:border-zinc-300 focus:ring-4 focus:ring-zinc-100 outline-none transition-all disabled:opacity-50"
+                                className="w-full pl-10 p-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 focus:border-zinc-300 dark:focus:border-zinc-500 focus:ring-4 focus:ring-zinc-100 dark:focus:ring-zinc-800 outline-none transition-all disabled:opacity-50"
                                 value={value.phone || ''}
                                 onChange={(e) => onChange({ ...value, phone: e.target.value })}
                                 disabled={readOnly}
@@ -160,7 +160,7 @@ const AddressForm: React.FC<{
                 <label className="text-[10px] text-zinc-400 font-bold uppercase block mb-1">Nr Klienta</label>
                 <input
                 type="text"
-                className="w-full p-2 bg-zinc-50 border border-zinc-200 rounded text-xs text-zinc-600 focus:bg-white focus:border-zinc-300 focus:ring-2 focus:ring-zinc-100 outline-none transition-all disabled:opacity-50"
+                className="w-full p-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs text-zinc-600 dark:text-zinc-300 focus:border-zinc-300 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-100 dark:focus:ring-zinc-800 outline-none transition-all disabled:opacity-50"
                 value={value.clientId}
                 onChange={(e) => onChange({ ...value, clientId: e.target.value })}
                 disabled={readOnly}
