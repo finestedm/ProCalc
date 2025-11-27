@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   AppState, 
@@ -333,10 +332,10 @@ const App: React.FC = () => {
     { label: isDarkMode ? 'Tryb Jasny' : 'Tryb Ciemny', icon: isDarkMode ? <Sun size={16}/> : <Moon size={16}/>, onClick: toggleTheme },
   ];
 
-  if (!isLoaded) return <div className="min-h-screen bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-500 font-sans">Ładowanie...</div>;
+  if (!isLoaded) return <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900 flex items-center justify-center text-zinc-500 font-sans">Ładowanie...</div>;
 
   return (
-    <div className="min-h-screen bg-zinc-100 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 transition-colors font-sans selection:bg-yellow-200 dark:selection:bg-yellow-900">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 transition-colors font-sans selection:bg-yellow-200 dark:selection:bg-yellow-900">
       
       <Header 
          appState={appState}
@@ -373,15 +372,6 @@ const App: React.FC = () => {
                />
                
                <ProjectMetaForm data={data.meta} mode={appState.mode} onChange={(val) => updateCalculationData({ meta: val })} />
-               
-               {/* VARIANTS SECTION - Only in Initial Mode */}
-               <VariantsSection 
-                    data={data}
-                    onChange={(updated) => updateCalculationData(updated)}
-                    exchangeRate={appState.exchangeRate}
-                    offerCurrency={appState.offerCurrency}
-                    onConfirm={triggerConfirm}
-               />
 
                <SuppliersSection 
                   suppliers={data.suppliers} 
@@ -420,6 +410,15 @@ const App: React.FC = () => {
                   offerCurrency={appState.offerCurrency}
                />
                
+               {/* VARIANTS SECTION - Moved to Bottom (Only in Initial Mode) */}
+               <VariantsSection 
+                    data={data}
+                    onChange={(updated) => updateCalculationData(updated)}
+                    exchangeRate={appState.exchangeRate}
+                    offerCurrency={appState.offerCurrency}
+                    onConfirm={triggerConfirm}
+               />
+
                <SummarySection 
                   appState={appState} 
                   onUpdateState={(updates) => setAppState(prev => ({ ...prev, ...updates }))}

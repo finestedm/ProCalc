@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { AppState, CalculationMode, Currency, CalculationData } from '../types';
 import { Package, Truck, Receipt, Wrench, Undo2, Redo2, EyeOff } from 'lucide-react';
@@ -99,14 +98,14 @@ export const SidePanel: React.FC<Props> = ({ appState, onUndo, onRedo, canUndo, 
   const currencyLabel = appState.offerCurrency;
 
   return (
-    <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700 p-4 sticky top-20 transition-colors">
+    <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 p-4 sticky top-20 transition-colors">
       <div className="flex justify-between items-center mb-4 border-b border-yellow-500 pb-2">
           <h3 className="text-zinc-800 dark:text-zinc-100 font-bold">Podsumowanie ({currencyLabel})</h3>
       </div>
 
       <CostPieChart data={chartData} />
 
-      <div className="space-y-3 mb-6 mt-4 border-t dark:border-zinc-700 pt-4">
+      <div className="space-y-3 mb-6 mt-4 border-t border-dashed border-zinc-200 dark:border-zinc-700 pt-4">
           <div className="flex justify-between items-center text-sm">
               <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-2"><Package size={14}/> Materiał</span>
               <span className="font-mono text-zinc-700 dark:text-zinc-300">{formatMoney(costs.suppliers, currencyLabel)}</span>
@@ -132,13 +131,13 @@ export const SidePanel: React.FC<Props> = ({ appState, onUndo, onRedo, canUndo, 
               </div>
           )}
 
-          <div className="border-t dark:border-zinc-700 pt-2 mt-2 flex justify-between items-center font-bold">
+          <div className="border-t border-zinc-200 dark:border-zinc-700 pt-2 mt-2 flex justify-between items-center font-bold">
                <span className="text-zinc-800 dark:text-zinc-200 uppercase text-xs">Suma Kosztów</span>
                <span className="text-zinc-900 dark:text-white">{formatMoney(costs.total, currencyLabel)}</span>
           </div>
       </div>
 
-      <div className="space-y-4 pt-4 border-t border-dashed dark:border-zinc-700">
+      <div className="space-y-4 pt-4 border-t border-zinc-200 dark:border-zinc-700">
         <div>
            <p className="text-xs text-zinc-500 dark:text-zinc-400 uppercase font-semibold">Marża</p>
            <div className="flex items-baseline gap-2">
@@ -150,7 +149,7 @@ export const SidePanel: React.FC<Props> = ({ appState, onUndo, onRedo, canUndo, 
            </div>
         </div>
 
-        <div className={`p-3 rounded border ${appState.manualPrice !== null ? 'bg-zinc-100 dark:bg-zinc-700 border-zinc-200 dark:border-zinc-600' : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700'}`}>
+        <div className={`p-3 rounded-lg border ${appState.manualPrice !== null ? 'bg-zinc-100 dark:bg-zinc-700 border-zinc-200 dark:border-zinc-600' : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700'}`}>
            <p className="text-xs uppercase font-bold text-zinc-600 dark:text-zinc-300">Cena Oferty ({currencyLabel})</p>
            <p className="text-2xl font-bold text-black dark:text-white">{formatMoney(sellingPrice, currencyLabel)}</p>
         </div>
