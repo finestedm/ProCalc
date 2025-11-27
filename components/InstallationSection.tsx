@@ -25,6 +25,7 @@ export const InstallationSection: React.FC<Props> = ({ data, onChange, exchangeR
   const [isOpen, setIsOpen] = useState(true);
   const [collapsedStages, setCollapsedStages] = useState<Set<string>>(new Set());
   const [linkMenuOpen, setLinkMenuOpen] = useState<{stageId: string, itemIdx: number} | null>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number, left: number } | null>(null);
   const [linkSearchTerm, setLinkSearchTerm] = useState('');
   const linkMenuRef = useRef<HTMLDivElement>(null);
 
@@ -68,6 +69,32 @@ export const InstallationSection: React.FC<Props> = ({ data, onChange, exchangeR
       };
       if (linkMenuOpen) document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [linkMenuOpen]);
+
+  // Close on scroll/resize to prevent floating detached menu
+  useEffect(() => {
+      const handleScroll = (event: Event) => {
+          // If the scroll event originated from inside the menu, ignore it
+          // We use capture=true for window scroll, so we catch bubbling events or target events
+          if (linkMenuRef.current) {
+               const target = event.target as Node;
+               // If scroll target is the menu itself or inside it
+               if (target === linkMenuRef.current || linkMenuRef.current.contains(target)) {
+                   return; 
+               }
+          }
+          
+          if (linkMenuOpen) setLinkMenuOpen(null);
+      };
+
+      if (linkMenuOpen) {
+          window.addEventListener('scroll', handleScroll, true);
+          window.addEventListener('resize', handleScroll);
+      }
+      return () => {
+          window.removeEventListener('scroll', handleScroll, true);
+          window.removeEventListener('resize', handleScroll);
+      };
   }, [linkMenuOpen]);
 
   // Reset search on open
@@ -539,7 +566,11 @@ export const InstallationSection: React.FC<Props> = ({ data, onChange, exchangeR
                                             {/* Link Button */}
                                             <div className="relative">
                                                 <button 
-                                                    onClick={() => setLinkMenuOpen({ stageId: stage.id, itemIdx: idx })}
+                                                    onClick={(e) => {
+                                                        const rect = e.currentTarget.getBoundingClientRect();
+                                                        setDropdownPos({ top: rect.bottom + 5, left: Math.max(10, rect.right - 320) });
+                                                        setLinkMenuOpen({ stageId: stage.id, itemIdx: idx });
+                                                    }}
                                                     className={`p-2 rounded-lg text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors ${linkMenuOpen?.stageId === stage.id && linkMenuOpen.itemIdx === idx ? 'bg-blue-100 text-blue-600' : ''}`}
                                                     title="Wybierz elementy/grupy do zsumowania"
                                                 >
@@ -547,8 +578,12 @@ export const InstallationSection: React.FC<Props> = ({ data, onChange, exchangeR
                                                 </button>
                                                 
                                                 {/* Link Menu Dropdown */}
-                                                {linkMenuOpen?.stageId === stage.id && linkMenuOpen.itemIdx === idx && (
-                                                    <div ref={linkMenuRef} className="absolute right-0 top-full mt-1 bg-white dark:bg-zinc-800 border dark:border-zinc-600 shadow-xl rounded-lg z-50 w-80 max-h-80 overflow-y-auto flex flex-col">
+                                                {linkMenuOpen?.stageId === stage.id && linkMenuOpen.itemIdx === idx && dropdownPos && (
+                                                    <div 
+                                                        ref={linkMenuRef} 
+                                                        className="fixed bg-white dark:bg-zinc-800 border dark:border-zinc-600 shadow-xl rounded-lg z-[9999] w-80 max-h-80 overflow-y-auto flex flex-col"
+                                                        style={{ top: dropdownPos.top, left: dropdownPos.left }}
+                                                    >
                                                         <div className="p-2 border-b dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800 z-10">
                                                             <div className="relative">
                                                                 <Search size={12} className="absolute left-2 top-2 text-zinc-400"/>
