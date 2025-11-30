@@ -11,51 +11,68 @@
         theme: {
           extend: {
             fontFamily: {
-                sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                sans: ['"Inter"', 'sans-serif'],
+                mono: ['"JetBrains Mono"', 'monospace'],
+            },
+            borderRadius: {
+                'none': '0px',
+                'sm': '1px',
+                'md': '2px',
+                'lg': '2px',
+                'xl': '2px', 
+                '2xl': '2px',
+                '3xl': '4px',
+                'full': '9999px',
             },
             colors: {
-              // Header Color (Teal)
+              amber: {
+                50: '#fffbeb',
+                100: '#fef3c7',
+                200: '#fde68a',
+                300: '#fcd34d',
+                400: '#fbbf24',
+                500: '#F0C80E', // Jungheinrich Yellow (Primary)
+                600: '#d97706',
+                700: '#b45309',
+                800: '#92400e',
+                900: '#78350f',
+              },
               cyan: {
-                500: '#009697', 
-                600: '#007A7A',
-                700: '#006161',
-                800: '#004747',
-                900: '#003333',
+                50: '#e6f4fc',
+                100: '#cce9f9',
+                200: '#99d3f3',
+                300: '#66bded',
+                400: '#33a8e7',
+                500: '#0093DD', // Jungheinrich Cyan/Blue (Secondary)
+                600: '#007bb8',
+                700: '#006494',
+                800: '#004d71',
+                900: '#003852',
               },
-              // Main Accent Color (Jungheinrich Yellow)
-              yellow: {
-                50: '#FFFDF5',
-                100: '#FFFBE0',
-                200: '#FFF4B8',
-                300: '#FFED90',
-                400: '#FFE668',
-                500: '#FFCC00',
-                600: '#D9AD00',
-                700: '#B38F00',
-                800: '#8C7000',
-                900: '#665200',
-              },
-              // Neutral Slate/Zinc
               zinc: {
-                50: '#f8fafc',
-                100: '#f1f5f9',
-                200: '#e2e8f0',
-                300: '#cbd5e1',
-                400: '#94a3b8',
-                500: '#64748b',
-                600: '#475569',
-                700: '#334155',
-                800: '#1e293b',
-                900: '#0f172a',
-                950: '#020617',
+                50: '#fafafa',
+                100: '#f4f4f5',
+                200: '#e4e4e7',
+                300: '#d4d4d8',
+                400: '#a1a1aa',
+                500: '#71717a',
+                600: '#52525b',
+                700: '#3f3f46',
+                800: '#27272a',
+                900: '#18181b', // Main Dark Surface
+                950: '#09090b', // Deep Black
               }
+            },
+            boxShadow: {
+                'sm': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                'DEFAULT': '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+                'none': 'none',
+                'glow': '0 0 10px rgba(240, 200, 14, 0.3)',
             },
             animation: {
                 fadeIn: 'fadeIn 0.2s ease-out',
                 slideUp: 'slideUp 0.3s ease-out',
-                scaleIn: 'scaleIn 0.4s ease-out',
                 slideInRight: 'slideInRight 0.3s ease-out',
-                'pulse-border': 'pickingPulse 2s infinite ease-in-out',
             },
             keyframes: {
                 fadeIn: {
@@ -63,44 +80,31 @@
                     '100%': { opacity: '1' },
                 },
                 slideUp: {
-                    '0%': { transform: 'translateY(100%)', opacity: '0' },
+                    '0%': { transform: 'translateY(10px)', opacity: '0' },
                     '100%': { transform: 'translateY(0)', opacity: '1' },
-                },
-                scaleIn: {
-                    '0%': { transform: 'scale(0.9)', opacity: '0' },
-                    '100%': { transform: 'scale(1)', opacity: '1' },
                 },
                 slideInRight: {
                     '0%': { transform: 'translateX(20px)', opacity: '0' },
                     '100%': { transform: 'translateX(0)', opacity: '1' },
-                },
-                // NEW STABLE ANIMATION using inset shadow
-                pickingPulse: {
-                    '0%, 100%': { 
-                        boxShadow: 'inset 0 0 0 2px rgba(234, 179, 8, 0.5)', 
-                        backgroundColor: 'rgba(254, 252, 232, 0.3)' 
-                    },
-                    '50%': { 
-                        boxShadow: 'inset 0 0 0 4px rgba(234, 179, 8, 1)', 
-                        backgroundColor: 'rgba(254, 240, 138, 0.4)' 
-                    },
                 }
             }
           }
         }
       }
     </script>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
       body {
-        font-family: 'Plus Jakarta Sans', sans-serif;
-        background-color: #f1f5f9;
+        font-family: 'Inter', sans-serif;
+        background-color: #f4f4f5; /* Zinc-100 */
+        color: #09090b;
         min-height: 100vh;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+        font-size: 13px;
       }
       
-      /* Custom Scrollbar */
+      /* Tech Scrollbar */
       ::-webkit-scrollbar {
           width: 8px;
           height: 8px;
@@ -109,49 +113,73 @@
           background: transparent; 
       }
       ::-webkit-scrollbar-thumb {
-          background: #cbd5e1;
-          border-radius: 4px;
+          background: #d4d4d8;
+          border: 2px solid transparent;
+          background-clip: content-box;
       }
       ::-webkit-scrollbar-thumb:hover {
-          background: #94a3b8;
+          background: #a1a1aa;
       }
       
       .dark ::-webkit-scrollbar-thumb {
-          background: #475569;
+          background: #3f3f46;
+      }
+      .dark ::-webkit-scrollbar-thumb:hover {
+          background: #52525b;
       }
 
-      /* Global Dark Mode Overrides */
       .dark body {
-        background-color: #0f172a;
-        color: #e2e8f0;
+        background-color: #000000;
+        color: #e4e4e7;
       }
       
-      .dark .bg-white {
-        background-color: #1e293b !important;
-        border-color: #334155 !important;
-        color: #e2e8f0 !important;
+      /* Input Reset for Tech Look */
+      input, select, textarea {
+        font-family: 'Inter', sans-serif;
+        border-radius: 0px !important;
+        background-color: #fff;
+        color: #09090b;
+        font-size: 12px;
+        transition: all 0.1s ease;
       }
       
-      /* Inputs - Consistent Backgrounds */
-      input[type="text"], input[type="number"], input[type="date"], input[type="email"], select, textarea {
-        background-color: #ffffff;
-        border-color: #e2e8f0;
-        color: #0f172a;
+      input[type="text"], input[type="number"], input[type="date"], select {
+        border: 1px solid #e4e4e7;
       }
 
-      input.bg-transparent {
-        background-color: transparent !important;
+      /* Monospace numbers in inputs */
+      input[type="number"] {
+        font-family: 'JetBrains Mono', monospace;
       }
 
-      .dark input[type="text"], .dark input[type="number"], .dark input[type="date"], .dark input[type="email"], .dark select, .dark textarea {
-        background-color: #334155 !important;
-        border-color: #475569 !important;
-        color: #f1f5f9 !important;
+      input:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: #F0C80E !important; /* Jungheinrich Yellow */
+        box-shadow: 0 0 0 1px #F0C80E !important;
+      }
+
+      .dark input, .dark select, .dark textarea {
+        background-color: #09090b !important;
+        border-color: #27272a !important;
+        color: #e4e4e7 !important;
       }
       
       .dark input:focus, .dark select:focus, .dark textarea:focus {
-        border-color: #FFCC00 !important;
-        background-color: #334155 !important;
+        border-color: #F0C80E !important;
+        background-color: #09090b !important;
+      }
+
+      /* Utility classes for technical lines */
+      .tech-border-b {
+        border-bottom: 1px solid #e4e4e7;
+      }
+      .dark .tech-border-b {
+        border-bottom: 1px solid #27272a;
+      }
+      
+      /* Mask for scroll indicators */
+      .mask-gradient-right {
+        mask-image: linear-gradient(to right, black 85%, transparent 100%);
       }
     </style>
   <script type="importmap">
@@ -167,7 +195,7 @@
 }
 </script>
 </head>
-  <body class="bg-zinc-100 transition-colors duration-200">
+  <body class="transition-colors duration-200">
     <div id="root"></div>
   </body>
 </html>

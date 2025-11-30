@@ -144,55 +144,65 @@ ${data.meta.salesPerson || 'Handlowiec'}
              <button onClick={onBack} className="text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white flex items-center gap-1 transition-colors">
                  <ArrowLeft size={18} /> Wróć
              </button>
-             <h2 className="text-xl font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-                 <FileText className="text-yellow-500"/> Dokumenty i Logistyka
+             <h2 className="text-xl font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2 font-mono uppercase tracking-tight">
+                 <FileText className="text-amber-500"/> Dokumenty i Logistyka
              </h2>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             
             {/* CARD 1: PROTOCOL */}
-            <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700">
-                <div className="flex items-center gap-3 mb-4 text-zinc-800 dark:text-zinc-100 font-bold text-lg">
-                    <div className="bg-zinc-100 dark:bg-zinc-700 p-3 rounded-full"><FileText size={24}/></div>
-                    Protokół Odbioru
+            <div className="bg-white dark:bg-zinc-950 p-0 rounded-sm shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                <div className="p-6 border-b border-zinc-100 dark:border-zinc-800">
+                    <div className="flex items-center gap-3 mb-4 text-zinc-800 dark:text-zinc-100 font-bold text-lg">
+                        <div className="bg-zinc-100 dark:bg-zinc-800 p-3 rounded-full text-zinc-600 dark:text-zinc-300"><FileText size={24}/></div>
+                        Protokół Odbioru
+                    </div>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6">
+                        Generuje standardowy druk protokołu odbioru końcowego, wypełniony danymi klienta i listą dostawców. Gotowy do podpisu.
+                    </p>
+                    <button 
+                        onClick={handlePrintProtocol}
+                        className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-black text-white rounded-sm font-bold flex items-center justify-center gap-2 transition-colors uppercase text-xs tracking-wider"
+                    >
+                        <Printer size={16}/> Drukuj Protokół
+                    </button>
                 </div>
-                <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6">
-                    Generuje standardowy druk protokołu odbioru końcowego, wypełniony danymi klienta i listą dostawców. Gotowy do podpisu.
-                </p>
-                <button 
-                    onClick={handlePrintProtocol}
-                    className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded font-bold flex items-center justify-center gap-2 transition-colors"
-                >
-                    <Printer size={18}/> Drukuj Protokół
-                </button>
+                <div className="bg-zinc-50 dark:bg-zinc-900 p-4 text-[10px] text-zinc-400 text-center uppercase font-bold tracking-wider">
+                    Format: A4 PDF (Druk Przeglądarkowy)
+                </div>
             </div>
 
             {/* CARD 2: LOGISTICS EMAIL */}
-            <div className="bg-white dark:bg-zinc-800 p-6 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700">
-                <div className="flex items-center gap-3 mb-4 text-zinc-800 dark:text-zinc-100 font-bold text-lg">
-                    <div className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-full text-blue-600"><Mail size={24}/></div>
-                    Mail do Logistyki
-                </div>
-                
-                <div className="bg-zinc-50 dark:bg-zinc-900 p-3 rounded border border-zinc-200 dark:border-zinc-700 mb-4 font-mono text-xs overflow-y-auto max-h-48 whitespace-pre-wrap text-zinc-600 dark:text-zinc-300">
-                    <div className="font-bold text-zinc-800 dark:text-zinc-100 border-b pb-1 mb-2">{emailSubject}</div>
-                    {emailBody}
-                </div>
+            <div className="bg-white dark:bg-zinc-950 p-0 rounded-sm shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                <div className="p-6 border-b border-zinc-100 dark:border-zinc-800">
+                    <div className="flex items-center gap-3 mb-4 text-zinc-800 dark:text-zinc-100 font-bold text-lg">
+                        <div className="bg-cyan-100 dark:bg-cyan-900/30 p-3 rounded-full text-cyan-600 dark:text-cyan-400"><Mail size={24}/></div>
+                        Mail do Logistyki
+                    </div>
+                    
+                    <div className="bg-zinc-50 dark:bg-zinc-900 p-3 rounded-sm border border-zinc-200 dark:border-zinc-700 mb-4 font-mono text-xs overflow-y-auto max-h-48 whitespace-pre-wrap text-zinc-600 dark:text-zinc-300">
+                        <div className="font-bold text-zinc-800 dark:text-zinc-100 border-b dark:border-zinc-700 pb-1 mb-2">{emailSubject}</div>
+                        {emailBody}
+                    </div>
 
-                <div className="flex gap-2">
-                    <button 
-                        onClick={handleSendEmail}
-                        className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold flex items-center justify-center gap-2 transition-colors"
-                    >
-                        <Send size={18}/> Otwórz w programie pocztowym
-                    </button>
-                    <button 
-                        onClick={handleCopyEmail}
-                        className={`flex-1 py-3 rounded font-bold flex items-center justify-center gap-2 transition-colors border ${copied ? 'bg-green-500 text-white border-green-500' : 'bg-white text-zinc-600 border-zinc-300 hover:bg-zinc-50'}`}
-                    >
-                        {copied ? <><CheckCircle size={18}/> Skopiowano</> : <><Copy size={18}/> Kopiuj</>}
-                    </button>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={handleSendEmail}
+                            className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-sm font-bold flex items-center justify-center gap-2 transition-colors uppercase text-xs tracking-wider"
+                        >
+                            <Send size={16}/> Wyślij (App)
+                        </button>
+                        <button 
+                            onClick={handleCopyEmail}
+                            className={`flex-1 py-3 rounded-sm font-bold flex items-center justify-center gap-2 transition-colors border uppercase text-xs tracking-wider ${copied ? 'bg-green-500 text-white border-green-500' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'}`}
+                        >
+                            {copied ? <><CheckCircle size={16}/> Skopiowano</> : <><Copy size={16}/> Kopiuj Treść</>}
+                        </button>
+                    </div>
+                </div>
+                <div className="bg-zinc-50 dark:bg-zinc-900 p-4 text-[10px] text-zinc-400 text-center uppercase font-bold tracking-wider">
+                    Generuje gotowy szablon wiadomości
                 </div>
             </div>
 

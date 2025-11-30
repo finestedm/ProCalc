@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Supplier, SupplierItem } from '../types';
 import { SplitSquareHorizontal, ChevronUp, ChevronDown, ArrowLeft } from 'lucide-react';
+import { formatNumber } from '../services/calculationService';
 
 interface Props {
   suppliers: Supplier[];
@@ -107,8 +108,8 @@ export const ComparisonView: React.FC<Props> = ({ suppliers, onBack }) => {
                                     </td>
                                     <td className="p-2 text-xs">{item.itemDescription}</td>
                                     <td className="p-2 text-center">{item.quantity}</td>
-                                    <td className="p-2 text-right text-gray-500">{price.toFixed(2)}</td>
-                                    <td className="p-2 text-right font-medium">{ (item.quantity * price).toFixed(2) }</td>
+                                    <td className="p-2 text-right text-gray-500">{formatNumber(price)}</td>
+                                    <td className="p-2 text-right font-medium">{formatNumber(item.quantity * price)}</td>
                                 </tr>
                             );
                         })}
@@ -119,7 +120,7 @@ export const ComparisonView: React.FC<Props> = ({ suppliers, onBack }) => {
             <div className="p-4 border-t bg-gray-50 flex justify-between items-center">
                  <span className="font-bold text-gray-500">Suma netto:</span>
                  <span className="text-xl font-bold text-zinc-800">
-                     {totalValue.toFixed(2)} {selectedSupplier?.currency}
+                     {formatNumber(totalValue)} {selectedSupplier?.currency}
                  </span>
             </div>
         </div>
@@ -129,15 +130,15 @@ export const ComparisonView: React.FC<Props> = ({ suppliers, onBack }) => {
   return (
     <div className="h-[calc(100vh-200px)] flex flex-col">
         <div className="flex items-center gap-4 mb-4">
-             <button onClick={onBack} className="text-gray-500 hover:text-black flex items-center gap-1">
-                 <ArrowLeft size={18} /> Wróć
+             <button onClick={onBack} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200">
+                 <ArrowLeft size={20} />
              </button>
-             <h2 className="text-xl font-bold flex items-center gap-2">
-                 <SplitSquareHorizontal className="text-yellow-500"/> Porównanie Dostawców
+             <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
+                 <SplitSquareHorizontal className="text-amber-500"/> Porównanie Dostawców
              </h2>
         </div>
-        
-        <div className="flex-1 flex gap-4 min-h-0">
+
+        <div className="flex gap-4 flex-1 overflow-hidden">
             {renderColumn(leftId, setLeftId, leftItems, setLeftItems, 'Left')}
             {renderColumn(rightId, setRightId, rightItems, setRightItems, 'Right')}
         </div>

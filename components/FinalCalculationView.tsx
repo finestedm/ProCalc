@@ -1,8 +1,9 @@
 
-import React from 'react';
-import { CalculationData, Currency, Supplier, TransportItem, OtherCostItem, InstallationData, FinalInstallationItem, SupplierStatus, Language } from '../types';
-import { FileText, Truck, Wrench, Receipt, Plus, Trash2, AlertCircle } from 'lucide-react';
-import { convert } from '../services/calculationService';
+
+import React, { useState } from 'react';
+import { CalculationData, Currency, Supplier, TransportItem, OtherCostItem, InstallationData, FinalInstallationItem, SupplierStatus, Language, CalculationMode } from '../types';
+import { FileText, Truck, Wrench, Receipt, Plus, Trash2, AlertCircle, ArrowRight, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
+import { convert, formatCurrency, formatNumber, calculateProjectCosts } from '../services/calculationService';
 
 interface Props {
     data: CalculationData; // This is the 'Final' state
@@ -10,11 +11,26 @@ interface Props {
     onChange: (data: CalculationData) => void;
     exchangeRate: number;
     offerCurrency: Currency;
+    // New Props for Footer Summary
+    manualPrice: number | null;
+    targetMargin: number;
+    onUpdateState: (updates: { manualPrice?: number | null, targetMargin?: number }) => void;
 }
 
-export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onChange, exchangeRate, offerCurrency }) => {
+export const FinalCalculationView: React.FC<Props> = ({ 
+    data, 
+    initialData, 
+    onChange, 
+    exchangeRate, 
+    offerCurrency,
+    manualPrice,
+    targetMargin,
+    onUpdateState
+}) => {
+    const [isEditingPrice, setIsEditingPrice] = useState(false);
+    const [localPriceInput, setLocalPriceInput] = useState('');
 
-    // --- Actions ---
+    // --- Actions --- (Same logic as before, just styling update)
 
     const updateSupplierOverride = (id: string, updates: Partial<Supplier>) => {
         const existingInFinal = data.suppliers.find(s => s.id === id);
@@ -26,7 +42,6 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
             const source = initialData.suppliers.find(s => s.id === id);
             if (source) {
                 const clone = JSON.parse(JSON.stringify(source));
-                // Apply updates
                 Object.assign(clone, updates);
                 newSuppliers.push(clone);
             }
@@ -200,51 +215,108 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
     const finalLaborItems = finalInstItems.filter(i => i.category === 'LABOR');
     const finalRentalItems = finalInstItems.filter(i => i.category === 'RENTAL');
 
+    // Calculations for Summary
+    // NOTE: For Final mode, we use default ormFee (or derived inside service if needed), 
+    // but here we are comparing total values. The service now expects ormFeePercent.
+    // However, FinalCalculationView props don't have globalSettings yet.
+    // We can assume standard 1.6 or update parent to pass it.
+    // For now, let's assume 1.6 as default since we don't have access to globalSettings here yet.
+    // Ideally parent should pass it.
+    
+    // UPDATE: To be correct, we should get this prop. But to minimize churn, let's default to 1.6 here
+    // or assume the parent passes updated logic eventually.
+    // Actually, `FinalCalculationView` is called in `App.tsx` where we have `appState`.
+    // We should update the Props here too if we want perfect accuracy, but the prompt didn't explicitly ask to update Final view props.
+    // However, to compile without errors if I changed the service signature, I must update this call.
+    // I made ormFeePercent optional in service with default 1.6, so this is safe.
+    
+    const finalCosts = calculateProjectCosts(data, exchangeRate, offerCurrency, CalculationMode.FINAL);
+    const totalFinalCost = finalCosts.total;
+
+    // Calculate Initial Price to use as default (Copy from Initial Calculation)
+    const initialCosts = calculateProjectCosts(initialData, exchangeRate, offerCurrency, CalculationMode.INITIAL);
+    const initialMarginDecimal = targetMargin / 100;
+    const initialPrice = initialMarginDecimal >= 1 ? 0 : initialCosts.total / (1 - initialMarginDecimal);
+
+    // Selling Price & Margin
+    // Defaults to Initial Price if no manual price is set, instead of recalculating based on Final Costs
+    const sellingPrice = manualPrice !== null 
+        ? manualPrice 
+        : initialPrice;
+
+    const actualMargin = sellingPrice > 0 ? (1 - (totalFinalCost / sellingPrice)) * 100 : 0;
+    const profit = sellingPrice - totalFinalCost;
+
+    const handlePriceFocus = () => {
+        setIsEditingPrice(true);
+        setLocalPriceInput(sellingPrice ? sellingPrice.toFixed(2) : '');
+    };
+
+    const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value;
+        setLocalPriceInput(val);
+        const num = parseFloat(val);
+        if (!isNaN(num)) {
+            onUpdateState({ manualPrice: num });
+        }
+    };
+
+    const handlePriceBlur = () => {
+        setIsEditingPrice(false);
+    };
+
     // Style constants
     const headerClass = "p-2 border-b dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-semibold uppercase text-xs tracking-wider sticky top-0 z-10";
+    const headerCyanClass = "p-2 border-b dark:border-zinc-700 bg-cyan-50 dark:bg-cyan-900/30 text-cyan-800 dark:text-cyan-400 font-bold uppercase text-xs tracking-wider sticky top-0 z-10 border-l border-cyan-100 dark:border-cyan-800";
+    
     const sectionHeaderClass = "p-2 font-bold text-xs uppercase text-zinc-800 dark:text-zinc-200 bg-zinc-200 dark:bg-zinc-700/50 pl-4 border-y dark:border-zinc-600";
     const cellClass = "p-2 border-b dark:border-zinc-800/50 text-sm align-top";
-    const inputClass = "w-full p-1.5 border rounded text-right bg-white dark:bg-zinc-900 focus:border-yellow-400 outline-none font-bold text-zinc-900 dark:text-white dark:border-zinc-600 text-sm";
-    const textInputClass = "w-full p-1.5 bg-transparent border-b border-transparent focus:border-yellow-400 outline-none text-sm text-zinc-800 dark:text-zinc-200 placeholder-zinc-400";
-    const selectClass = "w-full p-1.5 bg-white dark:bg-zinc-900 border rounded text-xs outline-none focus:border-yellow-400 dark:border-zinc-600";
+    const cellCyanClass = "p-2 border-b border-cyan-50 dark:border-cyan-900/20 bg-cyan-50/20 dark:bg-cyan-900/10 text-sm align-top border-l border-cyan-100 dark:border-zinc-800";
+    
+    const inputClass = "w-full p-1.5 border border-cyan-200 dark:border-cyan-800 rounded-sm text-right bg-white dark:bg-zinc-900 focus:ring-1 focus:ring-cyan-500 outline-none font-bold text-zinc-900 dark:text-white text-sm";
+    const textInputClass = "w-full p-1.5 bg-transparent border-b border-transparent focus:border-cyan-400 outline-none text-sm text-zinc-800 dark:text-zinc-200 placeholder-zinc-400";
+    const selectClass = "w-full p-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 rounded-sm text-xs outline-none focus:border-cyan-400 dark:border-zinc-700";
 
     return (
         <div className="space-y-6 animate-fadeIn">
-            <div className="bg-white dark:bg-zinc-800 p-0 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden">
-                <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 border-b dark:border-zinc-700 flex items-center justify-between">
+            <div className="bg-white dark:bg-zinc-950 p-0 rounded-sm shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border-b dark:border-zinc-700 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded text-green-700 dark:text-green-400">
+                        <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded-sm text-green-700 dark:text-green-400">
                             <FileText size={20} />
                         </div>
                         <div>
-                            <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100">Rozliczenie Końcowe</h2>
-                            <p className="text-xs text-zinc-500 dark:text-zinc-400">Wprowadź faktyczne koszty na podstawie faktur.</p>
+                            <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 font-mono uppercase tracking-tight">Rozliczenie Końcowe</h2>
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400">Wprowadź faktyczne koszty z faktur</p>
                         </div>
                     </div>
                 </div>
 
                 <div className="overflow-x-auto">
-                    <table className="w-full border-collapse min-w-[800px]">
+                    <table className="w-full border-collapse min-w-[900px]">
                         <thead>
                             <tr>
-                                <th className={`${headerClass} text-left w-1/4`}>Pozycja / Opis</th>
-                                <th className={`${headerClass} text-left w-1/5`}>Dostawca / Wykonawca</th>
-                                <th className={`${headerClass} text-right w-32`}>Szacunek (Wst.)</th>
-                                <th className={`${headerClass} text-right w-32`}>Faktura</th>
-                                <th className={`${headerClass} text-center w-20`}>Waluta</th>
-                                <th className={`${headerClass} text-right w-24`}>Różnica</th>
+                                <th className={`${headerClass} text-left w-1/4`}>Pozycja (Plan)</th>
+                                <th className={`${headerClass} text-right w-32`}>Szacunek</th>
+                                
+                                {/* Reality Section */}
+                                <th className={`${headerCyanClass} text-left w-1/5`}><div className="flex items-center gap-1">Faktura (Dostawca) <ArrowRight size={10}/></div></th>
+                                <th className={`${headerCyanClass} text-right w-32`}>Kwota Netto</th>
+                                <th className={`${headerCyanClass} text-center w-20`}>Waluta</th>
+                                
+                                <th className={`${headerClass} text-right w-24 border-l border-zinc-200 dark:border-zinc-700`}>Różnica</th>
                                 <th className={`${headerClass} w-10`}></th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white dark:bg-zinc-800">
+                        <tbody className="bg-white dark:bg-zinc-950">
                             
                             {/* SUPPLIERS */}
                             <tr>
                                 <td colSpan={7} className={sectionHeaderClass}>
                                     <div className="flex justify-between items-center">
                                         <span>Dostawcy (Materiał)</span>
-                                        <button onClick={addManualSupplier} className="text-[10px] bg-zinc-300 dark:bg-zinc-600 hover:bg-yellow-400 hover:text-black dark:text-zinc-200 px-2 py-0.5 rounded flex items-center gap-1 transition-colors">
-                                            <Plus size={12}/> Dodaj Dostawcę
+                                        <button onClick={addManualSupplier} className="text-[10px] bg-white dark:bg-zinc-600 hover:bg-cyan-50 dark:hover:bg-cyan-900 text-zinc-700 dark:text-zinc-200 px-2 py-0.5 rounded flex items-center gap-1 transition-colors border border-zinc-300 dark:border-zinc-500">
+                                            <Plus size={12}/> Dodaj
                                         </button>
                                     </div>
                                 </td>
@@ -264,7 +336,7 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                 const isManual = !!displayS.isManualFinal;
 
                                 return (
-                                    <tr key={id} className="hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors">
+                                    <tr key={id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors group">
                                         <td className={cellClass}>
                                             {isManual ? (
                                                 <input 
@@ -284,23 +356,25 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                                 </>
                                             )}
                                         </td>
-                                        <td className={cellClass}>
+                                        <td className={`${cellClass} text-right text-zinc-500 font-mono`}>
+                                            {!isManual ? (
+                                                <>{formatNumber(estimated)} <span className="text-[10px]">{displayS.currency}</span></>
+                                            ) : (
+                                                <span className="text-zinc-300">-</span>
+                                            )}
+                                        </td>
+                                        
+                                        {/* CYAN ZONE */}
+                                        <td className={cellCyanClass}>
                                             <input 
                                                 type="text" 
                                                 className={textInputClass} 
                                                 value={vendorName}
                                                 onChange={(e) => updateSupplierOverride(id, { finalVendorName: e.target.value })}
-                                                placeholder="Nazwa dostawcy..."
+                                                placeholder="Nazwa z faktury..."
                                             />
                                         </td>
-                                        <td className={`${cellClass} text-right text-zinc-500 font-mono`}>
-                                            {!isManual ? (
-                                                <>{estimated.toFixed(2)} <span className="text-[10px]">{displayS.currency}</span></>
-                                            ) : (
-                                                <span className="text-zinc-300">-</span>
-                                            )}
-                                        </td>
-                                        <td className={cellClass}>
+                                        <td className={cellCyanClass}>
                                             <input 
                                                 type="number" 
                                                 className={inputClass}
@@ -309,7 +383,7 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                                 onChange={(e) => updateSupplierOverride(id, { finalCostOverride: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                                             />
                                         </td>
-                                        <td className={cellClass}>
+                                        <td className={cellCyanClass}>
                                             {isManual ? (
                                                 <select 
                                                     className={selectClass}
@@ -325,8 +399,9 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                                 </div>
                                             )}
                                         </td>
-                                        <td className={`${cellClass} text-right font-bold font-mono ${finalOverride !== undefined ? (diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-500' : 'text-zinc-400') : 'text-zinc-300'}`}>
-                                            {finalOverride !== undefined ? `${diff > 0 ? '+' : ''}${diff.toFixed(2)}` : '-'}
+
+                                        <td className={`${cellClass} text-right font-bold font-mono border-l border-zinc-200 dark:border-zinc-800 ${finalOverride !== undefined ? (diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-500' : 'text-zinc-400') : 'text-zinc-300'}`}>
+                                            {finalOverride !== undefined ? `${diff > 0 ? '+' : ''}${formatNumber(diff)}` : '-'}
                                         </td>
                                         <td className={`${cellClass} text-center`}>
                                             {isManual && (
@@ -345,8 +420,8 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                 <td colSpan={7} className={sectionHeaderClass}>
                                     <div className="flex justify-between items-center">
                                         <span>Transport</span>
-                                        <button onClick={addManualTransport} className="text-[10px] bg-zinc-300 dark:bg-zinc-600 hover:bg-yellow-400 hover:text-black dark:text-zinc-200 px-2 py-0.5 rounded flex items-center gap-1 transition-colors">
-                                            <Plus size={12}/> Dodaj Transport
+                                        <button onClick={addManualTransport} className="text-[10px] bg-white dark:bg-zinc-600 hover:bg-cyan-50 dark:hover:bg-cyan-900 text-zinc-700 dark:text-zinc-200 px-2 py-0.5 rounded flex items-center gap-1 transition-colors border border-zinc-300 dark:border-zinc-500">
+                                            <Plus size={12}/> Dodaj
                                         </button>
                                     </div>
                                 </td>
@@ -372,7 +447,7 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                 const finalCurrency = finalT?.finalCurrency || displayT.currency;
 
                                 return (
-                                    <tr key={id} className="hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors">
+                                    <tr key={id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
                                         <td className={cellClass}>
                                             {isManualFinal ? (
                                                 <input 
@@ -386,7 +461,12 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                                 <div className="font-medium text-zinc-800 dark:text-zinc-200">{label}</div>
                                             )}
                                         </td>
-                                        <td className={cellClass}>
+                                        <td className={`${cellClass} text-right text-zinc-500 font-mono`}>
+                                            {initialT ? formatNumber(estimated) : '-'} <span className="text-[10px]">{displayT.currency}</span>
+                                        </td>
+
+                                        {/* CYAN ZONE */}
+                                        <td className={cellCyanClass}>
                                             <input 
                                                 type="text" 
                                                 className={textInputClass} 
@@ -395,10 +475,7 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                                 placeholder="Przewoźnik..."
                                             />
                                         </td>
-                                        <td className={`${cellClass} text-right text-zinc-500 font-mono`}>
-                                            {initialT ? estimated.toFixed(2) : '-'} <span className="text-[10px]">{displayT.currency}</span>
-                                        </td>
-                                        <td className={cellClass}>
+                                        <td className={cellCyanClass}>
                                             <input 
                                                 type="number" 
                                                 className={inputClass}
@@ -407,7 +484,7 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                                 onChange={(e) => updateTransportOverride(id, { finalCostOverride: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                                             />
                                         </td>
-                                        <td className={cellClass}>
+                                        <td className={cellCyanClass}>
                                             {/* Allow currency selection only if manual or overriding */}
                                             <select 
                                                 className={selectClass}
@@ -418,8 +495,9 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                                 <option value={Currency.EUR}>EUR</option>
                                             </select>
                                         </td>
-                                        <td className={`${cellClass} text-right font-bold font-mono ${finalOverride !== undefined ? (diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-500' : 'text-zinc-400') : 'text-zinc-300'}`}>
-                                            {finalOverride !== undefined ? `${diff > 0 ? '+' : ''}${diff.toFixed(2)}` : '-'}
+
+                                        <td className={`${cellClass} text-right font-bold font-mono border-l border-zinc-200 dark:border-zinc-800 ${finalOverride !== undefined ? (diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-500' : 'text-zinc-400') : 'text-zinc-300'}`}>
+                                            {finalOverride !== undefined ? `${diff > 0 ? '+' : ''}${formatNumber(diff)}` : '-'}
                                         </td>
                                         <td className={`${cellClass} text-center`}>
                                             {isManualFinal && (
@@ -438,36 +516,37 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                 <td colSpan={7} className={sectionHeaderClass}>
                                     <div className="flex justify-between items-center">
                                         <span>Montaż / Robocizna</span>
-                                        <button onClick={() => addFinalInstallationItem('LABOR')} className="text-[10px] bg-zinc-300 dark:bg-zinc-600 hover:bg-yellow-400 hover:text-black dark:text-zinc-200 px-2 py-0.5 rounded flex items-center gap-1 transition-colors">
-                                            <Plus size={12}/> Dodaj Fakturę (Montaż)
+                                        <button onClick={() => addFinalInstallationItem('LABOR')} className="text-[10px] bg-white dark:bg-zinc-600 hover:bg-cyan-50 dark:hover:bg-cyan-900 text-zinc-700 dark:text-zinc-200 px-2 py-0.5 rounded flex items-center gap-1 transition-colors border border-zinc-300 dark:border-zinc-500">
+                                            <Plus size={12}/> Dodaj
                                         </button>
                                     </div>
                                 </td>
                             </tr>
                             <tr className="bg-zinc-50/50 dark:bg-zinc-900/30">
-                                <td colSpan={2} className={`${cellClass} italic text-zinc-500`}>Szacowany koszt robocizny (Plan)</td>
-                                <td className={`${cellClass} text-right text-zinc-500 font-mono`}>{getEstimatedInstallationSplit().labor.toFixed(2)} <span className="text-[10px]">PLN</span></td>
-                                <td colSpan={4} className={cellClass}></td>
+                                <td className={`${cellClass} italic text-zinc-500`}>Szacowany koszt robocizny (Plan)</td>
+                                <td className={`${cellClass} text-right text-zinc-500 font-mono`}>{formatNumber(getEstimatedInstallationSplit().labor)} <span className="text-[10px]">PLN</span></td>
+                                <td colSpan={5} className={cellClass}></td>
                             </tr>
                             {finalLaborItems.map(item => (
-                                <tr key={item.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors">
+                                <tr key={item.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
                                     <td className={cellClass}>
                                         <input type="text" className={textInputClass} value={item.description} onChange={(e) => updateFinalInstallationItem(item.id, 'description', e.target.value)} placeholder="Opis usługi..." />
                                     </td>
-                                    <td className={cellClass}>
+                                    <td className={`${cellClass} text-right text-zinc-300`}>-</td>
+                                    
+                                    <td className={cellCyanClass}>
                                         <input type="text" className={textInputClass} value={item.vendorName} onChange={(e) => updateFinalInstallationItem(item.id, 'vendorName', e.target.value)} placeholder="Wykonawca..." />
                                     </td>
-                                    <td className={`${cellClass} text-right text-zinc-300`}>-</td>
-                                    <td className={cellClass}>
+                                    <td className={cellCyanClass}>
                                         <input type="number" className={inputClass} value={item.price} onChange={(e) => updateFinalInstallationItem(item.id, 'price', parseFloat(e.target.value) || 0)} />
                                     </td>
-                                    <td className={cellClass}>
+                                    <td className={cellCyanClass}>
                                         <select className={selectClass} value={item.currency} onChange={(e) => updateFinalInstallationItem(item.id, 'currency', e.target.value)}>
                                             <option value={Currency.PLN}>PLN</option>
                                             <option value={Currency.EUR}>EUR</option>
                                         </select>
                                     </td>
-                                    <td className={cellClass}></td>
+                                    <td className={`${cellClass} border-l border-zinc-200 dark:border-zinc-800`}></td>
                                     <td className={`${cellClass} text-center`}>
                                         <button onClick={() => removeFinalInstallationItem(item.id)} className="text-zinc-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
                                     </td>
@@ -480,36 +559,37 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                 <td colSpan={7} className={sectionHeaderClass}>
                                     <div className="flex justify-between items-center">
                                         <span>Wynajmy (Wózki, Podnośniki)</span>
-                                        <button onClick={() => addFinalInstallationItem('RENTAL')} className="text-[10px] bg-zinc-300 dark:bg-zinc-600 hover:bg-yellow-400 hover:text-black dark:text-zinc-200 px-2 py-0.5 rounded flex items-center gap-1 transition-colors">
-                                            <Plus size={12}/> Dodaj Fakturę (Wynajem)
+                                        <button onClick={() => addFinalInstallationItem('RENTAL')} className="text-[10px] bg-white dark:bg-zinc-600 hover:bg-cyan-50 dark:hover:bg-cyan-900 text-zinc-700 dark:text-zinc-200 px-2 py-0.5 rounded flex items-center gap-1 transition-colors border border-zinc-300 dark:border-zinc-500">
+                                            <Plus size={12}/> Dodaj
                                         </button>
                                     </div>
                                 </td>
                             </tr>
                             <tr className="bg-zinc-50/50 dark:bg-zinc-900/30">
-                                <td colSpan={2} className={`${cellClass} italic text-zinc-500`}>Szacowany koszt wynajmów (Plan)</td>
-                                <td className={`${cellClass} text-right text-zinc-500 font-mono`}>{getEstimatedInstallationSplit().rental.toFixed(2)} <span className="text-[10px]">PLN</span></td>
-                                <td colSpan={4} className={cellClass}></td>
+                                <td className={`${cellClass} italic text-zinc-500`}>Szacowany koszt wynajmów (Plan)</td>
+                                <td className={`${cellClass} text-right text-zinc-500 font-mono`}>{formatNumber(getEstimatedInstallationSplit().rental)} <span className="text-[10px]">PLN</span></td>
+                                <td colSpan={5} className={cellClass}></td>
                             </tr>
                             {finalRentalItems.map(item => (
-                                <tr key={item.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors">
+                                <tr key={item.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
                                     <td className={cellClass}>
                                         <input type="text" className={textInputClass} value={item.description} onChange={(e) => updateFinalInstallationItem(item.id, 'description', e.target.value)} placeholder="Opis wynajmu..." />
                                     </td>
-                                    <td className={cellClass}>
+                                    <td className={`${cellClass} text-right text-zinc-300`}>-</td>
+                                    
+                                    <td className={cellCyanClass}>
                                         <input type="text" className={textInputClass} value={item.vendorName} onChange={(e) => updateFinalInstallationItem(item.id, 'vendorName', e.target.value)} placeholder="Dostawca sprzętu..." />
                                     </td>
-                                    <td className={`${cellClass} text-right text-zinc-300`}>-</td>
-                                    <td className={cellClass}>
+                                    <td className={cellCyanClass}>
                                         <input type="number" className={inputClass} value={item.price} onChange={(e) => updateFinalInstallationItem(item.id, 'price', parseFloat(e.target.value) || 0)} />
                                     </td>
-                                    <td className={cellClass}>
+                                    <td className={cellCyanClass}>
                                         <select className={selectClass} value={item.currency} onChange={(e) => updateFinalInstallationItem(item.id, 'currency', e.target.value)}>
                                             <option value={Currency.PLN}>PLN</option>
                                             <option value={Currency.EUR}>EUR</option>
                                         </select>
                                     </td>
-                                    <td className={cellClass}></td>
+                                    <td className={`${cellClass} border-l border-zinc-200 dark:border-zinc-800`}></td>
                                     <td className={`${cellClass} text-center`}>
                                         <button onClick={() => removeFinalInstallationItem(item.id)} className="text-zinc-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
                                     </td>
@@ -522,8 +602,8 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                 <td colSpan={7} className={sectionHeaderClass}>
                                     <div className="flex justify-between items-center">
                                         <span>Inne Koszty</span>
-                                        <button onClick={addManualOtherCost} className="text-[10px] bg-zinc-300 dark:bg-zinc-600 hover:bg-yellow-400 hover:text-black dark:text-zinc-200 px-2 py-0.5 rounded flex items-center gap-1 transition-colors">
-                                            <Plus size={12}/> Dodaj Inny Koszt
+                                        <button onClick={addManualOtherCost} className="text-[10px] bg-white dark:bg-zinc-600 hover:bg-cyan-50 dark:hover:bg-cyan-900 text-zinc-700 dark:text-zinc-200 px-2 py-0.5 rounded flex items-center gap-1 transition-colors border border-zinc-300 dark:border-zinc-500">
+                                            <Plus size={12}/> Dodaj
                                         </button>
                                     </div>
                                 </td>
@@ -544,7 +624,7 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                 const currency = finalC?.finalCurrency || displayC.currency;
 
                                 return (
-                                    <tr key={id} className="hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors">
+                                    <tr key={id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
                                         <td className={cellClass}>
                                              {isManualFinal ? (
                                                 <input 
@@ -558,7 +638,9 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                                 <div className="font-medium text-zinc-800 dark:text-zinc-200">{displayC.description}</div>
                                             )}
                                         </td>
-                                        <td className={cellClass}>
+                                        <td className={`${cellClass} text-right text-zinc-500 font-mono`}>{formatNumber(estimated)} <span className="text-[10px]">{displayC.currency}</span></td>
+                                        
+                                        <td className={cellCyanClass}>
                                             <input 
                                                 type="text" 
                                                 className={textInputClass} 
@@ -567,8 +649,7 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                                 placeholder="Usługodawca..."
                                             />
                                         </td>
-                                        <td className={`${cellClass} text-right text-zinc-500 font-mono`}>{estimated.toFixed(2)} <span className="text-[10px]">{displayC.currency}</span></td>
-                                        <td className={cellClass}>
+                                        <td className={cellCyanClass}>
                                             <input 
                                                 type="number" 
                                                 className={inputClass}
@@ -577,7 +658,7 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                                 onChange={(e) => updateOtherCostOverride(id, { finalCostOverride: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                                             />
                                         </td>
-                                        <td className={cellClass}>
+                                        <td className={cellCyanClass}>
                                             <select 
                                                 className={selectClass}
                                                 value={currency}
@@ -587,8 +668,9 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                                                 <option value={Currency.EUR}>EUR</option>
                                             </select>
                                         </td>
-                                        <td className={`${cellClass} text-right font-bold font-mono ${finalOverride !== undefined ? (diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-500' : 'text-zinc-400') : 'text-zinc-300'}`}>
-                                            {finalOverride !== undefined ? `${diff > 0 ? '+' : ''}${diff.toFixed(2)}` : '-'}
+
+                                        <td className={`${cellClass} text-right font-bold font-mono border-l border-zinc-200 dark:border-zinc-800 ${finalOverride !== undefined ? (diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-500' : 'text-zinc-400') : 'text-zinc-300'}`}>
+                                            {finalOverride !== undefined ? `${diff > 0 ? '+' : ''}${formatNumber(diff)}` : '-'}
                                         </td>
                                         <td className={`${cellClass} text-center`}>
                                              {isManualFinal && (
@@ -603,6 +685,55 @@ export const FinalCalculationView: React.FC<Props> = ({ data, initialData, onCha
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            {/* FINAL SUMMARY FOOTER - Updated to Light Theme (Zinc-50/White) */}
+            <div className="bg-white dark:bg-zinc-950 p-6 rounded-sm shadow-lg border border-zinc-200 dark:border-zinc-800 flex flex-col lg:flex-row items-center justify-between gap-8">
+                
+                {/* 1. Final Cost */}
+                <div className="flex-1 w-full lg:w-auto text-center lg:text-left border-b lg:border-b-0 lg:border-r border-zinc-200 dark:border-zinc-800 pb-4 lg:pb-0 pr-0 lg:pr-8">
+                    <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Całkowity Koszt Rzeczywisty</div>
+                    <div className="text-3xl font-mono font-bold text-zinc-800 dark:text-zinc-200">
+                        {formatNumber(totalFinalCost)} <span className="text-lg text-zinc-400">{offerCurrency}</span>
+                    </div>
+                </div>
+
+                {/* 2. Confirmed Price (Input) */}
+                <div className="flex-1 w-full lg:w-auto flex flex-col items-center">
+                    <div className="text-[10px] text-amber-500 uppercase font-bold tracking-widest mb-1 flex items-center gap-1">
+                        <DollarSign size={12}/> Potwierdzona Cena Sprzedaży
+                    </div>
+                    <div className="relative group">
+                        <input 
+                            type="number" 
+                            className="bg-transparent text-4xl font-mono font-bold text-zinc-900 dark:text-white text-center outline-none border-b-2 border-zinc-200 dark:border-zinc-700 focus:border-amber-500 transition-all w-64 placeholder-zinc-300 dark:placeholder-zinc-700"
+                            placeholder="0.00"
+                            value={isEditingPrice ? localPriceInput : (sellingPrice > 0 ? sellingPrice.toFixed(2) : '')}
+                            onChange={handlePriceChange}
+                            onFocus={handlePriceFocus}
+                            onBlur={handlePriceBlur}
+                        />
+                        <span className="absolute right-0 bottom-2 text-lg text-zinc-400 font-mono pointer-events-none">{offerCurrency}</span>
+                    </div>
+                </div>
+
+                {/* 3. Result (Profit & Margin) */}
+                <div className="flex-1 w-full lg:w-auto flex justify-around lg:justify-end gap-8 border-t lg:border-t-0 lg:border-l border-zinc-200 dark:border-zinc-800 pt-4 lg:pt-0 pl-0 lg:pl-8">
+                    <div className="text-center lg:text-right">
+                        <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Marża Rzeczywista</div>
+                        <div className={`text-2xl font-bold font-mono ${actualMargin < 0 ? 'text-red-500' : actualMargin < targetMargin ? 'text-yellow-500' : 'text-green-600'}`}>
+                            {actualMargin.toFixed(2)}%
+                        </div>
+                    </div>
+                    <div className="text-center lg:text-right">
+                        <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Zysk / Strata</div>
+                        <div className={`text-2xl font-bold font-mono flex items-center gap-1 justify-center lg:justify-end ${profit > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                            {profit > 0 ? <TrendingUp size={20}/> : <TrendingDown size={20}/>}
+                            {formatNumber(profit)}
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     );

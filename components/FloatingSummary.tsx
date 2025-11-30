@@ -1,7 +1,9 @@
+
+
 import React from 'react';
 import { CalculationData, AppState, Currency } from '../types';
 import { Calculator, ArrowRight } from 'lucide-react';
-import { calculateProjectCosts } from '../services/calculationService';
+import { calculateProjectCosts, formatNumber } from '../services/calculationService';
 
 interface Props {
   data: CalculationData;
@@ -10,8 +12,9 @@ interface Props {
 
 export const FloatingSummary: React.FC<Props> = ({ data, appState }) => {
   const rate = appState.exchangeRate;
+  const ormFee = appState.globalSettings.ormFeePercent;
   
-  const costs = calculateProjectCosts(data, rate, appState.offerCurrency, appState.mode);
+  const costs = calculateProjectCosts(data, rate, appState.offerCurrency, appState.mode, ormFee);
   const totalCost = costs.total;
   
   let sellingPricePLN = 0;
@@ -45,7 +48,7 @@ export const FloatingSummary: React.FC<Props> = ({ data, appState }) => {
          <div className="flex flex-col sm:flex-row gap-x-6 gap-y-1">
              <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400 text-sm">
                  <span>Koszt:</span>
-                 <span className="font-mono font-bold text-zinc-900 dark:text-white">{totalCost.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {appState.offerCurrency}</span>
+                 <span className="font-mono font-bold text-zinc-900 dark:text-white">{formatNumber(totalCost)} {appState.offerCurrency}</span>
              </div>
              <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400 text-sm">
                  <span>Marża:</span>
@@ -59,7 +62,7 @@ export const FloatingSummary: React.FC<Props> = ({ data, appState }) => {
              <div className="text-right">
                  <div className="text-[10px] text-zinc-500 uppercase font-bold">Cena ({appState.offerCurrency})</div>
                  <div className="text-xl font-bold text-zinc-900 dark:text-white font-mono leading-none">
-                     {sellingPriceOffer.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                     {formatNumber(sellingPriceOffer)}
                  </div>
              </div>
          </div>

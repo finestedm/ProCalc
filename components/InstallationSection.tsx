@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { InstallationData, CustomInstallationItem, Currency, Supplier, InstallationStage, LinkedSource, VariantItemType } from '../types';
 import { Wrench, Plus, Trash2, ChevronUp, ChevronDown, Eye, EyeOff, Link, Search, X, Box, Package, Clock, Users, Combine, Info, RefreshCw, Settings, Truck, Edit2, Lock, Unlock, CheckSquare, Square, AlertCircle } from 'lucide-react';
-import { convert, calculateStageCost } from '../services/calculationService';
+import { convert, calculateStageCost, formatCurrency, formatNumber } from '../services/calculationService';
 
 interface Props {
   data: InstallationData;
@@ -33,7 +34,6 @@ export const InstallationSection: React.FC<Props> = ({
   const [linkSearchTerm, setLinkSearchTerm] = useState('');
   const linkMenuRef = useRef<HTMLDivElement>(null);
 
-  // Initialize stages if empty (Migration logic)
   useEffect(() => {
       if (!data.stages || data.stages.length === 0) {
           const defaultStage: InstallationStage = {
@@ -48,7 +48,6 @@ export const InstallationSection: React.FC<Props> = ({
               installersCount: data.installersCount || 2,
               manDayRate: data.manDayRate || 0,
               manualLaborHours: data.manualLaborHours || 0,
-              // Migration of global equipment to first stage
               forkliftDailyRate: data.forkliftDailyRate || 0,
               forkliftDays: data.forkliftDays || 0,
               forkliftTransportPrice: data.forkliftTransportPrice || 0,
@@ -56,7 +55,6 @@ export const InstallationSection: React.FC<Props> = ({
               scissorLiftDays: data.scissorLiftDays || 0,
               scissorLiftTransportPrice: data.scissorLiftTransportPrice || 0,
               customItems: data.customItems || [],
-              
               calculatedCost: 0,
               calculatedDuration: 0
           };
@@ -64,7 +62,6 @@ export const InstallationSection: React.FC<Props> = ({
       }
   }, []);
 
-  // Click outside to close link menu
   useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
           if (linkMenuRef.current && !linkMenuRef.current.contains(event.target as Node)) {
@@ -75,19 +72,12 @@ export const InstallationSection: React.FC<Props> = ({
       return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [linkMenuOpen]);
 
-  // Close on scroll/resize to prevent floating detached menu
   useEffect(() => {
       const handleScroll = (event: Event) => {
-          // If the scroll event originated from inside the menu, ignore it
-          // We use capture=true for window scroll, so we catch bubbling events or target events
           if (linkMenuRef.current) {
                const target = event.target as Node;
-               // If scroll target is the menu itself or inside it
-               if (target === linkMenuRef.current || linkMenuRef.current.contains(target)) {
-                   return; 
-               }
+               if (target === linkMenuRef.current || linkMenuRef.current.contains(target)) return; 
           }
-          
           if (linkMenuOpen) setLinkMenuOpen(null);
       };
 
@@ -101,7 +91,6 @@ export const InstallationSection: React.FC<Props> = ({
       };
   }, [linkMenuOpen]);
 
-  // Reset search on open
   useEffect(() => {
     if (linkMenuOpen) setLinkSearchTerm('');
   }, [linkMenuOpen]);
@@ -169,13 +158,10 @@ export const InstallationSection: React.FC<Props> = ({
           if (s.id === stageId) return { ...s, linkedSupplierIds: newIds };
           return s;
       });
-      
       onChange({ ...data, stages: newStages });
   };
 
-  // --- Calculations for Display ---
   let totalProjectCostPLN = data.otherInstallationCosts;
-  
   stages.forEach(stage => {
       if (!stage.isExcluded) {
         totalProjectCostPLN += calculateStageCost(stage, { ...data, suppliers });
@@ -184,14 +170,12 @@ export const InstallationSection: React.FC<Props> = ({
 
   const installationTotal = convert(totalProjectCostPLN, Currency.PLN, offerCurrency, exchangeRate);
 
-  // --- HELPER FOR LINKING OPTIONS ---
   const getLinkOptions = (): LinkOption[] => {
       const options: LinkOption[] = [];
       suppliers.forEach(s => {
           if(s.isIncluded === false) return;
           const supplierTotalQty = s.items.reduce((sum, i) => sum + i.quantity, 0);
           
-          // Add Supplier Group Option
           options.push({
               id: s.id,
               type: 'GROUP',
@@ -201,7 +185,6 @@ export const InstallationSection: React.FC<Props> = ({
               supplierId: s.id
           });
 
-          // Add Individual Items
           s.items.forEach(i => {
               options.push({
                   id: i.id,
@@ -216,16 +199,12 @@ export const InstallationSection: React.FC<Props> = ({
       return options;
   };
 
-  // Calculate global usage of items/groups across ALL stages and ALL custom items
   const getGlobalUsage = () => {
       const usedGroups = new Set<string>();
       const usedItems = new Set<string>();
 
       stages.forEach(s => {
-          // 1. Linked Suppliers (ORM) are effectively used Groups
           s.linkedSupplierIds?.forEach(id => usedGroups.add(id));
-
-          // 2. Custom Items Links
           s.customItems.forEach(ci => {
               ci.linkedSources?.forEach(src => {
                   if (src.type === 'GROUP') usedGroups.add(src.id);
@@ -238,7 +217,6 @@ export const InstallationSection: React.FC<Props> = ({
 
   const { usedGroups, usedItems } = getGlobalUsage();
 
-  // Filter options based on search term
   const filteredLinkOptions = getLinkOptions().filter(opt => {
       if (!linkSearchTerm) return true;
       const lower = linkSearchTerm.toLowerCase();
@@ -248,7 +226,6 @@ export const InstallationSection: React.FC<Props> = ({
       );
   });
 
-  // Helper to calculate total Qty from sources
   const calculateTotalLinkedQty = (sources: LinkedSource[]): number => {
       if (!sources || sources.length === 0) return 0;
       let total = 0;
@@ -267,6 +244,9 @@ export const InstallationSection: React.FC<Props> = ({
   };
 
   const handleStagePick = (e: React.MouseEvent, stage: InstallationStage) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('button') || target.closest('input') || target.closest('select')) return;
+
       if (isPickingMode && onPick) {
           onPick({
               id: stage.id,
@@ -276,13 +256,11 @@ export const InstallationSection: React.FC<Props> = ({
       }
   };
 
-  // --- Render Stage ---
   const renderStage = (stage: InstallationStage, index: number) => {
       const stageCost = calculateStageCost(stage, { ...data, suppliers });
       const isExcluded = stage.isExcluded;
       const isCollapsed = collapsedStages.has(stage.id);
       
-      // Calculate Time metrics
       let stageMinutes = 0;
       stage.linkedSupplierIds?.forEach(sid => {
            const s = suppliers.find(x => x.id === sid);
@@ -295,7 +273,6 @@ export const InstallationSection: React.FC<Props> = ({
         ? (stageCapacity > 0 ? Math.ceil(stageTotalHours / stageCapacity) : 0)
         : (stage.palletSpotsPerDay > 0 ? Math.ceil(stage.palletSpots / stage.palletSpotsPerDay) : 0);
 
-      // --- Custom Items Handlers inside Stage ---
       const addCustomItem = () => updateStage(stage.id, { customItems: [...stage.customItems, { id: Math.random().toString(36).substr(2, 9), description: '', quantity: 1, unitPrice: 0 }] });
       const removeCustomItem = (idx: number) => updateStage(stage.id, { customItems: stage.customItems.filter((_, i) => i !== idx) });
       
@@ -303,9 +280,8 @@ export const InstallationSection: React.FC<Props> = ({
           const newItems = [...stage.customItems];
           const item = newItems[idx];
           
-          // Special handling for Quantity Manual Override
           if (field === 'quantity' && item.linkedSources && item.linkedSources.length > 0 && item.isAutoQuantity) {
-              item.isAutoQuantity = false; // Break the auto-sync link if manually edited
+              item.isAutoQuantity = false; 
           }
 
           newItems[idx] = { ...item, [field]: value };
@@ -315,35 +291,25 @@ export const InstallationSection: React.FC<Props> = ({
       const toggleLinkItem = (idx: number, option: LinkOption) => {
           const newItems = [...stage.customItems];
           const item = newItems[idx];
-          
           let currentSources = item.linkedSources || [];
-          
-          // Check if already linked
           const exists = currentSources.some(s => s.id === option.id && s.type === option.type);
-          
           if (exists) {
-              // Remove
               currentSources = currentSources.filter(s => !(s.id === option.id && s.type === option.type));
           } else {
-              // Add
               currentSources = [...currentSources, { id: option.id, type: option.type }];
           }
-
           const newTotalQty = calculateTotalLinkedQty(currentSources);
-          
-          // Update description if it's the first link and description is empty
           let desc = item.description;
           if (currentSources.length > 0 && (!desc || desc === '')) {
               desc = currentSources.length === 1 
                   ? (option.type === 'ITEM' ? `Montaż: ${option.label}` : `Montaż elementów: ${option.label}`)
                   : `Montaż (wiele elementów)`;
           }
-
           newItems[idx] = {
               ...item,
               linkedSources: currentSources,
               quantity: newTotalQty,
-              isAutoQuantity: true, // Auto enable sync
+              isAutoQuantity: true, 
               description: desc
           };
           updateStage(stage.id, { customItems: newItems });
@@ -362,67 +328,62 @@ export const InstallationSection: React.FC<Props> = ({
       const handleSyncItem = (idx: number) => {
           const item = stage.customItems[idx];
           if (!item.linkedSources || item.linkedSources.length === 0) return;
-
           const newQty = calculateTotalLinkedQty(item.linkedSources);
           const newItems = [...stage.customItems];
           newItems[idx] = { ...item, quantity: newQty, isAutoQuantity: true };
           updateStage(stage.id, { customItems: newItems });
       };
 
-
       return (
           <div 
             key={stage.id} 
-            className={`bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl mb-6 relative shadow-sm transition-all 
+            className={`bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-sm mb-4 relative shadow-sm transition-all overflow-hidden
                 ${isExcluded ? 'opacity-50 grayscale' : ''}
-                ${isPickingMode ? 'hover:bg-yellow-50 dark:hover:bg-yellow-900/10 cursor-crosshair hover:animate-pulse-border' : ''}
+                ${isPickingMode ? 'hover:bg-amber-50 dark:hover:bg-amber-900/10 cursor-crosshair hover:animate-pulse-border' : ''}
             `}
             onClick={(e) => handleStagePick(e, stage)}
           >
-               {isExcluded && <div className="absolute top-0 right-0 left-0 bg-red-500 text-white text-xs font-bold text-center py-0.5 rounded-t-2xl z-10">ETAP WYKLUCZONY Z WARIANTU</div>}
+               {isExcluded && <div className="absolute top-0 right-0 left-0 bg-red-500 text-white text-[10px] font-bold text-center py-0.5 z-10">ETAP WYKLUCZONY Z WARIANTU</div>}
                
-               {/* STAGE HEADER */}
-               <div className="flex justify-between items-center p-5 bg-zinc-50/50 dark:bg-zinc-800/50 rounded-t-2xl border-b border-zinc-100 dark:border-zinc-700">
+               <div className="flex justify-between items-center p-4 bg-zinc-50/50 dark:bg-zinc-900 border-b border-zinc-100 dark:border-zinc-800">
                    <div className="flex items-center gap-3 w-full max-w-md">
                        <button 
                            onClick={(e) => { e.stopPropagation(); toggleStageCollapse(stage.id); }} 
-                           className="bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 p-1.5 rounded-lg transition-colors text-zinc-500 dark:text-zinc-300"
+                           className="bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 p-1.5 rounded-sm transition-colors text-zinc-500 dark:text-zinc-300"
                        >
-                           {isCollapsed ? <ChevronDown size={16}/> : <ChevronUp size={16}/>}
+                           {isCollapsed ? <ChevronDown size={14}/> : <ChevronUp size={14}/>}
                        </button>
-                       <span className="bg-white dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 text-zinc-500 font-bold px-2 py-1 rounded-lg text-xs">#{index + 1}</span>
+                       <span className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 font-bold px-2 py-0.5 text-[10px]">#{index + 1}</span>
                        <div className="relative group flex-1">
                             <input 
                                     type="text" 
-                                    className="font-bold text-lg text-zinc-800 dark:text-zinc-100 bg-transparent outline-none border-b-2 border-transparent focus:border-yellow-400 hover:border-zinc-200 dark:hover:border-zinc-600 px-1 py-0.5 transition-all w-full pr-8"
+                                    className="font-bold text-base text-zinc-800 dark:text-zinc-100 bg-transparent outline-none border-0 focus:ring-0 px-0 transition-all w-full"
                                     value={stage.name}
                                     onChange={(e) => updateStage(stage.id, { name: e.target.value })}
                                     placeholder="Nazwa Etapu (np. Antresola)"
                                     onClick={(e) => e.stopPropagation()}
                             />
-                            <Edit2 size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"/>
+                            <Edit2 size={12} className="absolute -right-4 top-1/2 -translate-y-1/2 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"/>
                        </div>
                    </div>
-                   <div className="flex items-center gap-6">
+                   <div className="flex items-center gap-4">
                        <div className="text-right">
                            <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Koszt Etapu</span>
-                           <div className="font-mono font-bold text-zinc-800 dark:text-zinc-200 text-lg">{stageCost.toFixed(2)} PLN</div>
+                           <div className="font-mono font-bold text-zinc-800 dark:text-zinc-200 text-sm">{formatNumber(stageCost)} PLN</div>
                        </div>
-                       <button onClick={(e) => { e.stopPropagation(); removeStage(stage.id); }} className="text-zinc-300 hover:text-red-500 transition-colors"><Trash2 size={20}/></button>
+                       <button onClick={(e) => { e.stopPropagation(); removeStage(stage.id); }} className="text-zinc-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors"><Trash2 size={16}/></button>
                    </div>
                </div>
 
-               {/* STAGE CONTENT (COLLAPSIBLE) */}
                <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${isCollapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}>
-                   <div className="overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                        <div className="p-6">
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                                {/* Col 1: Suppliers Linking */}
-                                <div className="bg-zinc-50 dark:bg-zinc-900/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-700/50">
-                                    <div className="text-xs font-bold text-zinc-500 mb-3 flex items-center gap-2 uppercase tracking-wider">
-                                        <Combine size={14}/> Powiązani Dostawcy (ORM)
+                   <div className="overflow-hidden">
+                        <div className="p-4">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div className="bg-zinc-50 dark:bg-zinc-900/30 p-3 border border-zinc-100 dark:border-zinc-800">
+                                    <div className="text-[10px] font-bold text-zinc-500 mb-2 flex items-center gap-2 uppercase tracking-wider">
+                                        <Combine size={12}/> Powiązani Dostawcy (ORM)
                                     </div>
-                                    <div className="space-y-1 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                                    <div className="space-y-0.5 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
                                         {suppliers.map(s => {
                                             const isLinked = stage.linkedSupplierIds?.includes(s.id);
                                             const linkedElsewhere = !isLinked && stages.some(os => os.linkedSupplierIds?.includes(s.id));
@@ -431,107 +392,102 @@ export const InstallationSection: React.FC<Props> = ({
                                                 <button 
                                                         key={s.id}
                                                         onClick={() => toggleSupplierInStage(stage.id, s.id)}
-                                                        className={`w-full text-left px-3 py-2 rounded-lg text-xs flex justify-between items-center border transition-all ${
+                                                        className={`w-full text-left px-2 py-1.5 text-[11px] flex justify-between items-center transition-all ${
                                                             isLinked 
-                                                            ? 'bg-white border-blue-200 text-blue-700 font-bold shadow-sm' 
+                                                            ? 'bg-white border border-cyan-200 text-cyan-800 font-bold shadow-sm' 
                                                             : linkedElsewhere 
-                                                                ? 'bg-transparent text-zinc-400 border-transparent opacity-60' 
-                                                                : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-700'
+                                                                ? 'bg-transparent text-zinc-400 border border-transparent opacity-60' 
+                                                                : 'bg-white dark:bg-zinc-950 text-zinc-600 dark:text-zinc-300 border border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800'
                                                         }`}
                                                 >
                                                     <span className="truncate">{s.customTabName || s.name}</span>
-                                                    {isLinked && <CheckLink size={14} className="text-blue-500"/>}
+                                                    {isLinked && <CheckLink size={12} className="text-cyan-500"/>}
                                                 </button>
                                             );
                                         })}
                                     </div>
                                 </div>
 
-                                {/* Col 2 & 3: Method & Details */}
-                                <div className="lg:col-span-2 space-y-6">
-                                    <div className="flex gap-2 bg-zinc-100 dark:bg-zinc-800/50 p-1 rounded-xl">
-                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'PALLETS' })} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${stage.calcMethod === 'PALLETS' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'}`}>Miejsca Paletowe</button>
-                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'TIME' })} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${stage.calcMethod === 'TIME' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'}`}>Roboczogodziny</button>
-                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'BOTH' })} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${stage.calcMethod === 'BOTH' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'}`}>Łączona</button>
+                                <div className="lg:col-span-2 space-y-4">
+                                    <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-sm">
+                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'PALLETS' })} className={`flex-1 py-1.5 text-[10px] font-bold transition-all rounded-sm ${stage.calcMethod === 'PALLETS' ? 'bg-white dark:bg-zinc-600 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'}`}>Miejsca Paletowe</button>
+                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'TIME' })} className={`flex-1 py-1.5 text-[10px] font-bold transition-all rounded-sm ${stage.calcMethod === 'TIME' ? 'bg-white dark:bg-zinc-600 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'}`}>Roboczogodziny</button>
+                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'BOTH' })} className={`flex-1 py-1.5 text-[10px] font-bold transition-all rounded-sm ${stage.calcMethod === 'BOTH' ? 'bg-white dark:bg-zinc-600 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'}`}>Łączona</button>
                                     </div>
 
                                     {(stage.calcMethod === 'PALLETS' || stage.calcMethod === 'BOTH') && (
-                                        <div className="grid grid-cols-3 gap-4 animate-fadeIn bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 p-4 rounded-xl">
-                                            {stage.calcMethod === 'BOTH' && <div className="col-span-3 text-[10px] font-bold text-yellow-600 uppercase border-b border-yellow-100 pb-2 mb-2">Część 1: Miejsca Paletowe</div>}
-                                            <div><label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1.5">Ilość Miejsc</label><input type="number" className="w-full p-2.5 border border-zinc-200 dark:border-zinc-600 rounded-xl text-sm bg-zinc-50 dark:bg-zinc-700/50 outline-none focus:border-yellow-400" value={stage.palletSpots} onChange={(e) => updateStage(stage.id, { palletSpots: parseFloat(e.target.value) || 0 })} /></div>
-                                            <div><label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1.5">Wydajność (szt/dzień)</label><input type="number" className="w-full p-2.5 border border-zinc-200 dark:border-zinc-600 rounded-xl text-sm bg-zinc-50 dark:bg-zinc-700/50 outline-none focus:border-yellow-400" value={stage.palletSpotsPerDay} onChange={(e) => updateStage(stage.id, { palletSpotsPerDay: parseFloat(e.target.value) || 0 })} /></div>
-                                            <div><label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1.5">Cena / Miejsce</label><input type="number" className="w-full p-2.5 border border-zinc-200 dark:border-zinc-600 rounded-xl text-sm bg-zinc-50 dark:bg-zinc-700/50 outline-none focus:border-yellow-400" value={stage.palletSpotPrice} onChange={(e) => updateStage(stage.id, { palletSpotPrice: parseFloat(e.target.value) || 0 })} /></div>
+                                        <div className="grid grid-cols-3 gap-3 animate-fadeIn bg-zinc-50/50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 p-3">
+                                            {stage.calcMethod === 'BOTH' && <div className="col-span-3 text-[10px] font-bold text-amber-600 uppercase border-b border-amber-100 pb-1 mb-1">Część 1: Miejsca Paletowe</div>}
+                                            <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Ilość Miejsc</label><input type="number" className="w-full p-2 border-0 rounded-none text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400" value={stage.palletSpots} onChange={(e) => updateStage(stage.id, { palletSpots: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Wydajność (szt/dzień)</label><input type="number" className="w-full p-2 border-0 rounded-none text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400" value={stage.palletSpotsPerDay} onChange={(e) => updateStage(stage.id, { palletSpotsPerDay: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Cena / Miejsce</label><input type="number" className="w-full p-2 border-0 rounded-none text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400" value={stage.palletSpotPrice} onChange={(e) => updateStage(stage.id, { palletSpotPrice: parseFloat(e.target.value) || 0 })} /></div>
                                         </div>
                                     )}
 
                                     {(stage.calcMethod === 'TIME' || stage.calcMethod === 'BOTH') && (
-                                        <div className="grid grid-cols-4 gap-4 animate-fadeIn bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 p-4 rounded-xl">
-                                            {stage.calcMethod === 'BOTH' && <div className="col-span-4 text-[10px] font-bold text-blue-600 uppercase border-b border-blue-100 pb-2 mb-2">Część 2: Roboczogodziny</div>}
-                                            <div className="col-span-4 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl flex justify-between items-center text-xs text-blue-800 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
+                                        <div className="grid grid-cols-4 gap-3 animate-fadeIn bg-zinc-50/50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 p-3">
+                                            {stage.calcMethod === 'BOTH' && <div className="col-span-4 text-[10px] font-bold text-cyan-600 uppercase border-b border-cyan-100 pb-1 mb-1">Część 2: Roboczogodziny</div>}
+                                            <div className="col-span-4 bg-cyan-50 dark:bg-cyan-900/20 p-2 flex justify-between items-center text-xs text-cyan-800 dark:text-cyan-300 border border-cyan-100 dark:border-cyan-800/50">
                                                 <span>ORM: <strong>{stageHours.toFixed(1)}h</strong></span>
-                                                <span>+ Manual: <input type="number" className="w-16 p-1 text-center border rounded-lg bg-white dark:bg-zinc-800 ml-1" value={stage.manualLaborHours} onChange={(e) => updateStage(stage.id, { manualLaborHours: parseFloat(e.target.value) || 0 })} /> h</span>
+                                                <span className="flex items-center">+ Manual: <input type="number" className="w-12 p-0.5 text-center border-0 bg-white dark:bg-zinc-950 ml-1 focus:ring-1 focus:ring-cyan-300 outline-none text-xs" value={stage.manualLaborHours} onChange={(e) => updateStage(stage.id, { manualLaborHours: parseFloat(e.target.value) || 0 })} /> h</span>
                                                 <span>= <strong>{stageTotalHours.toFixed(1)}h</strong></span>
                                             </div>
-                                            <div><label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1.5">Osoby</label><input type="number" className="w-full p-2.5 border border-zinc-200 dark:border-zinc-600 rounded-xl text-sm bg-zinc-50 dark:bg-zinc-700/50 outline-none focus:border-blue-400" value={stage.installersCount} onChange={(e) => updateStage(stage.id, { installersCount: parseFloat(e.target.value) || 0 })} /></div>
-                                            <div><label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1.5">h/Dzień</label><input type="number" className="w-full p-2.5 border border-zinc-200 dark:border-zinc-600 rounded-xl text-sm bg-zinc-50 dark:bg-zinc-700/50 outline-none focus:border-blue-400" value={stage.workDayHours} onChange={(e) => updateStage(stage.id, { workDayHours: parseFloat(e.target.value) || 0 })} /></div>
-                                            <div className="col-span-2"><label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1.5">Stawka (osobodzień)</label><input type="number" className="w-full p-2.5 border border-zinc-200 dark:border-zinc-600 rounded-xl text-sm bg-zinc-50 dark:bg-zinc-700/50 outline-none focus:border-blue-400" value={stage.manDayRate} onChange={(e) => updateStage(stage.id, { manDayRate: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Osoby</label><input type="number" className="w-full p-2 border-0 rounded-none text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-400" value={stage.installersCount} onChange={(e) => updateStage(stage.id, { installersCount: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">h/Dzień</label><input type="number" className="w-full p-2 border-0 rounded-none text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-400" value={stage.workDayHours} onChange={(e) => updateStage(stage.id, { workDayHours: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div className="col-span-2"><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Stawka (osobodzień)</label><input type="number" className="w-full p-2 border-0 rounded-none text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-400" value={stage.manDayRate} onChange={(e) => updateStage(stage.id, { manDayRate: parseFloat(e.target.value) || 0 })} /></div>
                                         </div>
                                     )}
                                     
-                                    <div className="text-right text-xs text-zinc-500">Estymowany czas: <strong className="text-zinc-800 dark:text-zinc-200 bg-zinc-100 dark:bg-zinc-700 px-2 py-1 rounded-lg ml-1">{stageDuration} dni</strong></div>
+                                    <div className="text-right text-[10px] text-zinc-500">Estymowany czas: <strong className="text-zinc-800 dark:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded ml-1">{stageDuration} dni</strong></div>
                                 </div>
                             </div>
 
-                            {/* --- EQUIPMENT FOR THIS STAGE --- */}
-                            <div className="mt-6 pt-6 border-t border-zinc-100 dark:border-zinc-700">
-                                    <h4 className="text-xs font-bold text-zinc-500 uppercase mb-4 flex items-center gap-2"><Truck size={14}/> Sprzęt dla etapu</h4>
+                            <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                                    <h4 className="text-[10px] font-bold text-zinc-500 uppercase mb-3 flex items-center gap-1"><Truck size={12}/> Sprzęt dla etapu</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {/* Forklift */}
-                                        <div className="bg-zinc-50 dark:bg-zinc-900/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-700/50">
-                                            <div className="flex justify-between mb-3"><span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Wózek Widłowy</span></div>
-                                            <div className="grid grid-cols-3 gap-3 text-[10px] text-zinc-400 font-bold uppercase mb-1">
+                                        <div className="bg-zinc-50 dark:bg-zinc-900/30 p-3 border border-zinc-100 dark:border-zinc-800">
+                                            <div className="flex justify-between mb-2"><span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Wózek Widłowy</span></div>
+                                            <div className="grid grid-cols-3 gap-2 text-[9px] text-zinc-400 font-bold uppercase mb-0.5">
                                                 <div>Stawka dzienna</div>
                                                 <div>Ilość Dni</div>
                                                 <div>Koszt Transportu</div>
                                             </div>
-                                            <div className="grid grid-cols-3 gap-3">
-                                                <input type="number" placeholder="0.00" className="p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs bg-white dark:bg-zinc-800" value={stage.forkliftDailyRate} onChange={e => updateStage(stage.id, { forkliftDailyRate: parseFloat(e.target.value) || 0 })} />
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <input type="number" placeholder="0.00" className="p-1.5 border-0 text-xs bg-white dark:bg-zinc-800" value={stage.forkliftDailyRate} onChange={e => updateStage(stage.id, { forkliftDailyRate: parseFloat(e.target.value) || 0 })} />
                                                 <div className="relative">
-                                                    <input type="number" placeholder="0" className={`p-2 border rounded-lg text-xs w-full bg-white dark:bg-zinc-800 ${stage.forkliftDays !== stageDuration ? 'border-orange-300' : 'border-zinc-200 dark:border-zinc-600'}`} value={stage.forkliftDays} onChange={e => updateStage(stage.id, { forkliftDays: parseFloat(e.target.value) || 0 })} />
+                                                    <input type="number" placeholder="0" className={`p-1.5 border-0 text-xs w-full bg-white dark:bg-zinc-800 ${stage.forkliftDays !== stageDuration ? 'ring-1 ring-orange-300' : ''}`} value={stage.forkliftDays} onChange={e => updateStage(stage.id, { forkliftDays: parseFloat(e.target.value) || 0 })} />
                                                     {stage.forkliftDays !== stageDuration && stageDuration > 0 && (
-                                                        <button onClick={() => updateStage(stage.id, { forkliftDays: stageDuration })} className="absolute right-1 top-1 text-blue-500 hover:text-blue-700 p-1" title="Sync"><RefreshCw size={10}/></button>
+                                                        <button onClick={() => updateStage(stage.id, { forkliftDays: stageDuration })} className="absolute right-1 top-1 text-blue-500 hover:text-blue-700 p-0.5" title="Sync"><RefreshCw size={10}/></button>
                                                     )}
                                                 </div>
-                                                <input type="number" placeholder="0.00" className="p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs bg-white dark:bg-zinc-800" value={stage.forkliftTransportPrice} onChange={e => updateStage(stage.id, { forkliftTransportPrice: parseFloat(e.target.value) || 0 })} />
+                                                <input type="number" placeholder="0.00" className="p-1.5 border-0 text-xs bg-white dark:bg-zinc-800" value={stage.forkliftTransportPrice} onChange={e => updateStage(stage.id, { forkliftTransportPrice: parseFloat(e.target.value) || 0 })} />
                                             </div>
                                         </div>
-                                        {/* Scissor Lift */}
-                                        <div className="bg-zinc-50 dark:bg-zinc-900/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-700/50">
-                                            <div className="flex justify-between mb-3"><span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Podnośnik</span></div>
-                                            <div className="grid grid-cols-3 gap-3 text-[10px] text-zinc-400 font-bold uppercase mb-1">
+                                        <div className="bg-zinc-50 dark:bg-zinc-900/30 p-3 border border-zinc-100 dark:border-zinc-800">
+                                            <div className="flex justify-between mb-2"><span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Podnośnik</span></div>
+                                            <div className="grid grid-cols-3 gap-2 text-[9px] text-zinc-400 font-bold uppercase mb-0.5">
                                                 <div>Stawka dzienna</div>
                                                 <div>Ilość Dni</div>
                                                 <div>Koszt Transportu</div>
                                             </div>
-                                            <div className="grid grid-cols-3 gap-3">
-                                                <input type="number" placeholder="0.00" className="p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs bg-white dark:bg-zinc-800" value={stage.scissorLiftDailyRate} onChange={e => updateStage(stage.id, { scissorLiftDailyRate: parseFloat(e.target.value) || 0 })} />
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <input type="number" placeholder="0.00" className="p-1.5 border-0 text-xs bg-white dark:bg-zinc-800" value={stage.scissorLiftDailyRate} onChange={e => updateStage(stage.id, { scissorLiftDailyRate: parseFloat(e.target.value) || 0 })} />
                                                 <div className="relative">
-                                                    <input type="number" placeholder="0" className={`p-2 border rounded-lg text-xs w-full bg-white dark:bg-zinc-800 ${stage.scissorLiftDays !== stageDuration ? 'border-orange-300' : 'border-zinc-200 dark:border-zinc-600'}`} value={stage.scissorLiftDays} onChange={e => updateStage(stage.id, { scissorLiftDays: parseFloat(e.target.value) || 0 })} />
+                                                    <input type="number" placeholder="0" className={`p-1.5 border-0 text-xs w-full bg-white dark:bg-zinc-800 ${stage.scissorLiftDays !== stageDuration ? 'ring-1 ring-orange-300' : ''}`} value={stage.scissorLiftDays} onChange={e => updateStage(stage.id, { scissorLiftDays: parseFloat(e.target.value) || 0 })} />
                                                     {stage.scissorLiftDays !== stageDuration && stageDuration > 0 && (
-                                                        <button onClick={() => updateStage(stage.id, { scissorLiftDays: stageDuration })} className="absolute right-1 top-1 text-blue-500 hover:text-blue-700 p-1" title="Sync"><RefreshCw size={10}/></button>
+                                                        <button onClick={() => updateStage(stage.id, { scissorLiftDays: stageDuration })} className="absolute right-1 top-1 text-blue-500 hover:text-blue-700 p-0.5" title="Sync"><RefreshCw size={10}/></button>
                                                     )}
                                                 </div>
-                                                <input type="number" placeholder="0.00" className="p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs bg-white dark:bg-zinc-800" value={stage.scissorLiftTransportPrice} onChange={e => updateStage(stage.id, { scissorLiftTransportPrice: parseFloat(e.target.value) || 0 })} />
+                                                <input type="number" placeholder="0.00" className="p-1.5 border-0 text-xs bg-white dark:bg-zinc-800" value={stage.scissorLiftTransportPrice} onChange={e => updateStage(stage.id, { scissorLiftTransportPrice: parseFloat(e.target.value) || 0 })} />
                                             </div>
                                         </div>
                                     </div>
                             </div>
 
-                            {/* --- CUSTOM ITEMS FOR THIS STAGE --- */}
-                            <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-700">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <h4 className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-2"><Settings size={14}/> Dodatki / Inne</h4>
-                                        <button onClick={addCustomItem} className="text-[10px] bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-700 dark:hover:bg-zinc-600 px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors font-bold"><Plus size={12}/> Dodaj</button>
+                            <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h4 className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1"><Settings size={12}/> Dodatki / Inne</h4>
+                                        <button onClick={addCustomItem} className="text-[10px] bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-700 dark:hover:bg-zinc-600 px-2 py-1 flex items-center gap-1 transition-colors font-bold"><Plus size={10}/> Dodaj</button>
                                     </div>
                                     
                                     {stage.customItems.map((item, idx) => {
@@ -540,11 +496,11 @@ export const InstallationSection: React.FC<Props> = ({
                                         const isAuto = !!item.isAutoQuantity;
                                         
                                         return (
-                                        <div key={item.id} className={`flex gap-3 items-center mb-2 relative ${item.isExcluded ? 'opacity-50' : ''}`}>
+                                        <div key={item.id} className={`flex gap-2 items-center mb-1.5 relative ${item.isExcluded ? 'opacity-50' : ''}`}>
                                             <div className="relative flex-1">
                                                 <input 
                                                     type="text" 
-                                                    className={`w-full p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs bg-white dark:bg-zinc-800 outline-none focus:border-blue-400 ${isLinked ? 'pl-8' : ''}`}
+                                                    className={`w-full p-1.5 border-0 rounded-none text-xs bg-zinc-50 dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-300 transition-all ${isLinked ? 'pl-7' : ''}`}
                                                     value={item.description} 
                                                     onChange={e => updateCustomItem(idx, 'description', e.target.value)} 
                                                     placeholder="Opis..." 
@@ -552,39 +508,37 @@ export const InstallationSection: React.FC<Props> = ({
                                                 {isLinked && (
                                                     <button 
                                                         onClick={() => handleUnlinkAll(idx)}
-                                                        className="absolute left-2 top-1/2 -translate-y-1/2 text-blue-500 hover:text-red-500"
+                                                        className="absolute left-1.5 top-1/2 -translate-y-1/2 text-cyan-500 hover:text-red-500"
                                                         title={`Połączono z ${linkedCount} elementami. Kliknij aby odłączyć.`}
                                                     >
-                                                        <Link size={14} />
+                                                        <Link size={12} />
                                                     </button>
                                                 )}
                                             </div>
                                             
-                                            {/* Quantity Input with Link Logic */}
-                                            <div className="relative w-24">
+                                            <div className="relative w-16">
                                                 <input 
                                                     type="number" 
-                                                    className={`w-full p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs text-center outline-none ${isAuto ? 'bg-blue-50 text-blue-700 font-bold' : 'bg-white dark:bg-zinc-800'}`} 
+                                                    className={`w-full p-1.5 border-0 rounded-none text-xs text-center outline-none ${isAuto ? 'bg-cyan-50 text-cyan-700 font-bold' : 'bg-zinc-50 dark:bg-zinc-800'}`} 
                                                     value={item.quantity} 
                                                     onChange={e => updateCustomItem(idx, 'quantity', parseFloat(e.target.value) || 0)} 
                                                 />
                                                 {isAuto && (
-                                                    <Lock size={10} className="absolute right-1.5 top-2.5 text-blue-300" />
+                                                    <Lock size={8} className="absolute right-1 top-2 text-cyan-300" />
                                                 )}
                                                 {!isAuto && isLinked && (
                                                     <button 
                                                         onClick={() => handleSyncItem(idx)}
-                                                        className="absolute right-1.5 top-2.5 text-orange-400 hover:text-blue-600"
+                                                        className="absolute right-1 top-2 text-orange-400 hover:text-cyan-600"
                                                         title="Przywróć synchronizację ilości (Suma zaznaczonych)"
                                                     >
-                                                        <RefreshCw size={10} />
+                                                        <RefreshCw size={8} />
                                                     </button>
                                                 )}
                                             </div>
 
-                                            <input type="number" className="w-24 p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-xs text-right bg-white dark:bg-zinc-800 outline-none focus:border-blue-400" value={item.unitPrice} onChange={e => updateCustomItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)} />
+                                            <input type="number" className="w-16 p-1.5 border-0 rounded-none text-xs text-right bg-zinc-50 dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-300" value={item.unitPrice} onChange={e => updateCustomItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)} />
                                             
-                                            {/* Link Button */}
                                             <div className="relative">
                                                 <button 
                                                     onClick={(e) => {
@@ -592,26 +546,26 @@ export const InstallationSection: React.FC<Props> = ({
                                                         setDropdownPos({ top: rect.bottom + 5, left: Math.max(10, rect.right - 320) });
                                                         setLinkMenuOpen({ stageId: stage.id, itemIdx: idx });
                                                     }}
-                                                    className={`p-2 rounded-lg text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors ${linkMenuOpen?.stageId === stage.id && linkMenuOpen.itemIdx === idx ? 'bg-blue-100 text-blue-600' : ''}`}
+                                                    className={`p-1.5 text-zinc-400 hover:text-cyan-500 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 transition-colors ${linkMenuOpen?.stageId === stage.id && linkMenuOpen.itemIdx === idx ? 'bg-cyan-100 text-cyan-600' : ''}`}
                                                     title="Wybierz elementy/grupy do zsumowania"
                                                 >
-                                                    <Link size={16}/>
+                                                    <Link size={14}/>
                                                 </button>
                                                 
-                                                {/* Link Menu Dropdown */}
                                                 {linkMenuOpen?.stageId === stage.id && linkMenuOpen.itemIdx === idx && dropdownPos && (
                                                     <div 
                                                         ref={linkMenuRef} 
-                                                        className="fixed bg-white dark:bg-zinc-800 border dark:border-zinc-600 shadow-xl rounded-lg z-[9999] w-80 max-h-80 overflow-y-auto flex flex-col"
+                                                        className="fixed bg-white dark:bg-zinc-800 border dark:border-zinc-600 shadow-xl rounded-none z-[9999] w-72 max-h-80 overflow-y-auto flex flex-col"
                                                         style={{ top: dropdownPos.top, left: dropdownPos.left }}
+                                                        onClick={(e) => e.stopPropagation()} 
                                                     >
                                                         <div className="p-2 border-b dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800 z-10">
                                                             <div className="relative">
-                                                                <Search size={12} className="absolute left-2 top-2 text-zinc-400"/>
+                                                                <Search size={10} className="absolute left-2 top-2 text-zinc-400"/>
                                                                 <input 
                                                                     type="text"
                                                                     autoFocus
-                                                                    className="w-full pl-7 p-1 text-xs border rounded bg-zinc-50 dark:bg-zinc-900 focus:border-blue-400 outline-none"
+                                                                    className="w-full pl-6 p-1 text-xs border-0 rounded-none bg-zinc-100 dark:bg-zinc-900 focus:ring-1 focus:ring-cyan-400 outline-none"
                                                                     placeholder="Szukaj..."
                                                                     value={linkSearchTerm}
                                                                     onChange={(e) => setLinkSearchTerm(e.target.value)}
@@ -623,7 +577,6 @@ export const InstallationSection: React.FC<Props> = ({
                                                             {filteredLinkOptions.map(opt => {
                                                                 const isSelectedInCurrent = item.linkedSources?.some(s => s.id === opt.id && s.type === opt.type);
                                                                 
-                                                                // Global Validation Logic
                                                                 let isDisabled = false;
                                                                 let disabledReason = '';
                                                                 
@@ -632,7 +585,6 @@ export const InstallationSection: React.FC<Props> = ({
                                                                         isDisabled = true;
                                                                         disabledReason = 'Grupa/Dostawca już wykorzystany (Montaż lub ORM)';
                                                                     } else {
-                                                                        // Check if any child item is used
                                                                         const supplier = suppliers.find(s => s.id === opt.id);
                                                                         if (supplier && supplier.items.some(i => usedItems.has(i.id))) {
                                                                             isDisabled = true;
@@ -640,7 +592,6 @@ export const InstallationSection: React.FC<Props> = ({
                                                                         }
                                                                     }
                                                                 } else {
-                                                                    // ITEM
                                                                     if (usedItems.has(opt.id) && !isSelectedInCurrent) {
                                                                         isDisabled = true;
                                                                         disabledReason = 'Element już wykorzystany';
@@ -649,15 +600,13 @@ export const InstallationSection: React.FC<Props> = ({
                                                                         disabledReason = 'Cała grupa (Dostawca) jest już wykorzystana';
                                                                     }
                                                                 }
-                                                                
-                                                                // Can always deselect self
                                                                 if (isSelectedInCurrent) isDisabled = false;
 
                                                                 return (
                                                                     <button
                                                                         key={`${opt.type}-${opt.id}`}
                                                                         className={`w-full text-left p-2 border-b last:border-0 text-xs flex justify-between items-center group transition-colors relative
-                                                                            ${isSelectedInCurrent ? 'bg-blue-50 dark:bg-blue-900/20' : ''}
+                                                                            ${isSelectedInCurrent ? 'bg-cyan-50 dark:bg-cyan-900/20' : ''}
                                                                             ${isDisabled ? 'bg-zinc-50 dark:bg-zinc-800/80 cursor-not-allowed' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700'}
                                                                         `}
                                                                         onClick={() => !isDisabled && toggleLinkItem(idx, opt)}
@@ -665,17 +614,17 @@ export const InstallationSection: React.FC<Props> = ({
                                                                         title={disabledReason}
                                                                     >
                                                                         <div className={`flex items-center gap-2 overflow-hidden ${isDisabled ? 'opacity-50' : ''}`}>
-                                                                            <div className={`w-3 h-3 border rounded flex items-center justify-center shrink-0 ${isSelectedInCurrent ? 'bg-blue-500 border-blue-500' : 'border-zinc-300'}`}>
-                                                                                {isSelectedInCurrent && <CheckSquare size={10} className="text-white"/>}
+                                                                            <div className={`w-3 h-3 border flex items-center justify-center shrink-0 ${isSelectedInCurrent ? 'bg-cyan-500 border-cyan-500' : 'border-zinc-300'}`}>
+                                                                                {isSelectedInCurrent && <CheckSquare size={8} className="text-white"/>}
                                                                             </div>
                                                                             <div className="truncate">
                                                                                 <div className="truncate font-medium text-zinc-700 dark:text-zinc-200">{opt.label}</div>
-                                                                                {opt.subLabel && <div className="truncate text-[10px] text-zinc-400">{opt.subLabel}</div>}
+                                                                                {opt.subLabel && <div className="truncate text-[9px] text-zinc-400">{opt.subLabel}</div>}
                                                                             </div>
                                                                         </div>
                                                                         <div className="flex items-center gap-2">
-                                                                            {isDisabled && <AlertCircle size={12} className="text-red-300"/>}
-                                                                            <div className={`bg-zinc-100 text-zinc-600 px-1.5 rounded font-mono text-[10px] shrink-0 ml-2 ${isDisabled ? 'opacity-50' : 'group-hover:bg-blue-100 group-hover:text-blue-700'}`}>
+                                                                            {isDisabled && <AlertCircle size={10} className="text-red-300"/>}
+                                                                            <div className={`bg-zinc-100 text-zinc-600 px-1.5 py-0.5 font-mono text-[9px] shrink-0 ml-2 ${isDisabled ? 'opacity-50' : 'group-hover:bg-cyan-100 group-hover:text-cyan-700'}`}>
                                                                                 {opt.qty}
                                                                             </div>
                                                                         </div>
@@ -683,13 +632,13 @@ export const InstallationSection: React.FC<Props> = ({
                                                                 );
                                                             })}
                                                             {filteredLinkOptions.length === 0 && (
-                                                                <div className="p-4 text-center text-xs text-zinc-400 italic">Brak wyników.</div>
+                                                                <div className="p-3 text-center text-xs text-zinc-400 italic">Brak wyników.</div>
                                                             )}
                                                         </div>
                                                         <div className="p-2 border-t dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-right">
                                                             <button 
                                                                 onClick={() => setLinkMenuOpen(null)}
-                                                                className="text-xs bg-blue-600 text-white px-3 py-1 rounded font-bold hover:bg-blue-700"
+                                                                className="text-[10px] bg-cyan-600 text-white px-3 py-1 font-bold hover:bg-cyan-700 shadow-sm"
                                                             >
                                                                 Gotowe
                                                             </button>
@@ -698,8 +647,8 @@ export const InstallationSection: React.FC<Props> = ({
                                                 )}
                                             </div>
 
-                                            <button onClick={() => updateCustomItem(idx, 'isExcluded', !item.isExcluded)} className="text-zinc-400 hover:text-zinc-600">{item.isExcluded ? <EyeOff size={16}/> : <Eye size={16}/>}</button>
-                                            <button onClick={() => removeCustomItem(idx)} className="text-zinc-300 hover:text-red-500"><Trash2 size={16}/></button>
+                                            <button onClick={() => updateCustomItem(idx, 'isExcluded', !item.isExcluded)} className="text-zinc-400 hover:text-zinc-600">{item.isExcluded ? <EyeOff size={14}/> : <Eye size={14}/>}</button>
+                                            <button onClick={() => removeCustomItem(idx)} className="text-zinc-300 hover:text-red-500"><Trash2 size={14}/></button>
                                         </div>
                                         );
                                     })}
@@ -712,18 +661,21 @@ export const InstallationSection: React.FC<Props> = ({
   };
 
   return (
-    <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 mb-8 transition-colors relative z-10">
+    <div className="bg-white dark:bg-zinc-950 rounded-sm border border-zinc-200 dark:border-zinc-800 mb-6 transition-colors relative z-10">
       <div 
-          className="p-5 flex justify-between items-center cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors rounded-t-2xl"
+          className="p-4 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
           onClick={() => setIsOpen(!isOpen)}
       >
         <div className="flex items-center gap-3">
-            <div className="bg-yellow-100 p-2 rounded-lg text-yellow-600">
+            <div className="bg-amber-100 dark:bg-amber-900/30 p-2 rounded-sm text-amber-600 dark:text-amber-500">
                 <Wrench size={20} />
             </div>
             <div>
-                <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-tight">Koszty Montażu (Etapowe)</h2>
-                <p className="text-xs text-zinc-500 mt-0.5">{stages.length} zdefiniowanych etapów</p>
+                <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 font-mono uppercase tracking-tight">Montaż (Etapy)</h2>
+                <div className="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
+                    Prace instalacyjne i sprzęt
+                    <span className="text-[10px] text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-sm">{stages.length} etapów</span>
+                </div>
             </div>
         </div>
         
@@ -731,7 +683,7 @@ export const InstallationSection: React.FC<Props> = ({
              <div className="text-right">
                 <span className="text-[10px] uppercase font-bold text-zinc-400 block leading-none mb-1">Suma</span>
                 <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200 text-lg">
-                    {installationTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {offerCurrency}
+                    {formatCurrency(installationTotal, offerCurrency)}
                 </span>
              </div>
              <button className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-transform duration-300" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
@@ -742,31 +694,30 @@ export const InstallationSection: React.FC<Props> = ({
       
       <div className={`grid transition-[grid-template-rows] duration-500 ease-in-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
         <div className="overflow-hidden">
-            <div className="p-6 pt-0 border-t border-transparent">
-                {/* STAGES LIST */}
+            <div className="p-4 pt-0 border-t border-transparent">
                 {stages.map((stage, idx) => renderStage(stage, idx))}
                 
-                <div className="mt-4 flex justify-center">
+                <div className="mt-2 flex justify-center">
                     <button 
                         onClick={addStage}
-                        className="flex items-center gap-2 bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-50 hover:border-zinc-300 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 px-6 py-3 rounded-xl text-sm font-bold shadow-sm transition-all"
+                        className="flex items-center gap-2 bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-50 hover:border-zinc-300 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-300 px-4 py-2 text-xs font-bold transition-all"
                     >
-                        <Plus size={18}/> Dodaj Kolejny Etap
+                        <Plus size={14}/> Dodaj Kolejny Etap
                     </button>
                 </div>
 
-                <div className="mt-8 pt-6 border-t border-dashed border-zinc-200 dark:border-zinc-700">
-                    <div className="flex items-center gap-4 bg-zinc-50 dark:bg-zinc-900/50 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                <div className="mt-4 pt-4 border-t border-dashed border-zinc-200 dark:border-zinc-700">
+                    <div className="flex items-center gap-4 bg-zinc-50 dark:bg-zinc-900/50 p-3 border border-zinc-100 dark:border-zinc-800">
                         <div className="flex-1">
-                            <label className="block text-xs font-bold text-zinc-500 mb-1 uppercase">Globalne Koszty Dodatkowe (Ryczałt Projektowy)</label>
-                            <p className="text-[10px] text-zinc-400">Koszty nieprzypisane do konkretnego etapu (np. dojazd koordynatora).</p>
+                            <label className="block text-[10px] font-bold text-zinc-500 mb-0.5 uppercase">Globalne Koszty Dodatkowe (Ryczałt Projektowy)</label>
+                            <p className="text-[9px] text-zinc-400">Koszty nieprzypisane do konkretnego etapu (np. dojazd koordynatora).</p>
                         </div>
                         <input 
                             type="number" 
                             min="0" 
                             value={data.otherInstallationCosts} 
                             onChange={(e) => onChange({...data, otherInstallationCosts: parseFloat(e.target.value) || 0})} 
-                            className="w-32 p-3 border border-zinc-200 dark:border-zinc-600 rounded-xl bg-white dark:bg-zinc-800 text-right font-bold focus:border-yellow-400 outline-none" 
+                            className="w-24 p-2 border-0 bg-white dark:bg-zinc-800 text-right font-bold focus:ring-1 focus:ring-amber-400 outline-none text-sm" 
                             placeholder="0.00" 
                         />
                     </div>

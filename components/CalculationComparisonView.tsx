@@ -1,4 +1,5 @@
 
+
 import React, { useEffect } from 'react';
 import { CalculationData, Currency, AppState, CalculationMode } from '../types';
 import { X, Scale, TrendingUp, TrendingDown } from 'lucide-react';
@@ -22,11 +23,11 @@ export const CalculationComparisonView: React.FC<Props> = ({ initial, final, app
     }, [onClose]);
 
     const rate = appState.exchangeRate;
-    // Calculate both in PLN for comparison? Or Offer Currency? Let's use Offer Currency for consistency
     const currency = appState.offerCurrency;
+    const ormFee = appState.globalSettings.ormFeePercent;
     
-    const costsInitial = calculateProjectCosts(initial, rate, currency, CalculationMode.INITIAL);
-    const costsFinal = calculateProjectCosts(final, rate, currency, CalculationMode.FINAL);
+    const costsInitial = calculateProjectCosts(initial, rate, currency, CalculationMode.INITIAL, ormFee);
+    const costsFinal = calculateProjectCosts(final, rate, currency, CalculationMode.FINAL, ormFee);
 
     const getSellingPrice = (costs: { total: number }) => {
         const marginDecimal = appState.targetMargin / 100;

@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { CalculationData, ProjectVariant, VariantItem, VariantItemType, Currency, VariantStatus } from '../types';
 import { Layers, Search, Trash2, Eye, EyeOff, ChevronDown, ChevronUp, Check, X, Crosshair, MinusCircle, Link, ArrowRight, Edit2, Lock, Plus, MousePointer2 } from 'lucide-react';
@@ -474,22 +475,25 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
   const cellClass = "p-3 border-b border-zinc-100 dark:border-zinc-800/50 text-sm align-middle";
 
   return (
-    <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 mb-8 transition-colors relative z-0">
+    <div className="bg-white dark:bg-zinc-950 rounded-sm border border-zinc-200 dark:border-zinc-800 mb-6 overflow-hidden transition-colors relative z-0">
       {renderTooltip()}
       
       <div 
-          className="p-5 flex justify-between items-center cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors rounded-t-2xl"
+          className="p-4 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
           onClick={() => setIsOpen(!isOpen)}
       >
         <div className="flex items-center gap-3">
-            <div className="bg-purple-100 p-2 rounded-lg text-purple-600">
+            <div className="bg-amber-100 dark:bg-amber-900/30 p-2 rounded-sm text-amber-600 dark:text-amber-500">
                 <Layers size={20} />
             </div>
             <div>
-                <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-tight">Warianty / Symulacje</h2>
-                <p className="text-xs text-zinc-500 mt-0.5">
-                    Status: <span className="font-bold text-zinc-700 dark:text-zinc-300">{(data.variants || []).some(v => v.status === 'INCLUDED') ? 'WHITELIST (Solo/Include)' : 'BLACKLIST (Standard)'}</span>
-                </p>
+                <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 font-mono uppercase tracking-tight">Warianty / Symulacje</h2>
+                <div className="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
+                    Zarządzanie opcjami what-if
+                    {data.variants.some(v => v.status === 'INCLUDED') && (
+                        <span className="bg-green-100 text-green-700 px-1 rounded text-[10px] font-bold border border-green-200">SOLO MODE</span>
+                    )}
+                </div>
             </div>
         </div>
         
@@ -500,25 +504,25 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
 
       <div className={`grid transition-[grid-template-rows] duration-500 ease-in-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
         <div className="overflow-hidden">
-            <div className="p-0 border-t border-zinc-100 dark:border-zinc-700">
+            <div className="p-0 border-t border-transparent">
                 {/* Add New Variant Toolbar */}
-                <div className="p-4 bg-zinc-50/50 dark:bg-zinc-800/30 border-b border-zinc-100 dark:border-zinc-700 flex justify-end">
+                <div className="p-4 flex justify-end">
                     <form onSubmit={addVariant} className="flex gap-2 w-full md:w-auto">
                         <input 
                             type="text" 
                             placeholder="Nazwa wariantu (np. Opcja A)..."
-                            className="flex-1 p-2 border border-zinc-200 dark:border-zinc-600 rounded-lg text-sm bg-white dark:bg-zinc-900 focus:border-yellow-400 outline-none min-w-[200px]"
+                            className="flex-1 px-3 py-1.5 border border-zinc-200 dark:border-zinc-700 rounded-none text-xs bg-white dark:bg-zinc-900 focus:border-amber-400 outline-none min-w-[200px]"
                             value={newVariantName}
                             onChange={(e) => setNewVariantName(e.target.value)}
                         />
-                        <button type="submit" className="bg-zinc-800 hover:bg-zinc-700 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2">
-                            <Plus size={16}/> Utwórz
+                        <button type="submit" className="bg-zinc-800 hover:bg-zinc-700 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 px-3 py-1.5 rounded-none text-xs font-bold transition-colors flex items-center gap-2">
+                            <Plus size={12}/> Utwórz
                         </button>
                     </form>
                 </div>
 
                 {/* Variants Table */}
-                <div className="overflow-x-auto min-h-[100px]">
+                <div className="overflow-x-auto min-h-[100px] border-t border-zinc-100 dark:border-zinc-800">
                     <table className="w-full text-left border-collapse min-w-[600px]">
                         <thead>
                             <tr>
@@ -529,9 +533,9 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
                                 <th className={`${headerClass} w-16`}></th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white dark:bg-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-700">
+                        <tbody className="bg-white dark:bg-zinc-950 divide-y divide-zinc-100 dark:divide-zinc-800">
                             {(data.variants || []).length === 0 && (
-                                <tr><td colSpan={5} className="p-8 text-center text-zinc-400 italic">Brak wariantów. Dodaj pierwszy wariant powyżej.</td></tr>
+                                <tr><td colSpan={5} className="p-8 text-center text-zinc-400 italic text-xs">Brak wariantów. Dodaj pierwszy wariant powyżej.</td></tr>
                             )}
                             
                             {(data.variants || []).map(variant => {
@@ -545,16 +549,16 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
                                                 <div className="relative group/edit">
                                                     <input 
                                                         type="text" 
-                                                        className="w-full bg-transparent border-b border-transparent hover:border-zinc-300 focus:border-yellow-400 outline-none font-bold text-zinc-700 dark:text-zinc-200 transition-colors py-1"
+                                                        className="w-full bg-transparent border-b border-transparent hover:border-zinc-300 focus:border-amber-400 outline-none font-bold text-zinc-700 dark:text-zinc-200 transition-colors py-1 text-xs"
                                                         value={variant.name}
                                                         onChange={(e) => updateVariantName(variant.id, e.target.value)}
                                                     />
-                                                    <Edit2 size={12} className="absolute right-0 top-1/2 -translate-y-1/2 text-zinc-300 opacity-0 group-hover/edit:opacity-100 pointer-events-none"/>
+                                                    <Edit2 size={10} className="absolute right-0 top-1/2 -translate-y-1/2 text-zinc-300 opacity-0 group-hover/edit:opacity-100 pointer-events-none"/>
                                                 </div>
-                                                <div className="text-[10px] text-zinc-400 uppercase font-semibold mt-1">{variant.status}</div>
+                                                <div className="text-[9px] text-zinc-400 uppercase font-semibold mt-0.5">{variant.status}</div>
                                             </td>
                                             <td className={`${cellClass} text-center`}>
-                                                <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-2.5 py-1 rounded-full text-xs font-bold">
+                                                <span className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 px-2 py-0.5 rounded-full text-[10px] font-bold border border-zinc-200 dark:border-zinc-700">
                                                     {variant.items.length}
                                                 </span>
                                             </td>
@@ -563,10 +567,10 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
                                             </td>
                                             <td className={`${cellClass} text-center`}>
                                                 <div className="flex items-center justify-center gap-1">
-                                                    <button onClick={() => handleSoloVariant(variant.id)} className="p-2 rounded-lg text-zinc-500 hover:text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-colors" title="SOLO"><Crosshair size={16}/></button>
-                                                    <button onClick={() => setVariantStatus(variant.id, 'EXCLUDED')} className={`p-2 rounded-lg transition-colors ${variant.status === 'EXCLUDED' ? 'bg-red-100 text-red-600' : 'text-zinc-400 hover:text-red-500 hover:bg-red-50'}`} title="WYKLUCZ"><EyeOff size={16}/></button>
-                                                    <button onClick={() => setVariantStatus(variant.id, 'INCLUDED')} className={`p-2 rounded-lg transition-colors ${variant.status === 'INCLUDED' ? 'bg-green-100 text-green-600' : 'text-zinc-400 hover:text-green-500 hover:bg-green-50'}`} title="UWZGLĘDNIJ"><Eye size={16}/></button>
-                                                    <button onClick={() => setVariantStatus(variant.id, 'NEUTRAL')} className={`p-2 rounded-lg transition-colors ${variant.status === 'NEUTRAL' ? 'text-zinc-300 cursor-default' : 'text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100'}`} title="RESET"><MinusCircle size={16}/></button>
+                                                    <button onClick={() => handleSoloVariant(variant.id)} className="p-1.5 rounded text-zinc-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors" title="SOLO (Tylko ten)"><Crosshair size={14}/></button>
+                                                    <button onClick={() => setVariantStatus(variant.id, 'EXCLUDED')} className={`p-1.5 rounded transition-colors ${variant.status === 'EXCLUDED' ? 'bg-red-100 text-red-600' : 'text-zinc-400 hover:text-red-500 hover:bg-red-50'}`} title="WYKLUCZ"><EyeOff size={14}/></button>
+                                                    <button onClick={() => setVariantStatus(variant.id, 'INCLUDED')} className={`p-1.5 rounded transition-colors ${variant.status === 'INCLUDED' ? 'bg-green-100 text-green-600' : 'text-zinc-400 hover:text-green-500 hover:bg-green-50'}`} title="UWZGLĘDNIJ"><Eye size={14}/></button>
+                                                    <button onClick={() => setVariantStatus(variant.id, 'NEUTRAL')} className={`p-1.5 rounded transition-colors ${variant.status === 'NEUTRAL' ? 'text-zinc-300 cursor-default' : 'text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100'}`} title="RESET"><MinusCircle size={14}/></button>
                                                 </div>
                                             </td>
                                             <td className={`${cellClass} text-center`}>
@@ -574,8 +578,8 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
                                                     <button onClick={() => {
                                                         setActiveVariantId(isEditing ? null : variant.id);
                                                         setShowDropdown(true); // Open dropdown when editing starts
-                                                    }} className={`text-xs px-3 py-1.5 rounded-lg border transition-colors font-medium ${isEditing ? 'bg-yellow-50 border-yellow-200 text-yellow-700' : 'bg-white dark:bg-zinc-700 border-zinc-200 dark:border-zinc-600 hover:bg-zinc-50'}`}>{isEditing ? 'Gotowe' : 'Edytuj'}</button>
-                                                    <button onClick={() => removeVariant(variant.id)} className="text-zinc-300 hover:text-red-500 p-1.5 rounded hover:bg-red-50 transition-colors"><Trash2 size={16}/></button>
+                                                    }} className={`text-[10px] px-2 py-1 rounded border transition-colors font-bold uppercase ${isEditing ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50'}`}>{isEditing ? 'Gotowe' : 'Edytuj'}</button>
+                                                    <button onClick={() => removeVariant(variant.id)} className="text-zinc-300 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors"><Trash2 size={12}/></button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -586,12 +590,12 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
                                                     <div className="p-4 relative">
                                                         <div className="flex gap-2 items-center relative z-50 mb-4">
                                                             <div className="relative flex-1">
-                                                                <Search className="absolute left-3 top-2.5 text-zinc-400" size={16}/>
+                                                                <Search className="absolute left-3 top-2.5 text-zinc-400" size={14}/>
                                                                 <input 
                                                                     ref={searchInputRef}
                                                                     type="text" 
-                                                                    className="w-full pl-10 p-2.5 border border-zinc-200 dark:border-zinc-600 rounded-xl text-sm outline-none focus:border-yellow-400 focus:ring-2 focus:ring-yellow-100 dark:bg-zinc-900 dark:text-white transition-all" 
-                                                                    placeholder="Wyszukaj elementy do dodania (Etap, Dostawca, Transport)..." 
+                                                                    className="w-full pl-9 p-2 border border-zinc-200 dark:border-zinc-700 rounded-none text-xs outline-none focus:border-amber-400 dark:bg-zinc-900 dark:text-white transition-all font-mono" 
+                                                                    placeholder="Szukaj elementów (Etap, Dostawca, Transport)..." 
                                                                     value={searchTerm} 
                                                                     onChange={(e) => {
                                                                         setSearchTerm(e.target.value);
@@ -604,10 +608,10 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
                                                             {onEnterPickingMode && (
                                                                 <button 
                                                                     onClick={() => onEnterPickingMode(variant.id)}
-                                                                    className="bg-yellow-400 hover:bg-yellow-500 text-black p-2.5 rounded-xl transition-colors shadow-sm flex items-center gap-2 font-bold text-xs whitespace-nowrap"
+                                                                    className="bg-amber-400 hover:bg-amber-500 text-black px-3 py-2 rounded-none transition-colors shadow-sm flex items-center gap-2 font-bold text-[10px] uppercase whitespace-nowrap"
                                                                     title="Wybierz elementy myszką z innych sekcji"
                                                                 >
-                                                                    <MousePointer2 size={18} /> Tryb Wybierania
+                                                                    <MousePointer2 size={14} /> Tryb Wybierania
                                                                 </button>
                                                             )}
                                                         </div>
@@ -616,16 +620,16 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
                                                         {showDropdown && (searchTerm.length > 0 || searchResults.length > 0) && activeVariantId && dropdownPosition && (
                                                             <div 
                                                                 ref={dropdownRef}
-                                                                className="fixed bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-600 shadow-2xl rounded-xl max-h-80 overflow-y-auto z-[9999] flex flex-col"
+                                                                className="fixed bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-2xl rounded-sm max-h-80 overflow-y-auto z-[9999] flex flex-col"
                                                                 style={{
                                                                     top: dropdownPosition.top,
                                                                     left: dropdownPosition.left,
                                                                     width: dropdownPosition.width
                                                                 }}
                                                             >
-                                                                <div className="sticky top-0 bg-zinc-50 dark:bg-zinc-700 p-2 flex justify-between items-center text-[10px] font-bold text-zinc-500 uppercase border-b border-zinc-200 dark:border-zinc-600 tracking-wider">
+                                                                <div className="sticky top-0 bg-zinc-50 dark:bg-zinc-800 p-2 flex justify-between items-center text-[9px] font-bold text-zinc-500 uppercase border-b border-zinc-200 dark:border-zinc-700 tracking-wider">
                                                                     <span>Wyniki Wyszukiwania</span>
-                                                                    <button onClick={() => setShowDropdown(false)} className="hover:text-red-500 p-1"><X size={14}/></button>
+                                                                    <button onClick={() => setShowDropdown(false)} className="hover:text-red-500 p-1"><X size={12}/></button>
                                                                 </div>
 
                                                                 {searchResults.length === 0 && searchTerm ? (
@@ -659,25 +663,25 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
                                                                                 key={`${res.id}-${i}`} 
                                                                                 onClick={() => !isDisabled && addItemToVariant(variant.id, res)} 
                                                                                 disabled={isDisabled}
-                                                                                className={`w-full text-left p-3 text-xs border-b border-zinc-100 dark:border-zinc-700 last:border-0 flex justify-between items-center transition-colors 
+                                                                                className={`w-full text-left p-2 text-xs border-b border-zinc-100 dark:border-zinc-800 last:border-0 flex justify-between items-center transition-colors 
                                                                                     ${isDisabled 
-                                                                                        ? 'bg-zinc-50 dark:bg-zinc-800/50 opacity-50 cursor-not-allowed' 
-                                                                                        : 'hover:bg-yellow-50 dark:hover:bg-yellow-900/20'
+                                                                                        ? 'bg-zinc-50 dark:bg-zinc-900/50 opacity-50 cursor-not-allowed' 
+                                                                                        : 'hover:bg-amber-50 dark:hover:bg-amber-900/20'
                                                                                     }`}
                                                                             >
                                                                                 <div>
                                                                                     <div className={`font-bold flex items-center gap-2 ${isDisabled ? 'text-zinc-400' : 'text-zinc-700 dark:text-zinc-200'}`}>
-                                                                                        {res.isRecommended && !isDisabled && <Link size={12} className="text-green-500" />}
+                                                                                        {res.isRecommended && !isDisabled && <Link size={10} className="text-green-500" />}
                                                                                         {res.label}
                                                                                     </div>
-                                                                                    {res.description && <div className="text-[10px] text-zinc-500 mt-0.5">{res.description}</div>}
+                                                                                    {res.description && <div className="text-[9px] text-zinc-500 mt-0.5">{res.description}</div>}
                                                                                     {isParentGroupSelected && <div className="text-[9px] text-red-400 italic mt-0.5">Grupa nadrzędna już wybrana</div>}
                                                                                     {isChildSelected && <div className="text-[9px] text-red-400 italic mt-0.5">Elementy tej grupy są już wybrane</div>}
                                                                                 </div>
                                                                                 {isDisabled ? (
-                                                                                    isExactMatch ? <Check size={14} className="text-green-500"/> : <Lock size={12} className="text-zinc-400"/>
+                                                                                    isExactMatch ? <Check size={12} className="text-green-500"/> : <Lock size={10} className="text-zinc-400"/>
                                                                                 ) : (
-                                                                                    res.isRecommended ? <ArrowRight size={14} className="text-green-500 opacity-50"/> : null
+                                                                                    res.isRecommended ? <ArrowRight size={12} className="text-green-500 opacity-50"/> : null
                                                                                 )}
                                                                             </button>
                                                                         );
@@ -686,29 +690,29 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
                                                             </div>
                                                         )}
 
-                                                        <div className="space-y-1 max-h-[200px] overflow-y-auto border border-zinc-200 dark:border-zinc-600 rounded-xl bg-white dark:bg-zinc-900">
+                                                        <div className="space-y-1 max-h-[200px] overflow-y-auto border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950">
                                                             {variant.items.length === 0 && <div className="p-6 text-center text-xs text-zinc-400 italic">Pusty wariant. Dodaj elementy korzystając z wyszukiwarki lub przycisku "Tryb Wybierania".</div>}
                                                             {variant.items.map((item, idx) => {
                                                                 const { val, curr } = getItemValue(item.id, item.type);
                                                                 return (
                                                                     <div 
                                                                         key={`${item.id}-${idx}`} 
-                                                                        className="flex justify-between items-center p-3 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 border-b border-zinc-100 dark:border-zinc-700 last:border-0"
+                                                                        className="flex justify-between items-center p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-900 border-b border-zinc-100 dark:border-zinc-800 last:border-0"
                                                                         onMouseEnter={(e) => handleMouseEnterItem(e, item.id, item.type)}
                                                                         onMouseLeave={() => setHoveredItemId(null)}
                                                                     >
-                                                                        <span className="truncate text-xs font-mono text-zinc-600 dark:text-zinc-300 flex items-center gap-2">
-                                                                            {item.type === 'STAGE' && <div className="p-1 bg-purple-100 text-purple-600 rounded"><Layers size={10}/></div>}
-                                                                            {item.type === 'TRANSPORT' && <div className="p-1 bg-blue-100 text-blue-600 rounded"><Layers size={10}/></div>}
+                                                                        <span className="truncate font-mono text-zinc-600 dark:text-zinc-300 flex items-center gap-2">
+                                                                            {item.type === 'STAGE' && <div className="p-0.5 bg-purple-100 text-purple-600 rounded"><Layers size={8}/></div>}
+                                                                            {item.type === 'TRANSPORT' && <div className="p-0.5 bg-blue-100 text-blue-600 rounded"><Layers size={8}/></div>}
                                                                             {item.originalDescription}
                                                                             
                                                                             {val > 0 && (
-                                                                                <span className="ml-2 text-[10px] bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 rounded">
+                                                                                <span className="ml-2 text-[9px] bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 px-1 py-0.5 rounded">
                                                                                     {val.toFixed(2)} {curr}
                                                                                 </span>
                                                                             )}
                                                                         </span>
-                                                                        <button onClick={() => removeItemFromVariant(variant.id, item.id, item.type)} className="text-zinc-300 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors"><X size={14}/></button>
+                                                                        <button onClick={() => removeItemFromVariant(variant.id, item.id, item.type)} className="text-zinc-300 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors"><X size={12}/></button>
                                                                     </div>
                                                                 );
                                                             })}

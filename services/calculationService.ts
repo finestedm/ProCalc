@@ -1,5 +1,19 @@
 
-import { CalculationData, Currency, CalculationMode, InstallationStage } from '../types';
+
+import { CalculationData, Currency, CalculationMode, InstallationStage, Supplier } from '../types';
+
+export const formatNumber = (value: number, decimals: number = 2): string => {
+    if (value === undefined || value === null || isNaN(value)) return '0,00';
+    return value.toLocaleString('pl-PL', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+        useGrouping: true
+    });
+};
+
+export const formatCurrency = (value: number, currency: string): string => {
+    return `${formatNumber(value, 2)} ${currency}`;
+};
 
 export const convert = (amount: number, from: Currency, to: Currency, rate: number) => {
     if (amount === 0) return 0;
@@ -23,7 +37,7 @@ export interface CostBreakdown {
 // Now returns Total Stage Cost including Equipment and Custom Items
 export const calculateStageCost = (
     stage: InstallationStage, 
-    data: CalculationData,
+    data: { suppliers: Supplier[] }, 
     options: { ignoreExclusions?: boolean } = {}
 ): number => {
     const { ignoreExclusions = false } = options;
@@ -80,11 +94,13 @@ export const calculateProjectCosts = (
     data: CalculationData, 
     rate: number, 
     targetCurrency: Currency,
-    mode: CalculationMode = CalculationMode.INITIAL
+    mode: CalculationMode = CalculationMode.INITIAL,
+    ormFeePercent: number = 1.6 // Default if not passed
 ): CostBreakdown => {
     const isFinal = mode === CalculationMode.FINAL;
     let excludedTotal = 0;
     let ormFeeTotal = 0;
+    const ormFeeRate = ormFeePercent / 100;
 
     // --- SUPPLIERS ---
     const suppliersTotal = data.suppliers.reduce((total, s) => {
@@ -97,7 +113,7 @@ export const calculateProjectCosts = (
              cost = s.finalCostOverride;
              // Even in final mode, if it was an ORM supplier, we assume the fee applies to the final invoice amount
              if (s.isOrm) {
-                 supplierOrmFee = cost * 0.016;
+                 supplierOrmFee = cost * ormFeeRate;
              }
         } else {
             // Standard Calculation
@@ -117,9 +133,9 @@ export const calculateProjectCosts = (
             
             cost = sTotal * (1 - s.discount / 100);
 
-            // Calculate ORM Fee (1.6% of discounted value)
+            // Calculate ORM Fee
             if (s.isOrm) {
-                supplierOrmFee = cost * 0.016;
+                supplierOrmFee = cost * ormFeeRate;
             }
         }
 

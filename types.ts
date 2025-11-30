@@ -83,6 +83,23 @@ export interface Supplier {
   isManualFinal?: boolean;    // Added manually in Final Calculation stage
 }
 
+// --- SHEET TYPES ---
+export interface SheetCell {
+    value: string; // The raw input (e.g., "=A1*2" or "100")
+    result?: number | string; // The calculated result
+}
+
+export interface SheetRow {
+    id: string;
+    cells: Record<string, SheetCell>; // Key is column ID (A, B, C...)
+}
+
+export interface SheetData {
+    columns: string[]; // ['A', 'B', 'C'...]
+    rows: SheetRow[];
+    selectedCell?: { rowId: string, colId: string };
+}
+
 export interface OtherCostItem {
   id: string;
   description: string;
@@ -92,6 +109,17 @@ export interface OtherCostItem {
   finalCostOverride?: number; // For Final Calculation Mode
   finalCurrency?: Currency;   // Currency of the final invoice
   finalVendorName?: string;
+  attachedSheet?: SheetData; // If present, price is derived from this sheet
+}
+
+// --- SCRATCHPAD TYPE (Legacy support or simple view) ---
+export interface ScratchpadRow {
+    id: string;
+    col1: string; // Description part 1
+    col2: string; // Description part 2 / Qty
+    col3: string; // Math / Notes
+    val: string;  // Value column (intended for numbers)
+    isChecked: boolean; // Visual marker
 }
 
 export interface TransportItem {
@@ -240,6 +268,11 @@ export interface PaymentTerms {
   finalPaymentDays: number; // Days from invoice
 }
 
+export interface GlobalSettings {
+    ormFeePercent: number; // e.g. 1.6
+    truckLoadCapacity: number; // e.g. 22000 kg
+}
+
 export interface CalculationData {
   payer: AddressData;
   recipient: AddressData;
@@ -248,6 +281,7 @@ export interface CalculationData {
   suppliers: Supplier[];
   transport: TransportItem[];
   otherCosts: OtherCostItem[];
+  otherCostsScratchpad?: ScratchpadRow[]; // Legacy field kept for compatibility
   installation: InstallationData;
   nameplateQty: number;
   tasks: ProjectTask[];
@@ -265,13 +299,15 @@ export interface AppState {
   offerCurrency: Currency; 
   clientCurrency: Currency; 
   targetMargin: number;
-  manualPrice: number | null; 
+  manualPrice: number | null;
+  globalSettings: GlobalSettings;
 }
 
 export interface HistoryEntry {
   timestamp: number;
   state: AppState;
   description: string;
+  changes?: string[]; // Detailed list of changes
 }
 
 export interface ProjectFile {
@@ -320,6 +356,11 @@ export const EMPTY_PAYMENT_TERMS: PaymentTerms = {
   finalPaymentDays: 14
 };
 
+export const DEFAULT_SETTINGS: GlobalSettings = {
+    ormFeePercent: 1.6,
+    truckLoadCapacity: 22000
+};
+
 export const EMPTY_CALCULATION: CalculationData = {
   payer: { ...EMPTY_ADDRESS },
   recipient: { ...EMPTY_ADDRESS },
@@ -328,6 +369,7 @@ export const EMPTY_CALCULATION: CalculationData = {
   suppliers: [],
   transport: [],
   otherCosts: [],
+  otherCostsScratchpad: [],
   installation: { ...EMPTY_INSTALLATION },
   nameplateQty: 0,
   tasks: [],

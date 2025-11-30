@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { AppState, CalculationMode, ViewMode } from '../types';
-import { Calculator as CalcIcon, Scale, LayoutDashboard, Undo2, Redo2, Menu, NotebookPen, FileText, HardDrive } from 'lucide-react';
+import { Calculator as CalcIcon, Scale, LayoutDashboard, Undo2, Redo2, Menu, NotebookPen, FileText, HardDrive, Square } from 'lucide-react';
 import { DropdownMenu } from './DropdownMenu';
 
 interface Props {
@@ -35,48 +35,44 @@ export const Header: React.FC<Props> = ({
     const isFinal = appState.mode === CalculationMode.FINAL;
 
     const navItems = [
-        { mode: ViewMode.CALCULATOR, label: 'Kalkulator', icon: <CalcIcon size={16}/> },
-        { mode: ViewMode.LOGISTICS, label: 'Logistyka', icon: <LayoutDashboard size={16}/> },
-        { mode: ViewMode.NOTES, label: 'Notatki', icon: <NotebookPen size={16}/> },
-        { mode: ViewMode.DOCUMENTS, label: 'Dokumenty', icon: <FileText size={16}/> },
+        { mode: ViewMode.CALCULATOR, label: 'Kalkulator', icon: <CalcIcon size={14}/> },
+        { mode: ViewMode.LOGISTICS, label: 'Logistyka', icon: <LayoutDashboard size={14}/> },
+        { mode: ViewMode.NOTES, label: 'Notatki', icon: <NotebookPen size={14}/> },
+        { mode: ViewMode.DOCUMENTS, label: 'Dokumenty', icon: <FileText size={14}/> },
     ];
 
     return (
-        <header className="w-full bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 h-16 shrink-0 z-50 transition-colors">
-            <div className="max-w-[1920px] mx-auto px-4 h-full flex items-center justify-between gap-4">
+        <header className="w-full bg-white dark:bg-black h-14 shrink-0 z-50 transition-colors border-b border-zinc-200 dark:border-zinc-800">
+            <div className="max-w-[1920px] mx-auto px-6 h-full flex items-center justify-between">
                 
-                {/* 1. LEFT: Logo */}
+                {/* 1. LEFT: Brand */}
                 <div className="flex items-center gap-3 shrink-0">
-                    <div className="bg-gradient-to-br from-yellow-400 to-yellow-500 p-1.5 rounded-xl shadow-sm text-zinc-900">
-                        <CalcIcon size={18} strokeWidth={2.5} />
+                    <div className="w-6 h-6 bg-zinc-900 dark:bg-white text-white dark:text-black flex items-center justify-center rounded-sm">
+                        <CalcIcon size={14} strokeWidth={3} />
                     </div>
                     <div className="flex flex-col">
-                        <h1 className="text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-100 leading-none">
-                            ProCalc
+                        <h1 className="text-sm font-bold tracking-tight text-zinc-900 dark:text-white uppercase leading-none font-mono">
+                            ProCalc<span className="text-zinc-400">.v1</span>
                         </h1>
-                        <span className="hidden md:block text-[9px] font-semibold text-zinc-400 tracking-wider uppercase">Manager</span>
                     </div>
                 </div>
 
-                {/* 2. CENTER: Navigation (Desktop) - Scrollable on mobile */}
-                <div className="flex-1 flex justify-center overflow-x-auto no-scrollbar mask-gradient px-2">
-                    <div className="flex items-center gap-1 md:gap-2 p-1 bg-zinc-100/50 dark:bg-zinc-800/50 rounded-full border border-zinc-200/50 dark:border-zinc-700/50">
+                {/* 2. CENTER: Navigation Tabs (Underline Style) */}
+                <div className="flex-1 flex justify-center h-full">
+                    <div className="flex h-full gap-8">
                         {navItems.map((item) => {
                             const isActive = appState.viewMode === item.mode;
                             return (
                                 <button 
                                     key={item.mode}
                                     onClick={() => setAppState(prev => ({ ...prev, viewMode: item.mode }))}
-                                    className={`relative px-4 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap flex items-center gap-2 ${
+                                    className={`relative h-full flex items-center gap-2 text-xs font-medium uppercase tracking-wide transition-all duration-200 border-b-2 ${
                                         isActive 
-                                        ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm border border-zinc-200 dark:border-zinc-600' 
-                                        : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:text-zinc-200'
+                                        ? 'text-zinc-900 dark:text-white border-zinc-900 dark:border-white' 
+                                        : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300 border-transparent hover:border-zinc-200'
                                     }`}
                                 >
-                                    <span className={isActive ? "text-yellow-600 dark:text-yellow-400" : "text-zinc-400"}>
-                                        {item.icon}
-                                    </span>
-                                    <span className="hidden md:inline">{item.label}</span>
+                                    {item.label}
                                 </button>
                             );
                         })}
@@ -84,88 +80,85 @@ export const Header: React.FC<Props> = ({
                 </div>
 
                 {/* 3. RIGHT: Actions & Mode Switcher */}
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-4 shrink-0">
                     
-                    {/* Mode Switcher - Only in Calculator View */}
+                    {/* Mode Switcher */}
                     {appState.viewMode === ViewMode.CALCULATOR && (
-                        <div className="hidden lg:flex bg-zinc-100/80 dark:bg-zinc-800 p-1 rounded-full items-center border border-zinc-200 dark:border-zinc-700 mr-2">
+                        <div className="hidden lg:flex items-center border border-zinc-200 dark:border-zinc-800 rounded-sm overflow-hidden h-8">
                             <button
                                 onClick={() => setAppState(prev => ({ ...prev, mode: CalculationMode.INITIAL }))}
-                                className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                className={`px-3 h-full text-[10px] font-bold uppercase tracking-wider transition-all flex items-center ${
                                     !isFinal 
-                                    ? 'bg-white dark:bg-zinc-600 text-zinc-900 dark:text-white shadow-sm border border-zinc-200 dark:border-zinc-500' 
-                                    : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'
+                                    ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white' 
+                                    : 'bg-transparent text-zinc-400 hover:text-zinc-600'
                                 }`}
                             >
-                                {!isFinal && <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>}
                                 Wstępna
                             </button>
-                            
+                            <div className="w-px h-full bg-zinc-200 dark:bg-zinc-800"></div>
                             <button
                                 onClick={() => setAppState(prev => ({ ...prev, mode: CalculationMode.FINAL }))}
-                                className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                className={`px-3 h-full text-[10px] font-bold uppercase tracking-wider transition-all flex items-center ${
                                     isFinal 
-                                    ? 'bg-white dark:bg-zinc-600 text-zinc-900 dark:text-white shadow-sm border border-zinc-200 dark:border-zinc-500' 
-                                    : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'
+                                    ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white' 
+                                    : 'bg-transparent text-zinc-400 hover:text-zinc-600'
                                 }`}
                             >
                                 Końcowa
-                                {isFinal && <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>}
                             </button>
                         </div>
                     )}
 
-                    {/* Quick Access to Project Manager */}
-                    <button 
-                         onClick={onShowProjectManager}
-                         className="hidden sm:flex p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full"
-                         title="Menedżer Projektów"
-                    >
-                         <HardDrive size={18} />
-                    </button>
+                    <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block"></div>
 
-                     {/* Comparison Button */}
-                     {appState.viewMode === ViewMode.CALCULATOR && (
-                        <button 
-                            onClick={onShowComparison} 
-                            className="hidden sm:flex p-2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full"
-                            title="Porównaj Wersje"
+                    {/* Actions */}
+                    <div className="flex items-center gap-2">
+                         <button 
+                             onClick={onShowProjectManager}
+                             className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                             title="Menedżer Projektów"
                         >
-                            <Scale size={18}/>
+                             <HardDrive size={16} />
                         </button>
-                     )}
 
-                    <div className="h-6 w-px bg-zinc-200 dark:bg-zinc-700 mx-1 hidden sm:block"></div>
+                         {appState.viewMode === ViewMode.CALCULATOR && (
+                            <button 
+                                onClick={onShowComparison} 
+                                className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                                title="Porównaj Wersje"
+                            >
+                                <Scale size={16}/>
+                            </button>
+                         )}
 
-                    {/* Undo / Redo */}
-                    <div className="hidden sm:flex items-center gap-0.5">
-                         <button 
-                            onClick={onUndo} 
-                            disabled={!canUndo} 
-                            className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-30 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full" 
-                            title="Cofnij"
-                         >
-                             <Undo2 size={18}/>
-                         </button>
-                         <button 
-                            onClick={onRedo} 
-                            disabled={!canRedo} 
-                            className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-30 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full" 
-                            title="Ponów"
-                         >
-                             <Redo2 size={18}/>
-                         </button>
+                         <div className="hidden sm:flex items-center gap-1">
+                             <button 
+                                onClick={onUndo} 
+                                disabled={!canUndo} 
+                                className="w-8 h-8 flex items-center justify-center text-zinc-500 disabled:opacity-20 hover:text-zinc-900 dark:hover:text-white transition-colors" 
+                                title="Cofnij"
+                             >
+                                 <Undo2 size={16}/>
+                             </button>
+                             <button 
+                                onClick={onRedo} 
+                                disabled={!canRedo} 
+                                className="w-8 h-8 flex items-center justify-center text-zinc-500 disabled:opacity-20 hover:text-zinc-900 dark:hover:text-white transition-colors" 
+                                title="Ponów"
+                             >
+                                 <Redo2 size={16}/>
+                             </button>
+                        </div>
+
+                        <DropdownMenu 
+                            trigger={
+                                <div className="w-8 h-8 flex items-center justify-center text-zinc-900 dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-sm transition-colors">
+                                    <Menu size={16} />
+                                </div>
+                            } 
+                            items={menuItems}
+                        />
                     </div>
-
-                    {/* Menu */}
-                    <DropdownMenu 
-                        trigger={
-                            <div className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors text-zinc-600 dark:text-zinc-300">
-                                <Menu size={20} />
-                            </div>
-                        } 
-                        items={menuItems}
-                    />
                     <input type="file" ref={projectInputRef} className="hidden" accept=".json" onChange={handleImport} />
                 </div>
             </div>

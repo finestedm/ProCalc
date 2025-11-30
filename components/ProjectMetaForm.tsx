@@ -1,16 +1,22 @@
 
 import React, { useState } from 'react';
 import { ProjectMeta, CalculationMode } from '../types';
-import { Briefcase, Calendar, User, ChevronDown } from 'lucide-react';
+import { Briefcase, Calendar, User, ChevronDown, Hash, ScanLine } from 'lucide-react';
 
 interface Props {
   data: ProjectMeta;
   mode: CalculationMode;
   onChange: (data: ProjectMeta) => void;
+  isOpen?: boolean; // Controlled state
+  onToggle?: () => void; // Toggle handler
 }
 
-export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange }) => {
-  const [isOpen, setIsOpen] = useState(true);
+export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen = true, onToggle }) => {
+  const [internalOpen, setInternalOpen] = useState(true);
+  
+  // Use controlled state if provided, otherwise local
+  const showContent = onToggle ? isOpen : internalOpen;
+  const toggleHandler = onToggle || (() => setInternalOpen(!internalOpen));
 
   const handleChange = (key: keyof ProjectMeta, value: string) => {
     onChange({ ...data, [key]: value });
@@ -26,45 +32,48 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange }) => {
       handleChange('sapProjectNumber', sapPrefix + cleanVal);
   };
 
-  const inputClass = "w-full p-2.5 bg-zinc-50 border border-zinc-200 rounded-lg text-sm text-zinc-800 placeholder-zinc-400 focus:bg-white focus:border-zinc-300 focus:ring-4 focus:ring-zinc-100 outline-none transition-all dark:bg-zinc-700 dark:border-zinc-600 dark:text-zinc-100 dark:focus:bg-zinc-800";
-  const labelClass = "block text-xs font-bold text-zinc-500 uppercase mb-1.5 ml-1";
+  const inputClass = "w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-sm text-xs text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all";
+  const labelClass = "block text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase mb-1 ml-1 tracking-wider";
 
   return (
-    <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 mb-8 overflow-hidden transition-all duration-300">
+    <div className="bg-white dark:bg-zinc-950 rounded-sm border border-zinc-200 dark:border-zinc-800 mb-6 overflow-hidden transition-all duration-300 h-full flex flex-col">
+      {/* Standardized Header */}
       <div 
-          className="p-5 flex justify-between items-center cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
-          onClick={() => setIsOpen(!isOpen)}
+          className="p-4 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+          onClick={toggleHandler}
       >
         <div className="flex items-center gap-3">
-            <div className="bg-yellow-100 p-2 rounded-lg text-yellow-600">
+            <div className="bg-amber-100 dark:bg-amber-900/30 p-2 rounded-sm text-amber-600 dark:text-amber-500">
                 <Briefcase size={20} />
             </div>
             <div>
-                <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-tight">Szczegóły Projektu</h2>
-                {!isOpen && (data.orderNumber || data.projectNumber) && (
-                    <div className="flex items-center gap-2 mt-0.5 text-xs text-zinc-500">
-                        {data.orderNumber && <span>Zam: <span className="font-semibold text-zinc-700 dark:text-zinc-300">{data.orderNumber}</span></span>}
-                        {data.orderNumber && data.projectNumber && <span className="w-1 h-1 rounded-full bg-zinc-300"></span>}
-                        {data.projectNumber && <span>Proj: <span className="font-semibold text-zinc-700 dark:text-zinc-300">{data.projectNumber}</span></span>}
-                    </div>
-                )}
+                <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 font-mono uppercase tracking-tight">Szczegóły Projektu</h2>
+                <div className="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
+                    {!showContent && (data.orderNumber || data.projectNumber) ? (
+                        <>
+                            {data.orderNumber && <span>{data.orderNumber}</span>}
+                            {data.orderNumber && data.projectNumber && <span>•</span>}
+                            {data.projectNumber && <span>{data.projectNumber}</span>}
+                        </>
+                    ) : "Numery, Daty, Osoby"}
+                </div>
             </div>
         </div>
-        <button className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-transform duration-300" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+        <button className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-transform duration-300" style={{ transform: showContent ? 'rotate(180deg)' : 'rotate(0deg)' }}>
             <ChevronDown size={20}/>
         </button>
       </div>
       
-      <div className={`grid transition-[grid-template-rows] duration-500 ease-in-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-          <div className="overflow-hidden">
-              <div className="p-6 pt-0 border-t border-transparent grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-                <div>
+      <div className={`grid transition-[grid-template-rows] duration-500 ease-in-out ${showContent ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'} flex-1`}>
+          <div className="overflow-hidden h-full flex flex-col">
+              <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
+                <div className="md:col-span-2">
                     <label className={labelClass}>Nr Zamówienia</label>
                     <input
                         type="text"
                         value={data.orderNumber}
                         onChange={(e) => handleChange('orderNumber', e.target.value)}
-                        className={inputClass}
+                        className={`${inputClass} font-bold text-zinc-900 dark:text-white`}
                         placeholder="np. ZAM/2024/..."
                     />
                 </div>
@@ -73,12 +82,12 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange }) => {
                     <div>
                         <label className={labelClass}>Data Zamówienia</label>
                         <div className="relative group">
-                            <Calendar className="absolute left-3 top-2.5 text-zinc-400 group-focus-within:text-zinc-600" size={16}/>
+                            <Calendar className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600" size={14}/>
                             <input
                                 type="date"
                                 value={data.orderDate}
                                 onChange={(e) => handleChange('orderDate', e.target.value)}
-                                className={`${inputClass} pl-10`}
+                                className={`${inputClass} pl-9`}
                             />
                         </div>
                     </div>
@@ -88,12 +97,12 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange }) => {
                     <div>
                         <label className={labelClass}>Data Protokołu</label>
                         <div className="relative group">
-                            <Calendar className="absolute left-3 top-2.5 text-zinc-400 group-focus-within:text-zinc-600" size={16}/>
+                            <Calendar className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600" size={14}/>
                             <input
                                 type="date"
                                 value={data.protocolDate}
                                 onChange={(e) => handleChange('protocolDate', e.target.value)}
-                                className={`${inputClass} pl-10`}
+                                className={`${inputClass} pl-9`}
                             />
                         </div>
                     </div>
@@ -102,36 +111,42 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange }) => {
                 <div>
                     <label className={labelClass}>Nr Projektu SAP</label>
                     <div className="relative flex items-center group">
-                        <span className="absolute left-3 text-zinc-400 text-sm font-medium select-none bg-zinc-100 dark:bg-zinc-600 px-1.5 py-0.5 rounded-md text-xs">{sapPrefix}</span>
+                        <span className="absolute left-1 top-1 bottom-1 flex items-center justify-center text-zinc-400 text-[10px] font-mono select-none bg-zinc-100 dark:bg-zinc-800 px-1.5 rounded-sm border border-zinc-200 dark:border-zinc-700">{sapPrefix}</span>
                         <input
                             type="text"
                             value={displaySap}
                             onChange={(e) => handleSapChange(e.target.value)}
                             maxLength={10} 
-                            className={`${inputClass} pl-20 font-mono`}
+                            className={`${inputClass} pl-14 font-mono`}
                             placeholder="XXXXX"
                         />
                     </div>
                 </div>
-                <div>
-                    <label className={labelClass}>Nr Projektu</label>
-                    <input
-                        type="text"
-                        value={data.projectNumber}
-                        onChange={(e) => handleChange('projectNumber', e.target.value)}
-                        className={inputClass}
-                        placeholder="np. P-2024-..."
-                    />
+                
+                <div className="md:col-span-2 border-t border-zinc-100 dark:border-zinc-800 my-1"></div>
+
+                <div className="md:col-span-2">
+                    <label className={labelClass}>Nr Projektu (CRM)</label>
+                    <div className="relative group">
+                        <ScanLine className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600" size={14}/>
+                        <input
+                            type="text"
+                            value={data.projectNumber}
+                            onChange={(e) => handleChange('projectNumber', e.target.value)}
+                            className={`${inputClass} pl-9`}
+                            placeholder="np. P-2024-..."
+                        />
+                    </div>
                 </div>
                 <div>
                     <label className={labelClass}>Handlowiec</label>
                     <div className="relative group">
-                        <User className="absolute left-3 top-2.5 text-zinc-400 group-focus-within:text-zinc-600" size={16}/>
+                        <User className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600" size={14}/>
                         <input
                             type="text"
                             value={data.salesPerson}
                             onChange={(e) => handleChange('salesPerson', e.target.value)}
-                            className={`${inputClass} pl-10`}
+                            className={`${inputClass} pl-9`}
                             placeholder="Imię Nazwisko"
                         />
                     </div>
@@ -139,12 +154,12 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange }) => {
                 <div>
                     <label className={labelClass}>Wsparcie Sprzedaży</label>
                     <div className="relative group">
-                        <User className="absolute left-3 top-2.5 text-zinc-400 group-focus-within:text-zinc-600" size={16}/>
+                        <User className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600" size={14}/>
                         <input
                             type="text"
                             value={data.assistantPerson}
                             onChange={(e) => handleChange('assistantPerson', e.target.value)}
-                            className={`${inputClass} pl-10`}
+                            className={`${inputClass} pl-9`}
                             placeholder="Imię Nazwisko"
                         />
                     </div>

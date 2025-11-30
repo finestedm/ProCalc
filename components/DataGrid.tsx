@@ -1,7 +1,9 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { SupplierItem, Currency } from '../types';
 import { ArrowUp, ArrowDown, Trash2, ArrowLeft, ArrowRight, ArrowUpDown, ChevronUp, ChevronDown, Search, Settings2, Plus, Eye, EyeOff } from 'lucide-react';
 import { DropdownMenu } from './DropdownMenu';
+import { formatNumber } from '../services/calculationService';
 
 interface ColumnConfig {
     id: keyof SupplierItem | 'totalValue' | 'jhPrice' | 'actions';
@@ -43,14 +45,14 @@ export const DataGrid: React.FC<DataGridProps> = ({
     
     // Default columns configuration - REORDERED based on request
     const defaultColumns: ColumnConfig[] = [
-        { id: 'quantity', label: 'Ilość', width: 80, minWidth: 60 },
-        { id: 'itemDescription', label: 'Opis', width: 350, minWidth: 200 },
-        { id: 'componentNumber', label: 'Nr Komponentu', width: 150, minWidth: 100 },
-        { id: 'weight', label: 'Waga (kg)', width: 80, minWidth: 60 },
-        { id: 'unitPrice', label: 'Cena jedn.', width: 120, minWidth: 80 },
-        { id: 'jhPrice', label: 'Cena JH', width: 100, minWidth: 80 }, // Logic handles visibility
-        { id: 'totalValue', label: 'Wartość', width: 120, minWidth: 80 },
-        { id: 'actions', label: 'Opcje', width: 80, minWidth: 80 },
+        { id: 'quantity', label: 'Qty', width: 70, minWidth: 60 },
+        { id: 'itemDescription', label: 'Description', width: 350, minWidth: 200 },
+        { id: 'componentNumber', label: 'Part No.', width: 140, minWidth: 100 },
+        { id: 'weight', label: 'Weight', width: 70, minWidth: 60 },
+        { id: 'unitPrice', label: 'Unit Price', width: 100, minWidth: 80 },
+        { id: 'jhPrice', label: 'JH Price', width: 90, minWidth: 80 }, // Logic handles visibility
+        { id: 'totalValue', label: 'Total', width: 100, minWidth: 80 },
+        { id: 'actions', label: '...', width: 50, minWidth: 50 },
     ];
     const [columns, setColumns] = useState<ColumnConfig[]>(defaultColumns);
 
@@ -143,27 +145,27 @@ export const DataGrid: React.FC<DataGridProps> = ({
     // Use picking-pulse animation (inset box shadow) which doesn't affect layout
     const pickingClass = isPickingMode 
         ? "cursor-crosshair hover:animate-pulse-border" 
-        : "hover:bg-blue-50/50 dark:hover:bg-blue-900/10";
+        : "hover:bg-zinc-50 dark:hover:bg-zinc-900/50";
 
     return (
         <div className={`flex flex-col w-full ${className}`}>
             {/* Toolbar */}
             <div className="flex justify-between items-center mb-2 px-1 gap-2 shrink-0 pt-2">
                 <div className="relative w-64">
-                    <Search className="absolute left-2 top-2.5 text-zinc-400" size={16}/>
+                    <Search className="absolute left-2.5 top-2 text-zinc-400" size={14}/>
                     <input 
                         type="text" 
-                        placeholder="Filtruj pozycje..."
-                        className="w-full pl-8 p-2 border border-zinc-200 dark:border-zinc-700 rounded text-sm bg-white dark:bg-zinc-800 outline-none focus:border-yellow-400 transition-colors"
+                        placeholder="Filter items..."
+                        className="w-full pl-8 p-1.5 border border-zinc-200 dark:border-zinc-700 rounded-sm text-xs bg-white dark:bg-zinc-900 outline-none focus:border-yellow-500 transition-all font-mono"
                         value={filterText}
                         onChange={(e) => setFilterText(e.target.value)}
                     />
                 </div>
                 <DropdownMenu 
                     align="right"
-                    trigger={<Settings2 size={18} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"/>}
+                    trigger={<Settings2 size={14} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"/>}
                     items={[
-                        { label: 'Resetuj kolumny', onClick: () => {
+                        { label: 'Reset Columns', onClick: () => {
                             setColumns(defaultColumns);
                             setSortConfig(null);
                         }}
@@ -171,15 +173,15 @@ export const DataGrid: React.FC<DataGridProps> = ({
                 />
             </div>
 
-            {/* Table Container */}
-            <div className="flex-1 overflow-auto border border-zinc-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800 shadow-sm relative min-h-[200px]">
-                <table className="text-sm text-left border-collapse table-fixed" style={{ minWidth: '100%' }}>
-                    <thead className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 sticky top-0 z-10 font-semibold uppercase text-xs tracking-wider shadow-sm">
+            {/* Table Container - Strict Grid Look */}
+            <div className="flex-1 overflow-auto border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 relative min-h-[200px]">
+                <table className="text-xs text-left border-collapse table-fixed w-full">
+                    <thead className="bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 sticky top-0 z-10 font-bold uppercase text-[10px] tracking-wider border-b border-zinc-300 dark:border-zinc-700">
                         <tr>
-                            <th className="p-2 w-10 text-center border-b dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800">#</th>
+                            <th className="p-0 border-r border-zinc-300 dark:border-zinc-700 w-8 text-center bg-zinc-100 dark:bg-zinc-900">#</th>
                             
                             {!sortConfig && onMoveItem && (
-                                <th className="p-2 w-16 text-center border-b dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800">Sort</th>
+                                <th className="p-0 border-r border-zinc-300 dark:border-zinc-700 w-8 text-center bg-zinc-100 dark:bg-zinc-900"></th>
                             )}
 
                             {columns.map((col, idx) => {
@@ -189,22 +191,22 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                 return (
                                     <th 
                                         key={col.id}
-                                        className={`p-2 border-b dark:border-zinc-700 relative group select-none ${col.id === 'jhPrice' ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-400 border-l border-green-100 dark:border-green-800' : 'bg-zinc-100 dark:bg-zinc-800'}`}
+                                        className={`p-2 relative group select-none border-r border-zinc-300 dark:border-zinc-700 last:border-r-0 ${col.id === 'jhPrice' ? 'bg-green-50/50 dark:bg-green-900/20 text-green-800 dark:text-green-400' : ''}`}
                                         style={{ width: col.width }}
                                     >
                                         <div className="flex items-center justify-between h-full">
                                             <div 
-                                                className={`flex items-center gap-1 cursor-pointer flex-1 truncate hover:text-zinc-900 dark:hover:text-zinc-200 ${col.id === 'actions' ? 'justify-center' : ''}`}
+                                                className={`flex items-center gap-1 cursor-pointer flex-1 truncate hover:text-zinc-900 dark:hover:text-white ${col.id === 'actions' ? 'justify-center' : ''}`}
                                                 onClick={() => handleSort(col.id)}
                                             >
                                                 {col.label}
                                                 {sortConfig?.key === col.id && (
-                                                    sortConfig.direction === 'asc' ? <ChevronUp size={12}/> : <ChevronDown size={12}/>
+                                                    sortConfig.direction === 'asc' ? <ChevronUp size={10}/> : <ChevronDown size={10}/>
                                                 )}
                                             </div>
                                             
                                             {col.id !== 'actions' && (
-                                                <div className="flex opacity-0 group-hover:opacity-100 transition-opacity mr-2 gap-1">
+                                                <div className="flex opacity-0 group-hover:opacity-100 transition-opacity mr-1 gap-0.5">
                                                     <button 
                                                         disabled={idx === 0}
                                                         onClick={(e) => { e.stopPropagation(); moveColumn(idx, 'left'); }}
@@ -221,7 +223,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
 
                                         {col.id !== 'actions' && (
                                             <div 
-                                                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-yellow-400 active:bg-yellow-600 z-20"
+                                                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-yellow-500 active:bg-yellow-600 z-20"
                                                 onMouseDown={(e) => {
                                                     e.preventDefault();
                                                     handleResize(col.id, col.width, e.clientX);
@@ -233,7 +235,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
                             })}
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
                         {processedItems.map((item, index) => {
                             // Helper to find original index for onMoveItem
                             const originalIndex = items.findIndex(i => i.id === item.id);
@@ -245,7 +247,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
                             return (
                                 <tr 
                                     key={item.id} 
-                                    className={`${pickingClass} transition-colors group ${isExcluded ? 'opacity-50' : ''}`}
+                                    className={`${pickingClass} transition-colors group ${isExcluded ? 'opacity-50 grayscale' : ''}`}
                                     onClick={(e) => {
                                         if (isPickingMode && onPick) {
                                             e.stopPropagation(); // Stop propagation to prevent group selection
@@ -253,24 +255,24 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                         }
                                     }}
                                 >
-                                    <td className="p-2 text-center text-zinc-400 text-xs">{index + 1}</td>
+                                    <td className="p-1 text-center text-zinc-400 text-[10px] font-mono border-r border-zinc-200 dark:border-zinc-800">{index + 1}</td>
                                     
                                     {!sortConfig && onMoveItem && (
-                                        <td className="p-2">
-                                            <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <td className="p-1 border-r border-zinc-200 dark:border-zinc-800">
+                                            <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button 
                                                     onClick={() => onMoveItem(originalIndex, 'up')}
                                                     disabled={originalIndex === 0}
-                                                    className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 disabled:opacity-20"
+                                                    className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 disabled:opacity-20"
                                                 >
-                                                    <ArrowUp size={14} />
+                                                    <ArrowUp size={10} />
                                                 </button>
                                                 <button 
                                                     onClick={() => onMoveItem(originalIndex, 'down')}
                                                     disabled={originalIndex === items.length - 1}
-                                                    className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 disabled:opacity-20"
+                                                    className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 disabled:opacity-20"
                                                 >
-                                                    <ArrowDown size={14} />
+                                                    <ArrowDown size={10} />
                                                 </button>
                                             </div>
                                         </td>
@@ -278,20 +280,22 @@ export const DataGrid: React.FC<DataGridProps> = ({
 
                                     {columns.map(col => {
                                          if (col.id === 'jhPrice' && !isOrm) return null;
+                                         
+                                         // Special Action Column
                                          if (col.id === 'actions') {
                                              return (
-                                                 <td key={col.id} className="p-2 text-center border-l border-transparent">
+                                                 <td key={col.id} className="p-1 text-center border-r border-zinc-200 dark:border-zinc-800 last:border-r-0">
                                                     <div className="flex items-center justify-center gap-1">
                                                         <button 
                                                             onClick={(e) => { e.stopPropagation(); onUpdateItem(item.id, 'isExcluded', !item.isExcluded); }}
-                                                            className={`p-1.5 rounded transition-colors ${isExcluded ? 'text-zinc-400 hover:text-zinc-600' : 'text-green-600 bg-green-50 dark:bg-green-900/20 hover:bg-green-100'}`}
-                                                            title={isExcluded ? "Przywróć do kalkulacji" : "Wyłącz z kalkulacji"}
+                                                            className={`p-1 rounded transition-colors ${isExcluded ? 'text-zinc-400 hover:text-zinc-600' : 'text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20'}`}
+                                                            title={isExcluded ? "Include" : "Exclude"}
                                                         >
-                                                            {isExcluded ? <EyeOff size={14}/> : <Eye size={14}/>}
+                                                            {isExcluded ? <EyeOff size={10}/> : <Eye size={10}/>}
                                                         </button>
                                                         {!readOnly && (
-                                                            <button onClick={(e) => { e.stopPropagation(); onDeleteItem(item.id); }} className="p-1.5 rounded text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                                                                <Trash2 size={14}/>
+                                                            <button onClick={(e) => { e.stopPropagation(); onDeleteItem(item.id); }} className="p-1 rounded text-zinc-300 hover:text-red-500 transition-colors">
+                                                                <Trash2 size={10}/>
                                                             </button>
                                                         )}
                                                     </div>
@@ -299,12 +303,16 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                              );
                                          }
 
+                                         // Data Columns
+                                         const cellClass = "p-0 relative border-r border-zinc-200 dark:border-zinc-800 last:border-r-0 h-[28px]";
+                                         const commonInputClass = `w-full h-full px-2 bg-transparent outline-none border-none rounded-none focus:ring-1 focus:ring-inset focus:ring-yellow-500 text-xs font-mono transition-all ${isExcluded ? 'text-zinc-400' : 'text-zinc-800 dark:text-zinc-200'}`;
+
                                          return (
-                                            <td key={col.id} className={`p-0 border-l border-transparent focus-within:border-yellow-400 transition-colors truncate relative ${isExcluded ? 'decoration-slice line-through text-zinc-400' : ''}`}>
+                                            <td key={col.id} className={cellClass}>
                                                 {col.id === 'itemDescription' && (
                                                     <input 
                                                         type="text" 
-                                                        className={`w-full px-3 py-2.5 bg-transparent outline-none ${isExcluded ? 'text-zinc-400' : 'text-zinc-700 dark:text-zinc-200 placeholder-zinc-300'}`}
+                                                        className={`${commonInputClass} font-sans`}
                                                         value={item.itemDescription} 
                                                         onChange={(e) => onUpdateItem(item.id, 'itemDescription', e.target.value)}
                                                         readOnly={readOnly || isExcluded}
@@ -314,7 +322,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                                 {col.id === 'componentNumber' && (
                                                     <input 
                                                         type="text" 
-                                                        className={`w-full px-3 py-2.5 bg-transparent outline-none font-mono text-xs ${isExcluded ? 'text-zinc-400' : 'text-zinc-600 dark:text-zinc-400'}`}
+                                                        className={commonInputClass}
                                                         value={item.componentNumber} 
                                                         onChange={(e) => onUpdateItem(item.id, 'componentNumber', e.target.value)}
                                                         readOnly={readOnly || isExcluded}
@@ -324,7 +332,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                                 {col.id === 'quantity' && (
                                                     <input 
                                                         type="number" 
-                                                        className={`w-full px-3 py-2.5 text-center bg-transparent outline-none font-bold ${isExcluded ? 'text-zinc-400' : 'text-zinc-800 dark:text-zinc-200'}`}
+                                                        className={`${commonInputClass} text-center font-bold`}
                                                         value={item.quantity} 
                                                         onChange={(e) => onUpdateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
                                                         readOnly={readOnly || isExcluded}
@@ -334,7 +342,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                                 {col.id === 'weight' && (
                                                     <input 
                                                         type="number" 
-                                                        className="w-full px-3 py-2.5 text-center bg-transparent outline-none text-zinc-500" 
+                                                        className={`${commonInputClass} text-center text-zinc-500`}
                                                         value={item.weight} 
                                                         onChange={(e) => onUpdateItem(item.id, 'weight', parseFloat(e.target.value) || 0)}
                                                         readOnly={readOnly || isExcluded}
@@ -342,26 +350,24 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                                     />
                                                 )}
                                                 {col.id === 'unitPrice' && (
-                                                    <div className={`h-full ${isOrm && !isExcluded ? 'bg-orange-50/30 dark:bg-orange-900/5' : ''}`}>
-                                                        <input 
-                                                            type="number" 
-                                                            step="0.01" 
-                                                            className={`w-full px-3 py-2.5 text-right bg-transparent outline-none font-mono ${isOrm && !isExcluded ? 'text-orange-800 dark:text-orange-400 font-medium' : ''}`}
-                                                            value={item.unitPrice} 
-                                                            onChange={(e) => onUpdateItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                                            readOnly={readOnly || isExcluded}
-                                                            onClick={(e) => e.stopPropagation()}
-                                                        />
-                                                    </div>
+                                                    <input 
+                                                        type="number" 
+                                                        step="0.01" 
+                                                        className={`${commonInputClass} text-right ${isOrm && !isExcluded ? 'text-orange-600 dark:text-orange-400' : ''}`}
+                                                        value={item.unitPrice} 
+                                                        onChange={(e) => onUpdateItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                                        readOnly={readOnly || isExcluded}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    />
                                                 )}
                                                 {col.id === 'jhPrice' && isOrm && (
-                                                     <div className={`px-3 py-2.5 text-right font-mono font-bold ${isExcluded ? 'text-zinc-400 bg-transparent' : 'text-green-700 dark:text-green-500 bg-green-50/30 dark:bg-green-900/5'} h-full flex items-center justify-end cursor-not-allowed`}>
-                                                        {jhPrice.toFixed(2)}
+                                                     <div className={`px-2 h-full flex items-center justify-end font-mono text-xs font-bold ${isExcluded ? 'text-zinc-400' : 'text-green-700 dark:text-green-500 bg-green-50/20 dark:bg-green-900/10'}`}>
+                                                        {formatNumber(jhPrice)}
                                                     </div>
                                                 )}
                                                 {col.id === 'totalValue' && (
-                                                    <div className={`px-3 py-2.5 text-right font-medium ${isExcluded ? 'text-zinc-400 bg-transparent' : 'text-zinc-800 dark:text-zinc-200 bg-zinc-50/50 dark:bg-zinc-800/30'} h-full flex items-center justify-end`}>
-                                                        {totalValue.toFixed(2)}
+                                                    <div className={`px-2 h-full flex items-center justify-end font-mono text-xs ${isExcluded ? 'text-zinc-400' : 'text-zinc-900 dark:text-white bg-zinc-50 dark:bg-zinc-800/50'}`}>
+                                                        {formatNumber(totalValue)}
                                                     </div>
                                                 )}
                                             </td>
@@ -372,8 +378,8 @@ export const DataGrid: React.FC<DataGridProps> = ({
                         })}
                         {processedItems.length === 0 && (
                             <tr>
-                                <td colSpan={columns.length + 3} className="p-8 text-center text-zinc-400 italic">
-                                    {filterText ? 'Brak pozycji spełniających kryteria.' : 'Brak pozycji w ofercie.'}
+                                <td colSpan={columns.length + 3} className="p-8 text-center text-zinc-400 italic text-xs font-mono">
+                                    {filterText ? 'NO MATCHING ITEMS FOUND.' : 'NO ITEMS ADDED.'}
                                 </td>
                             </tr>
                         )}
@@ -382,9 +388,9 @@ export const DataGrid: React.FC<DataGridProps> = ({
             </div>
             
             {!readOnly && onAddItem && (
-                <div className="mt-2 shrink-0">
-                    <button onClick={onAddItem} className="text-sm text-zinc-700 dark:text-zinc-300 hover:text-black bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 px-3 py-2 rounded flex items-center gap-1 transition-colors border dark:border-zinc-600 w-full justify-center">
-                        <Plus size={16} /> Dodaj pozycję
+                <div className="mt-2 shrink-0 border-t border-dashed border-zinc-300 dark:border-zinc-700 pt-2">
+                    <button onClick={onAddItem} className="text-[10px] uppercase font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 px-4 py-2 rounded-sm flex items-center gap-2 transition-colors w-full justify-center border border-zinc-200 dark:border-zinc-700">
+                        <Plus size={12} /> Add Item Row
                     </button>
                 </div>
             )}

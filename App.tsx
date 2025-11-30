@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   AppState, 
@@ -11,7 +12,8 @@ import {
   HistoryEntry,
   ProjectFile,
   VariantItemType,
-  VariantItem
+  VariantItem,
+  DEFAULT_SETTINGS
 } from './types';
 import { CustomerSection } from './components/CustomerSection';
 import { ProjectMetaForm } from './components/ProjectMetaForm';
@@ -33,8 +35,10 @@ import { ConfirmDialog } from './components/ConfirmDialog';
 import { Header } from './components/Header';
 import { FloatingSummary } from './components/FloatingSummary';
 import { ProjectManagerModal } from './components/ProjectManagerModal';
+import { SettingsModal } from './components/SettingsModal';
 import { fetchEurRate } from './services/currencyService';
-import { Moon, Sun, History, Download, Upload, FilePlus, HardDrive, MousePointer2, X, Plus, Check, Trash2 } from 'lucide-react';
+import { generateDiff } from './services/diffService';
+import { Moon, Sun, History, Download, Upload, FilePlus, HardDrive, MousePointer2, X, Plus, Check, Trash2, Settings } from 'lucide-react';
 
 const STORAGE_KEY = 'procalc_data_v1';
 const THEME_KEY = 'procalc_theme';
@@ -54,8 +58,6 @@ const FlyingParticle: React.FC<FlyingParticleProps> = ({ id, startX, startY, lab
         return () => clearTimeout(timer);
     }, [id, onComplete]);
 
-    // Calculate destination (Bottom Left, where the basket icon is roughly located)
-    // Assuming icon is at roughly left: 30px, bottom: 30px
     const targetX = 30; 
     const targetY = window.innerHeight - 30;
     
@@ -64,17 +66,16 @@ const FlyingParticle: React.FC<FlyingParticleProps> = ({ id, startX, startY, lab
 
     return (
         <div 
-            className="fixed z-[9999] pointer-events-none bg-yellow-400 text-black text-xs font-bold px-3 py-1.5 rounded-full shadow-lg border border-yellow-600 flex items-center gap-1"
+            className="fixed z-[9999] pointer-events-none bg-zinc-900 text-white dark:bg-white dark:text-black text-[10px] font-mono font-bold px-2 py-1 shadow-sm border border-zinc-500 flex items-center gap-1"
             style={{ 
                 left: startX, 
                 top: startY,
-                // We use CSS variables for the transform destination
                 '--tx': `${deltaX}px`,
                 '--ty': `${deltaY}px`,
                 animation: 'flyToBasket 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards'
             } as React.CSSProperties}
         >
-            <Plus size={12} strokeWidth={3} /> {label}
+            <Plus size={10} strokeWidth={3} /> {label}
         </div>
     );
 };
@@ -89,7 +90,8 @@ const App: React.FC = () => {
     offerCurrency: Currency.EUR, 
     clientCurrency: Currency.PLN, 
     targetMargin: 20,
-    manualPrice: null
+    manualPrice: null,
+    globalSettings: { ...DEFAULT_SETTINGS }
   });
 
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
@@ -97,17 +99,18 @@ const App: React.FC = () => {
   const [showComparison, setShowComparison] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showProjectManager, setShowProjectManager] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   
-  // --- VISUAL PICKING MODE STATE ---
+  // Synchronized state for top forms
+  const [isHeaderFormsOpen, setIsHeaderFormsOpen] = useState(true);
+  
   const [pickingVariantId, setPickingVariantId] = useState<string | null>(null);
-  const [pickedItemsBuffer, setPickedItemsBuffer] = useState<VariantItem[]>([]); // Staging area
+  const [pickedItemsBuffer, setPickedItemsBuffer] = useState<VariantItem[]>([]);
   const [flyingParticles, setFlyingParticles] = useState<FlyingParticleProps[]>([]);
   const [basketPulse, setBasketPulse] = useState(false);
 
-  // File System Handle State (Persisted during session)
   const [dirHandle, setDirHandle] = useState<any>(null);
 
-  // --- Dialog State ---
   const [dialogConfig, setDialogConfig] = useState<{
       isOpen: boolean;
       title: string;
@@ -134,12 +137,9 @@ const App: React.FC = () => {
       });
   };
   
-  // --- History Management (Undo/Redo) ---
   const [past, setPast] = useState<AppState[]>([]);
   const [future, setFuture] = useState<AppState[]>([]);
   const [historyLog, setHistoryLog] = useState<HistoryEntry[]>([]);
-  
-  // Snackbar State
   const [snackbar, setSnackbar] = useState<{message: string, action?: () => void, actionLabel?: string} | null>(null);
 
   const lastSnapshot = useRef<AppState>(appState);
@@ -171,6 +171,10 @@ const App: React.FC = () => {
         if(parsed.final && typeof parsed.final.installation.finalInstallationCosts === 'undefined') parsed.final.installation.finalInstallationCosts = [];
         if(parsed.initial && !parsed.initial.variants) parsed.initial.variants = [];
         if(parsed.final && !parsed.final.variants) parsed.final.variants = [];
+        if(parsed.initial && !parsed.initial.otherCostsScratchpad) parsed.initial.otherCostsScratchpad = [];
+        if(parsed.final && !parsed.final.otherCostsScratchpad) parsed.final.otherCostsScratchpad = [];
+        // Init global settings if missing
+        if(!parsed.globalSettings) parsed.globalSettings = { ...DEFAULT_SETTINGS };
 
         const mergedState = { ...appState, ...parsed };
         setAppState(mergedState);
@@ -205,6 +209,9 @@ const App: React.FC = () => {
           const lastDataState = getHistoryState(lastSnapshot.current);
 
           if (JSON.stringify(currentDataState) !== JSON.stringify(lastDataState)) {
+              const changes = generateDiff(lastSnapshot.current, appState);
+              const description = changes.length === 1 ? changes[0] : `${changes.length} zmian`;
+
               setPast(prev => {
                   const newPast = [...prev, lastSnapshot.current];
                   return newPast.slice(-50); 
@@ -214,7 +221,8 @@ const App: React.FC = () => {
               setHistoryLog(prev => [{
                   timestamp: now.getTime(),
                   state: lastSnapshot.current,
-                  description: `Zmiana: ${now.toLocaleTimeString()}`
+                  description: description,
+                  changes: changes
               }, ...prev].slice(0, 50));
 
               setFuture([]);
@@ -232,17 +240,14 @@ const App: React.FC = () => {
   }, [appState, isLoaded]);
 
   // --- PICKING MODE LOGIC ---
-  
   const handleVariantItemPick = (item: { id: string, type: VariantItemType, label: string }, origin?: {x: number, y: number}) => {
       if (!pickingVariantId) return;
 
-      // Check if already in buffer
       if (pickedItemsBuffer.some(i => i.id === item.id && i.type === item.type)) {
           showSnackbar("Ten element jest już wybrany (w koszyku).");
           return;
       }
 
-      // Check if already in the existing variant
       const dataKey = appState.mode === CalculationMode.INITIAL ? 'initial' : 'final';
       const variants = appState[dataKey].variants;
       const targetVariant = variants.find(v => v.id === pickingVariantId);
@@ -251,14 +256,12 @@ const App: React.FC = () => {
           return;
       }
 
-      // Add to buffer
       setPickedItemsBuffer(prev => [...prev, {
           id: item.id,
           type: item.type,
           originalDescription: item.label
       }]);
 
-      // Trigger Animation
       if (origin) {
           const pid = Date.now();
           setFlyingParticles(prev => [...prev, { 
@@ -268,7 +271,6 @@ const App: React.FC = () => {
               label: item.label.length > 20 ? item.label.substring(0,20)+'...' : item.label,
               onComplete: (id) => {
                   setFlyingParticles(p => p.filter(x => x.id !== id));
-                  // Trigger basket pulse
                   setBasketPulse(true);
                   setTimeout(() => setBasketPulse(false), 300);
               }
@@ -291,11 +293,10 @@ const App: React.FC = () => {
           return;
       }
 
-      // Commit changes to AppState
       setAppState(prev => {
           const newState = { ...prev };
           const dataKey = prev.mode === CalculationMode.INITIAL ? 'initial' : 'final';
-          const variants = [...newState[dataKey].variants]; // Shallow copy of array
+          const variants = [...newState[dataKey].variants]; 
           
           const variantIndex = variants.findIndex(v => v.id === pickingVariantId);
           if (variantIndex !== -1) {
@@ -320,17 +321,26 @@ const App: React.FC = () => {
       if (past.length === 0) return;
       const previousState = past[past.length - 1];
       const newPast = past.slice(0, -1);
+      
+      const historyTip = historyLog[0];
+      const changesText = historyTip?.changes && historyTip.changes.length > 0 
+        ? (historyTip.changes.length === 1 ? historyTip.changes[0] : `${historyTip.changes.length} zmian`)
+        : 'Cofnięto zmianę';
+
       isUndoRedoOperation.current = true; 
       setFuture(prev => [appState, ...prev]);
       setPast(newPast);
       setAppState(previousState);
-      showSnackbar("Cofnięto zmianę");
+      
+      setHistoryLog(prev => prev.slice(1));
+      showSnackbar(`Cofnięto: ${changesText}`);
   };
 
   const handleRedo = () => {
       if (future.length === 0) return;
       const nextState = future[0];
       const newFuture = future.slice(1);
+      
       isUndoRedoOperation.current = true;
       setPast(prev => [...prev, appState]);
       setFuture(newFuture);
@@ -402,6 +412,9 @@ const App: React.FC = () => {
           if (parsed.appState) {
                if(parsed.appState.initial && !parsed.appState.initial.variants) parsed.appState.initial.variants = [];
                if(parsed.appState.final && !parsed.appState.final.variants) parsed.appState.final.variants = [];
+               if(parsed.appState.initial && !parsed.appState.initial.otherCostsScratchpad) parsed.appState.initial.otherCostsScratchpad = [];
+               if(parsed.appState.final && !parsed.appState.final.otherCostsScratchpad) parsed.appState.final.otherCostsScratchpad = [];
+               if(!parsed.appState.globalSettings) parsed.appState.globalSettings = { ...DEFAULT_SETTINGS };
 
                setAppState(parsed.appState);
                if (parsed.historyLog) setHistoryLog(parsed.historyLog);
@@ -409,7 +422,9 @@ const App: React.FC = () => {
                if (parsed.future) setFuture(parsed.future);
           } else {
                const merged = { ...appState, ...parsed };
-                if(merged.initial && !merged.initial.variants) merged.initial.variants = [];
+               if(merged.initial && !merged.initial.variants) merged.initial.variants = [];
+               if(merged.initial && !merged.initial.otherCostsScratchpad) merged.initial.otherCostsScratchpad = [];
+               if(!merged.globalSettings) merged.globalSettings = { ...DEFAULT_SETTINGS };
                setAppState(merged);
           }
           showSnackbar("Projekt wczytany pomyślnie");
@@ -452,7 +467,8 @@ const App: React.FC = () => {
                 offerCurrency: Currency.EUR, 
                 clientCurrency: Currency.PLN, 
                 targetMargin: 20,
-                manualPrice: null
+                manualPrice: null,
+                globalSettings: { ...DEFAULT_SETTINGS }
               });
               setPast([]);
               setFuture([]);
@@ -472,6 +488,7 @@ const App: React.FC = () => {
   const isFinal = appState.mode === CalculationMode.FINAL;
 
   const menuItems = [
+    { label: 'Ustawienia', icon: <Settings size={16}/>, onClick: () => setShowSettings(true) },
     { label: 'Nowy Projekt', icon: <FilePlus size={16}/>, onClick: handleNewProject, danger: true },
     { label: 'Otwórz Menedżer Projektów', icon: <HardDrive size={16}/>, onClick: () => setShowProjectManager(true) },
     { label: 'Pobierz Projekt (.json)', icon: <Download size={16}/>, onClick: handleExport },
@@ -480,10 +497,10 @@ const App: React.FC = () => {
     { label: 'Zmień Motyw', icon: isDarkMode ? <Sun size={16}/> : <Moon size={16}/>, onClick: toggleTheme },
   ];
 
-  if (!isLoaded) return <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900 flex items-center justify-center text-zinc-500 font-sans">Ładowanie...</div>;
+  if (!isLoaded) return <div className="min-h-screen bg-black flex items-center justify-center text-zinc-500 font-mono text-sm">Wczytywanie systemu...</div>;
 
   return (
-    <div className="h-screen overflow-hidden bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 transition-colors font-sans selection:bg-yellow-200 dark:selection:bg-yellow-900 flex flex-col">
+    <div className="h-screen overflow-hidden bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 transition-colors font-sans flex flex-col">
       <style>{`
         @keyframes flyToBasket {
           0% { transform: translate(0, 0) scale(1); opacity: 1; }
@@ -506,102 +523,120 @@ const App: React.FC = () => {
          handleImport={handleImport}
       />
 
-      {/* Main Layout - Clean light background, refined padding */}
-      <main className="flex-1 overflow-y-auto w-full max-w-[1600px] mx-auto p-4 md:px-6 md:pb-6 md:pt-3 grid grid-cols-1 xl:grid-cols-12 gap-8 items-start pt-6">
+      {/* Main Layout - Modified to support Bottom Summary */}
+      <main className="flex-1 overflow-y-auto w-full max-w-[1920px] mx-auto grid grid-cols-1 xl:grid-cols-12 items-start relative gap-0">
         
-        {/* LEFT COLUMN (Forms) */}
+        {/* LEFT COLUMN (Forms) - Expanded */}
         {appState.viewMode === ViewMode.CALCULATOR && (
-            <div className="xl:col-span-9 space-y-6 animate-slideInRight pb-24">
-                {/* If in Final Mode, show Comparison Header or specific Final View */}
-                {isFinal ? (
-                    <FinalCalculationView 
-                        data={appState.final}
-                        initialData={appState.initial}
-                        onChange={(updated) => updateCalculationData(updated)}
-                        exchangeRate={appState.exchangeRate}
-                        offerCurrency={appState.offerCurrency}
-                    />
-                ) : (
-                    <>
-                    <CustomerSection 
-                        data={{ payer: data.payer, recipient: data.recipient, orderingParty: data.orderingParty }} 
-                        onChange={(field, val) => updateCalculationData({ [field]: val })} 
-                    />
-                    
-                    <ProjectMetaForm data={data.meta} mode={appState.mode} onChange={(val) => updateCalculationData({ meta: val })} />
-
-                    <SuppliersSection 
-                        suppliers={data.suppliers} 
-                        transport={data.transport}
-                        installation={data.installation}
-                        onChange={(val) => updateCalculationData({ suppliers: val })}
-                        onBatchChange={handleBatchUpdate}
-                        onOpenComparison={() => setAppState(prev => ({...prev, viewMode: ViewMode.COMPARISON }))}
-                        exchangeRate={appState.exchangeRate}
-                        offerCurrency={appState.offerCurrency}
-                        nameplateQty={data.nameplateQty}
-                        onNameplateChange={(qty) => updateCalculationData({ nameplateQty: qty })}
-                        onConfirm={triggerConfirm}
-                        // PICKING PROPS
-                        isPickingMode={!!pickingVariantId}
-                        onPick={handleVariantItemPick}
-                    />
-                    
-                    <TransportSection 
-                        transport={data.transport} 
-                        suppliers={data.suppliers}
-                        onChange={(val) => updateCalculationData({ transport: val })} 
-                        exchangeRate={appState.exchangeRate}
-                        offerCurrency={appState.offerCurrency}
-                         // PICKING PROPS
-                        isPickingMode={!!pickingVariantId}
-                        onPick={handleVariantItemPick}
-                    />
-
-                    <OtherCostsSection 
-                        costs={data.otherCosts} 
-                        onChange={(val) => updateCalculationData({ otherCosts: val })} 
-                        exchangeRate={appState.exchangeRate}
-                        offerCurrency={appState.offerCurrency}
-                         // PICKING PROPS
-                        isPickingMode={!!pickingVariantId}
-                        onPick={handleVariantItemPick}
-                    />
-
-                    <InstallationSection 
-                        data={data.installation} 
-                        suppliers={data.suppliers}
-                        onChange={(val) => updateCalculationData({ installation: val })}
-                        exchangeRate={appState.exchangeRate}
-                        offerCurrency={appState.offerCurrency}
-                         // PICKING PROPS
-                        isPickingMode={!!pickingVariantId}
-                        onPick={handleVariantItemPick}
-                    />
-                    
-                    {/* VARIANTS SECTION - Moved to Bottom (Only in Initial Mode) */}
-                    <VariantsSection 
-                            data={data}
+            <div className="xl:col-span-10 p-6 pb-32">
+                <div className="max-w-[1350px] mx-auto space-y-6">
+                    {isFinal ? (
+                        <FinalCalculationView 
+                            data={appState.final}
+                            initialData={appState.initial}
                             onChange={(updated) => updateCalculationData(updated)}
                             exchangeRate={appState.exchangeRate}
                             offerCurrency={appState.offerCurrency}
-                            onConfirm={triggerConfirm}
-                            onEnterPickingMode={(id) => setPickingVariantId(id)}
-                    />
+                            manualPrice={appState.manualPrice}
+                            targetMargin={appState.targetMargin}
+                            onUpdateState={(updates) => setAppState(prev => ({ ...prev, ...updates }))}
+                        />
+                    ) : (
+                        <>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div className="lg:col-span-2">
+                                <CustomerSection 
+                                    data={{ payer: data.payer, recipient: data.recipient, orderingParty: data.orderingParty }} 
+                                    onChange={(field, val) => updateCalculationData({ [field]: val })} 
+                                    isOpen={isHeaderFormsOpen}
+                                    onToggle={() => setIsHeaderFormsOpen(!isHeaderFormsOpen)}
+                                />
+                            </div>
+                            <div className="lg:col-span-1">
+                                <ProjectMetaForm 
+                                    data={data.meta} 
+                                    mode={appState.mode} 
+                                    onChange={(val) => updateCalculationData({ meta: val })} 
+                                    isOpen={isHeaderFormsOpen}
+                                    onToggle={() => setIsHeaderFormsOpen(!isHeaderFormsOpen)}
+                                />
+                            </div>
+                        </div>
 
-                    <SummarySection 
-                        appState={appState} 
-                        onUpdateState={(updates) => setAppState(prev => ({ ...prev, ...updates }))}
-                        data={data}
-                    />
-                    </>
-                )}
+                        <SuppliersSection 
+                            suppliers={data.suppliers} 
+                            transport={data.transport}
+                            installation={data.installation}
+                            onChange={(val) => updateCalculationData({ suppliers: val })}
+                            onBatchChange={handleBatchUpdate}
+                            onOpenComparison={() => setAppState(prev => ({...prev, viewMode: ViewMode.COMPARISON }))}
+                            exchangeRate={appState.exchangeRate}
+                            offerCurrency={appState.offerCurrency}
+                            nameplateQty={data.nameplateQty}
+                            onNameplateChange={(qty) => updateCalculationData({ nameplateQty: qty })}
+                            onConfirm={triggerConfirm}
+                            isPickingMode={!!pickingVariantId}
+                            onPick={handleVariantItemPick}
+                        />
+                        
+                        <TransportSection 
+                            transport={data.transport} 
+                            suppliers={data.suppliers}
+                            onChange={(val) => updateCalculationData({ transport: val })} 
+                            exchangeRate={appState.exchangeRate}
+                            offerCurrency={appState.offerCurrency}
+                            isPickingMode={!!pickingVariantId}
+                            onPick={handleVariantItemPick}
+                            truckLoadCapacity={appState.globalSettings.truckLoadCapacity}
+                        />
+
+                        <InstallationSection 
+                            data={data.installation} 
+                            suppliers={data.suppliers}
+                            onChange={(val) => updateCalculationData({ installation: val })}
+                            exchangeRate={appState.exchangeRate}
+                            offerCurrency={appState.offerCurrency}
+                            isPickingMode={!!pickingVariantId}
+                            onPick={handleVariantItemPick}
+                        />
+
+                        <OtherCostsSection 
+                            costs={data.otherCosts} 
+                            scratchpad={data.otherCostsScratchpad || []}
+                            onChange={(costs) => updateCalculationData({ otherCosts: costs })} 
+                            onScratchpadChange={(sp) => updateCalculationData({ otherCostsScratchpad: sp })}
+                            exchangeRate={appState.exchangeRate}
+                            offerCurrency={appState.offerCurrency}
+                            isPickingMode={!!pickingVariantId}
+                            onPick={handleVariantItemPick}
+                        />
+                        
+                        <VariantsSection 
+                                data={data}
+                                onChange={(updated) => updateCalculationData(updated)}
+                                exchangeRate={appState.exchangeRate}
+                                offerCurrency={appState.offerCurrency}
+                                onConfirm={triggerConfirm}
+                                onEnterPickingMode={(id) => setPickingVariantId(id)}
+                        />
+
+                        {/* MAIN FINANCIAL SUMMARY PLACED HERE AS FOOTER BLOCK */}
+                        <div className="mt-8 border-t-2 border-zinc-200 dark:border-zinc-800 pt-8">
+                            <SummarySection 
+                                appState={appState} 
+                                onUpdateState={(updates) => setAppState(prev => ({ ...prev, ...updates }))}
+                                data={data}
+                            />
+                        </div>
+                        </>
+                    )}
+                </div>
             </div>
         )}
 
         {/* FULL SCREEN MODES */}
         {appState.viewMode === ViewMode.LOGISTICS && (
-            <div className="xl:col-span-12 animate-slideInRight">
+            <div className="xl:col-span-12 animate-fadeIn p-6">
                  <LogisticsView data={data} onUpdateSupplier={(id, updates) => {
                      const updatedSuppliers = data.suppliers.map(s => s.id === id ? { ...s, ...updates } : s);
                      updateCalculationData({ suppliers: updatedSuppliers });
@@ -610,7 +645,7 @@ const App: React.FC = () => {
         )}
 
         {appState.viewMode === ViewMode.COMPARISON && (
-            <div className="xl:col-span-12 animate-slideInRight">
+            <div className="xl:col-span-12 animate-fadeIn p-6">
                 <ComparisonView 
                     suppliers={data.suppliers} 
                     onBack={() => setAppState(prev => ({...prev, viewMode: ViewMode.CALCULATOR}))} 
@@ -619,7 +654,7 @@ const App: React.FC = () => {
         )}
         
         {appState.viewMode === ViewMode.NOTES && (
-             <div className="xl:col-span-12 animate-slideInRight">
+             <div className="xl:col-span-12 animate-fadeIn p-6">
                 <ProjectNotesView 
                     data={data} 
                     onChange={(updates) => updateCalculationData(updates)}
@@ -629,7 +664,7 @@ const App: React.FC = () => {
         )}
 
         {appState.viewMode === ViewMode.DOCUMENTS && (
-             <div className="xl:col-span-12 animate-slideInRight">
+             <div className="xl:col-span-12 animate-fadeIn p-6">
                 <DocumentsView 
                     data={data} 
                     onBack={() => setAppState(prev => ({...prev, viewMode: ViewMode.CALCULATOR}))} 
@@ -637,16 +672,18 @@ const App: React.FC = () => {
             </div>
         )}
 
-        {/* RIGHT COLUMN (Summary & Navigation) - Hidden on mobile/tablet (xl:block) */}
+        {/* RIGHT COLUMN (Stats Only) - Narrower */}
         {appState.viewMode === ViewMode.CALCULATOR && (
-            <div className="hidden xl:block xl:col-span-3 space-y-6 sticky top-0">
-                <SidePanel 
-                    appState={appState} 
-                    onUndo={handleUndo} 
-                    onRedo={handleRedo}
-                    canUndo={past.length > 0}
-                    canRedo={future.length > 0}
-                />
+            <div className="hidden xl:block xl:col-span-2 sticky top-0 h-screen overflow-y-auto border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4">
+                <div className="space-y-8">
+                    <SidePanel 
+                        appState={appState} 
+                        onUndo={handleUndo} 
+                        onRedo={handleRedo}
+                        canUndo={past.length > 0}
+                        canRedo={future.length > 0}
+                    />
+                </div>
             </div>
         )}
 
@@ -657,27 +694,26 @@ const App: React.FC = () => {
           <FlyingParticle key={p.id} {...p} />
       ))}
 
-      {/* Floating Summary - Visible ONLY on small screens (xl:hidden) */}
+      {/* Floating Summary - Only on small screens where main summary is scrolled out */}
       {!pickingVariantId && (
         <FloatingSummary data={data} appState={appState} />
       )}
 
       {/* PICKING MODE OVERLAY BAR */}
       {pickingVariantId && (
-          <div className="fixed bottom-0 left-0 right-0 bg-zinc-900 text-white p-4 z-[999] animate-slideUp flex flex-col md:flex-row items-center justify-between shadow-2xl border-t-2 border-yellow-500 gap-4">
+          <div className="fixed bottom-0 left-0 right-0 bg-zinc-900 text-white p-4 z-[999] animate-slideUp flex flex-col md:flex-row items-center justify-between shadow-2xl border-t-2 border-amber-500 gap-4">
               <div className="flex items-center gap-4 flex-1 overflow-hidden">
-                  <div className={`bg-yellow-500 p-2 rounded-full text-black transition-transform duration-200 shrink-0 ${basketPulse ? 'scale-150' : ''}`}>
+                  <div className={`bg-amber-500 p-2 rounded-full text-black transition-transform duration-200 shrink-0 ${basketPulse ? 'scale-150' : ''}`}>
                       <MousePointer2 size={24} />
                   </div>
                   <div className="overflow-hidden flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                           <h3 className="font-bold text-lg leading-none whitespace-nowrap">Tryb Wybierania</h3>
-                           <span className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full border border-zinc-700">
+                           <h3 className="font-bold text-lg leading-none whitespace-nowrap font-mono">TRYB WYBIERANIA</h3>
+                           <span className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700 font-mono">
                                {data.variants.find(v => v.id === pickingVariantId)?.name}
                            </span>
                       </div>
                       
-                      {/* Picked Items Horizontal Scroll List */}
                       {pickedItemsBuffer.length === 0 ? (
                           <p className="text-sm text-zinc-400">Kliknij element w interfejsie aby dodać go do koszyka.</p>
                       ) : (
@@ -701,14 +737,14 @@ const App: React.FC = () => {
               <div className="flex items-center gap-2 shrink-0">
                   <button 
                       onClick={handleCancelPicking}
-                      className="bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors text-sm"
+                      className="bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-600 px-4 py-2 rounded font-bold flex items-center gap-2 transition-colors text-sm"
                   >
                       <X size={16}/> Anuluj
                   </button>
                    <button 
                       onClick={handleConfirmPicking}
                       disabled={pickedItemsBuffer.length === 0}
-                      className="bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition-colors text-sm shadow-lg shadow-yellow-500/20"
+                      className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-black px-6 py-2 rounded font-bold flex items-center gap-2 transition-colors text-sm shadow-lg shadow-amber-500/20"
                   >
                       <Check size={16}/> Zatwierdź ({pickedItemsBuffer.length})
                   </button>
@@ -749,7 +785,15 @@ const App: React.FC = () => {
           />
       )}
 
-      {/* Global Confirmation Dialog */}
+      {showSettings && (
+          <SettingsModal 
+              isOpen={showSettings}
+              onClose={() => setShowSettings(false)}
+              settings={appState.globalSettings}
+              onSave={(newSettings) => setAppState(prev => ({ ...prev, globalSettings: newSettings }))}
+          />
+      )}
+
       <ConfirmDialog 
           isOpen={dialogConfig.isOpen}
           title={dialogConfig.title}
@@ -761,10 +805,10 @@ const App: React.FC = () => {
 
       {/* Snackbar */}
       {snackbar && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-zinc-900 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-4 animate-slideUp z-[100]">
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-700 text-white px-6 py-3 rounded shadow-xl flex items-center gap-4 animate-slideUp z-[100] text-sm font-medium">
               <span>{snackbar.message}</span>
               {snackbar.action && (
-                  <button onClick={snackbar.action} className="text-yellow-500 font-bold hover:text-yellow-400 text-sm">
+                  <button onClick={snackbar.action} className="text-amber-500 font-bold hover:text-amber-400 text-xs uppercase tracking-wide">
                       {snackbar.actionLabel || 'OK'}
                   </button>
               )}
