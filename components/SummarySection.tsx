@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { CalculationData, Currency, AppState, CalculationMode, EMPTY_PAYMENT_TERMS, PaymentTerms } from '../types';
-import { RefreshCw, Unlock, DollarSign, ToggleLeft, ToggleRight } from 'lucide-react';
+import { RefreshCw, Unlock, DollarSign, ToggleLeft, ToggleRight, AlertTriangle, AlertOctagon } from 'lucide-react';
 import { fetchEurRate } from '../services/currencyService';
 import { calculateProjectCosts, formatCurrency, formatNumber } from '../services/calculationService';
 
@@ -44,6 +44,16 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
       
       profit = sellingPrice - totalCost;
   }
+
+  // Margin Warning Logic
+  const isCriticalMargin = marginPercent < 6;
+  const isWarningMargin = marginPercent < 7 && !isCriticalMargin;
+  
+  const marginColorClass = isCriticalMargin 
+    ? 'text-red-600 dark:text-red-500' 
+    : isWarningMargin 
+        ? 'text-orange-500' 
+        : 'text-amber-500';
 
   // Display Logic
   const vatRate = 0.23;
@@ -128,7 +138,7 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                   </div>
 
                   {/* 2. Margin Control */}
-                  <div className="p-6 flex flex-col justify-between hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors relative">
+                  <div className={`p-6 flex flex-col justify-between hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors relative ${isCriticalMargin ? 'bg-red-50/30 dark:bg-red-900/10' : ''}`}>
                       <div className="flex justify-between items-start">
                           <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Marża Celowana</span>
                           {appState.manualPrice !== null && (
@@ -148,7 +158,7 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                               step="0.1"
                               value={parseFloat(marginPercent.toFixed(2))}
                               onChange={(e) => handleMarginChange(parseFloat(e.target.value) || 0)}
-                              className="bg-transparent text-4xl font-mono font-bold text-amber-500 outline-none w-32 placeholder-zinc-300"
+                              className={`bg-transparent text-4xl font-mono font-bold outline-none w-32 placeholder-zinc-300 ${marginColorClass}`}
                           />
                           <span className="text-zinc-400 font-mono text-xl">%</span>
                       </div>
@@ -307,6 +317,20 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                   
                   {/* Detailed Breakdown */}
                   <div className="mt-4 w-full space-y-2">
+                      {/* WARNING BLOCKS */}
+                      {isCriticalMargin && (
+                          <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 p-2 rounded-sm flex items-center gap-2 text-red-700 dark:text-red-400 animate-pulse">
+                              <AlertOctagon size={16} className="shrink-0"/>
+                              <span className="text-[10px] font-bold uppercase leading-tight">Poziom Krytyczny!<br/>Marża poniżej 6%</span>
+                          </div>
+                      )}
+                      {isWarningMargin && (
+                          <div className="bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 p-2 rounded-sm flex items-center gap-2 text-orange-700 dark:text-orange-400">
+                              <AlertTriangle size={16} className="shrink-0"/>
+                              <span className="text-[10px] font-bold uppercase">Uwaga: Marża poniżej 7%</span>
+                          </div>
+                      )}
+
                       {/* Conditional PLN Payment Row - Only for EUR */}
                       {showPlnPayment && (
                           <div className="text-[10px] font-mono font-bold text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded border border-amber-200 dark:border-amber-800 flex justify-between items-center animate-fadeIn">

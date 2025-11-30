@@ -66,7 +66,7 @@ export const Header: React.FC<Props> = ({
                                 <button 
                                     key={item.mode}
                                     onClick={() => setAppState(prev => ({ ...prev, viewMode: item.mode }))}
-                                    className={`relative h-full flex items-center gap-2 text-xs font-medium uppercase tracking-wide transition-all duration-200 border-b-2 ${
+                                    className={`relative h-full flex items-center gap-2 text-xs font-bold uppercase tracking-wide transition-all duration-200 border-b-2 font-mono ${
                                         isActive 
                                         ? 'text-zinc-900 dark:text-white border-zinc-900 dark:border-white' 
                                         : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300 border-transparent hover:border-zinc-200'
@@ -87,7 +87,7 @@ export const Header: React.FC<Props> = ({
                         <div className="hidden lg:flex items-center border border-zinc-200 dark:border-zinc-800 rounded-sm overflow-hidden h-8">
                             <button
                                 onClick={() => setAppState(prev => ({ ...prev, mode: CalculationMode.INITIAL }))}
-                                className={`px-3 h-full text-[10px] font-bold uppercase tracking-wider transition-all flex items-center ${
+                                className={`px-3 h-full text-[10px] font-bold uppercase tracking-wider transition-all flex items-center font-mono ${
                                     !isFinal 
                                     ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white' 
                                     : 'bg-transparent text-zinc-400 hover:text-zinc-600'
@@ -98,7 +98,7 @@ export const Header: React.FC<Props> = ({
                             <div className="w-px h-full bg-zinc-200 dark:bg-zinc-800"></div>
                             <button
                                 onClick={() => setAppState(prev => ({ ...prev, mode: CalculationMode.FINAL }))}
-                                className={`px-3 h-full text-[10px] font-bold uppercase tracking-wider transition-all flex items-center ${
+                                className={`px-3 h-full text-[10px] font-bold uppercase tracking-wider transition-all flex items-center font-mono ${
                                     isFinal 
                                     ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white' 
                                     : 'bg-transparent text-zinc-400 hover:text-zinc-600'

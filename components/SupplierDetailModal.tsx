@@ -1,6 +1,9 @@
+
+
+
 import React, { useState, useEffect } from 'react';
 import { Supplier, SupplierItem, Currency, SupplierStatus } from '../types';
-import { X, Save, Maximize2, Calendar, Hash, Tag, Globe } from 'lucide-react';
+import { X, Save, Maximize2, Calendar, Hash, Tag, Globe, MapPin, Building2, AtSign, User, Phone } from 'lucide-react';
 import { DataGrid } from './DataGrid';
 
 interface Props {
@@ -162,6 +165,83 @@ export const SupplierDetailModal: React.FC<Props> = ({ supplier, onSave, onClose
                                 onChange={(e) => updateSupplierField('discount', parseFloat(e.target.value) || 0)}
                             />
                          </div>
+                    </div>
+                </div>
+
+                {/* Address Fields (New Section) */}
+                <div className="px-4 pb-4 border-t border-dashed border-zinc-200 dark:border-zinc-700 pt-3">
+                    <div className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Dane do zamówienia (Adres / Kontakt)</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="relative group">
+                            <MapPin className="absolute left-2 top-2.5 text-zinc-400" size={14} />
+                            <input 
+                                type="text" 
+                                placeholder="Ulica i nr"
+                                className="w-full pl-8 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-xs focus:border-yellow-400 outline-none"
+                                value={localSupplier.street || ''}
+                                onChange={(e) => updateSupplierField('street', e.target.value)}
+                            />
+                        </div>
+                        <div className="flex gap-2">
+                            <input 
+                                type="text" 
+                                placeholder="Kod"
+                                className="w-20 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-xs focus:border-yellow-400 outline-none"
+                                value={localSupplier.zip || ''}
+                                onChange={(e) => updateSupplierField('zip', e.target.value)}
+                            />
+                            <input 
+                                type="text" 
+                                placeholder="Miasto"
+                                className="flex-1 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-xs focus:border-yellow-400 outline-none"
+                                value={localSupplier.city || ''}
+                                onChange={(e) => updateSupplierField('city', e.target.value)}
+                            />
+                        </div>
+                        <div className="flex gap-2">
+                            <div className="relative group flex-1">
+                                <Building2 className="absolute left-2 top-2.5 text-zinc-400" size={14} />
+                                <input 
+                                    type="text" 
+                                    placeholder="NIP"
+                                    className="w-full pl-8 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-xs focus:border-yellow-400 outline-none font-mono"
+                                    value={localSupplier.nip || ''}
+                                    onChange={(e) => updateSupplierField('nip', e.target.value)}
+                                />
+                            </div>
+                            <div className="relative group flex-1">
+                                <Phone className="absolute left-2 top-2.5 text-zinc-400" size={14} />
+                                <input 
+                                    type="text" 
+                                    placeholder="Telefon"
+                                    className="w-full pl-8 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-xs focus:border-yellow-400 outline-none"
+                                    value={localSupplier.phone || ''}
+                                    onChange={(e) => updateSupplierField('phone', e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                             <div className="relative flex-1">
+                                <AtSign className="absolute left-2 top-2.5 text-zinc-400" size={14} />
+                                <input 
+                                    type="text" 
+                                    placeholder="Email"
+                                    className="w-full pl-8 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-xs focus:border-yellow-400 outline-none"
+                                    value={localSupplier.email || ''}
+                                    onChange={(e) => updateSupplierField('email', e.target.value)}
+                                />
+                             </div>
+                             <div className="relative flex-1">
+                                <User className="absolute left-2 top-2.5 text-zinc-400" size={14} />
+                                <input 
+                                    type="text" 
+                                    placeholder="Osoba kont."
+                                    className="w-full pl-8 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-xs focus:border-yellow-400 outline-none"
+                                    value={localSupplier.contactPerson || ''}
+                                    onChange={(e) => updateSupplierField('contactPerson', e.target.value)}
+                                />
+                             </div>
+                        </div>
                     </div>
                 </div>
             </div>

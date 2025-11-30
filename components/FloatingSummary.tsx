@@ -1,5 +1,4 @@
 
-
 import React from 'react';
 import { CalculationData, AppState, Currency } from '../types';
 import { Calculator, ArrowRight } from 'lucide-react';
@@ -42,6 +41,16 @@ export const FloatingSummary: React.FC<Props> = ({ data, appState }) => {
   // sellingPricePLN here is actually in Offer Currency units because calculateProjectCosts returns target currency
   const sellingPriceOffer = sellingPricePLN;
 
+  // Margin Color Logic
+  const isCritical = marginPercent < 6;
+  const isWarning = marginPercent < 7 && !isCritical;
+  
+  const marginClass = isCritical 
+    ? 'text-red-600 dark:text-red-500 animate-pulse' 
+    : isWarning 
+        ? 'text-orange-500' 
+        : (appState.manualPrice !== null ? 'text-zinc-900 dark:text-white' : 'text-yellow-600 dark:text-yellow-400');
+
   return (
     <div className="xl:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-800 border-t border-yellow-500 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-50 animate-slideUp">
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -52,7 +61,7 @@ export const FloatingSummary: React.FC<Props> = ({ data, appState }) => {
              </div>
              <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400 text-sm">
                  <span>Marża:</span>
-                 <span className={`font-bold ${appState.manualPrice !== null ? 'text-zinc-900 dark:text-white' : 'text-yellow-600 dark:text-yellow-400'}`}>
+                 <span className={`font-bold ${marginClass}`}>
                      {marginPercent.toFixed(2)}%
                  </span>
              </div>

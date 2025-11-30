@@ -1,13 +1,16 @@
 
+
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Supplier, SupplierItem, Currency, Language, SupplierStatus, TransportItem, InstallationData, VariantItemType } from '../types';
-import { Package, Plus, Trash2, Calendar, FileSpreadsheet, Copy, Eye, EyeOff, StickyNote, Tag, Loader2, Sparkles, Euro, Maximize2, ArrowUp, ArrowDown, Search, ArrowUpDown, ChevronDown, ChevronUp, GripVertical, Settings2, ArrowLeft, ArrowRight, Zap, FolderPlus, Edit3, MessageSquarePlus, SplitSquareHorizontal, MousePointer2 } from 'lucide-react';
+import { Package, Plus, Trash2, Calendar, FileSpreadsheet, Copy, Eye, EyeOff, StickyNote, Tag, Loader2, Sparkles, Euro, Maximize2, ArrowUp, ArrowDown, Search, ArrowUpDown, ChevronDown, ChevronUp, GripVertical, Settings2, ArrowLeft, ArrowRight, Zap, FolderPlus, Edit3, MessageSquarePlus, SplitSquareHorizontal, MousePointer2, AlertTriangle, CheckCircle } from 'lucide-react';
 import { DropdownMenu } from './DropdownMenu';
 import * as XLSX from 'xlsx';
 import { extractDataFromOffer } from '../services/aiService';
 import { SupplierDetailModal } from './SupplierDetailModal';
 import { DataGrid } from './DataGrid';
 import { convert, formatCurrency, formatNumber } from '../services/calculationService';
+import { PREDEFINED_SUPPLIERS } from '../services/supplierDatabase';
 
 interface Props {
   suppliers: Supplier[];
@@ -158,6 +161,41 @@ export const SuppliersSection: React.FC<Props> = ({
     const updated = [...suppliers];
     updated[index] = { ...updated[index], [field]: value };
     onChange(updated);
+  };
+
+  // Logic to handle supplier selection from DB or custom
+  const handleSupplierSelect = (index: number, selectedName: string) => {
+      const dbSupplier = PREDEFINED_SUPPLIERS.find(s => s.name === selectedName);
+      const updated = [...suppliers];
+      const current = { ...updated[index] };
+
+      if (dbSupplier) {
+          // Fill from DB
+          current.name = dbSupplier.name;
+          current.customTabName = dbSupplier.name;
+          current.street = dbSupplier.street;
+          current.zip = dbSupplier.zip;
+          current.city = dbSupplier.city;
+          current.nip = dbSupplier.nip;
+          current.email = dbSupplier.email;
+          current.phone = dbSupplier.phone;
+          current.contactPerson = dbSupplier.contactPerson;
+      } else if (selectedName === 'OTHER') {
+          // Reset to custom/manual
+          current.name = 'Inny Dostawca';
+          current.customTabName = 'Inny Dostawca';
+          // Clear address fields to force manual entry
+          current.street = '';
+          current.zip = '';
+          current.city = '';
+          current.nip = '';
+          current.email = '';
+          current.phone = '';
+          current.contactPerson = '';
+      }
+
+      updated[index] = current;
+      onChange(updated);
   };
 
   const addItem = (supplierIndex: number) => {
@@ -447,6 +485,10 @@ export const SuppliersSection: React.FC<Props> = ({
   
   const activeOrmFee = currentSupplier?.isOrm ? (activeSupplierTotal * 0.016) : 0;
 
+  // Validation Logic: Is this supplier valid for ordering?
+  // Only check if active and not ORM (ORM is system managed)
+  const isCurrentMissingData = currentSupplier && !currentSupplier.isOrm && isCurrentIncluded && (!currentSupplier.address && !currentSupplier.city && !currentSupplier.nip && (currentSupplier.name === 'Inny Dostawca' || currentSupplier.name === 'Nowy Dostawca'));
+
   const supplierMenuItems = [
       { label: 'Porównaj Dostawców', icon: <SplitSquareHorizontal size={14} />, onClick: onOpenComparison },
       { label: 'Importuj Excel (Dołącz do aktywnej)', icon: <FileSpreadsheet size={14} />, onClick: () => fileInputRef.current?.click() },
@@ -513,6 +555,7 @@ export const SuppliersSection: React.FC<Props> = ({
                     >
                         {suppliers.map((s, idx) => {
                             const isActive = activeTab === idx;
+                            const isMissingData = !s.isOrm && s.isIncluded !== false && (!s.city && !s.nip && (s.name === 'Inny Dostawca' || s.name === 'Nowy Dostawca'));
                             
                             return (
                                 <button
@@ -526,9 +569,11 @@ export const SuppliersSection: React.FC<Props> = ({
                                         }
                                         ${s.isIncluded === false ? 'opacity-50 decoration-slate-400 line-through' : ''}
                                         ${isPickingMode && isActive ? 'ring-2 ring-inset ring-amber-400 z-20 cursor-crosshair' : ''}
+                                        ${isMissingData ? 'text-red-500 dark:text-red-400 bg-red-50/50' : ''}
                                     `}
                                 >
                                     {isPickingMode && isActive && <MousePointer2 size={10} className="inline animate-pulse text-amber-500" />}
+                                    {isMissingData && <AlertTriangle size={10} className="text-red-500"/>}
                                     <span className="truncate">{s.customTabName || s.name}</span>
                                 </button>
                             );
@@ -571,6 +616,7 @@ export const SuppliersSection: React.FC<Props> = ({
                 <div 
                     className={`bg-white dark:bg-zinc-950 p-3 border-x border-b border-zinc-200 dark:border-zinc-800 relative transition-all min-h-[200px]
                         ${isPickingMode && currentSupplier ? 'hover:bg-amber-50 dark:hover:bg-amber-900/10 cursor-crosshair hover:animate-pulse-border' : ''}
+                        ${isCurrentMissingData ? 'border-red-400 dark:border-red-800' : ''}
                     `}
                     onClick={(e) => currentSupplier && handleSupplierGroupPick(e, currentSupplier)}
                 >
@@ -597,15 +643,34 @@ export const SuppliersSection: React.FC<Props> = ({
 
                                 <div className="col-span-1 md:col-span-2">
                                     <label className="block text-[10px] font-bold text-zinc-500 dark:text-zinc-400 mb-0.5">Dostawca (w systemie)</label>
-                                    <div className="flex gap-1 h-9">
-                                        <input
-                                            type="text"
-                                            className={`w-full px-2 h-full border border-zinc-200 dark:border-zinc-700 rounded-none text-xs focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none ${!isCurrentIncluded ? 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800' : 'bg-white dark:bg-zinc-950'} transition-all`}
-                                            value={currentSupplier.name}
-                                            onChange={(e) => updateSupplier(activeTab, 'name', e.target.value)}
-                                            disabled={!isCurrentIncluded}
-                                            placeholder="Oficjalna nazwa dostawcy"
-                                        />
+                                    <div className="flex gap-1 h-9 relative">
+                                        {/* Supplier Select / Input Combo */}
+                                        <div className="relative flex-1">
+                                            {currentSupplier.isOrm ? (
+                                                // If ORM, lock it but allow editing name if needed
+                                                <input
+                                                    type="text"
+                                                    className="w-full px-2 h-full border border-zinc-200 dark:border-zinc-700 rounded-none text-xs focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none bg-white dark:bg-zinc-950 transition-all text-zinc-500"
+                                                    value={currentSupplier.name}
+                                                    readOnly
+                                                    disabled
+                                                />
+                                            ) : (
+                                                <select
+                                                    className={`w-full px-2 h-full border rounded-none text-xs focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none bg-white dark:bg-zinc-950 transition-all ${isCurrentMissingData ? 'border-red-400 text-red-600 font-bold' : 'border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-white'}`}
+                                                    value={PREDEFINED_SUPPLIERS.some(s => s.name === currentSupplier.name) ? currentSupplier.name : 'OTHER'}
+                                                    onChange={(e) => handleSupplierSelect(activeTab, e.target.value)}
+                                                    disabled={!isCurrentIncluded}
+                                                >
+                                                    {PREDEFINED_SUPPLIERS.map(s => (
+                                                        <option key={s.id} value={s.name}>{s.name}</option>
+                                                    ))}
+                                                    <option value="OTHER">Inny / Ręczny (Uzupełnij)</option>
+                                                </select>
+                                            )}
+                                            {isCurrentMissingData && <div className="absolute right-6 top-1/2 -translate-y-1/2 text-red-500 pointer-events-none animate-pulse"><AlertTriangle size={14}/></div>}
+                                        </div>
+
                                         <button 
                                             onClick={() => updateSupplier(activeTab, 'isIncluded', !isCurrentIncluded)}
                                             className={`h-full w-9 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center flex-shrink-0 transition-colors rounded-none ${
@@ -619,7 +684,7 @@ export const SuppliersSection: React.FC<Props> = ({
                                         </button>
                                         <button
                                             onClick={() => setDetailViewIndex(activeTab)}
-                                            className="h-full w-9 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center bg-white dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 hover:text-amber-600 hover:border-amber-400 transition-colors rounded-none"
+                                            className={`h-full w-9 border flex items-center justify-center transition-colors rounded-none ${isCurrentMissingData ? 'bg-red-50 border-red-300 text-red-600 hover:bg-red-100' : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-amber-600 hover:border-amber-400'}`}
                                             title="Rozszerz / Edytuj szczegóły"
                                         >
                                             <Maximize2 size={14} />
@@ -636,6 +701,7 @@ export const SuppliersSection: React.FC<Props> = ({
                                         </div>
                                     </div>
                                     {currentSupplier.isOrm && <span className="text-[9px] text-green-600 dark:text-green-400 font-bold ml-1">ORM</span>}
+                                    {isCurrentMissingData && <span className="text-[9px] text-red-500 font-bold ml-1 block mt-1">! Wymagane uzupełnienie danych (kliknij lupę)</span>}
                                 </div>
                                 
                                 <div className={`contents transition-opacity duration-200 ${isCurrentIncluded ? 'opacity-100' : 'opacity-30 grayscale pointer-events-none select-none'}`}>

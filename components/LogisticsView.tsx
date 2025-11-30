@@ -1,4 +1,6 @@
 
+
+
 import React, { useMemo } from 'react';
 import { CalculationData, Supplier, SupplierStatus, TransportItem, Currency, Language } from '../types';
 import { Truck, Calendar, Package, AlertCircle, BarChart3, Printer, CheckCircle2, UserCircle, Globe, Combine, Layers, ArrowRight, Clock } from 'lucide-react';
@@ -54,6 +56,142 @@ export const LogisticsView: React.FC<Props> = ({ data, onUpdateSupplier }) => {
           case SupplierStatus.TO_ORDER: return 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800';
           case SupplierStatus.ORDERED: return 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800';
       }
+  };
+
+  const handlePrintOrder = (supplier: Supplier) => {
+      const printWindow = window.open('', '', 'width=900,height=1000');
+      if (!printWindow) return;
+
+      const isEn = supplier.language === Language.EN;
+      
+      // Labels Dictionary
+      const L = {
+          title: isEn ? "ORDER" : "ZAMÓWIENIE",
+          date: isEn ? "Date" : "Data",
+          supplier: isEn ? "Supplier" : "Dostawca",
+          buyer: isEn ? "Buyer" : "Zamawiający",
+          deliveryAddr: isEn ? "Delivery Address" : "Adres Dostawy",
+          contact: isEn ? "Contact" : "Kontakt",
+          project: isEn ? "Project" : "Projekt",
+          ref: isEn ? "Ref" : "Nr Zam.",
+          items: isEn ? "Items" : "Pozycje",
+          desc: isEn ? "Description" : "Opis",
+          qty: isEn ? "Qty" : "Ilość",
+          unit: isEn ? "pcs" : "szt",
+          partNo: isEn ? "Part No." : "Nr Kat.",
+          weight: isEn ? "Weight" : "Waga",
+          total: isEn ? "Total" : "Razem",
+          notes: isEn ? "Notes" : "Uwagi",
+          footer: isEn ? "Please confirm receipt of this order." : "Prosimy o potwierdzenie otrzymania zamówienia.",
+          offerRef: isEn ? "Based on Offer" : "Dotyczy oferty",
+      };
+
+      const itemsHtml = supplier.items.map((item, idx) => `
+        <tr>
+            <td style="text-align: center;">${idx + 1}</td>
+            <td>${item.itemDescription}</td>
+            <td>${item.componentNumber}</td>
+            <td style="text-align: center;">${item.quantity} ${L.unit}</td>
+            <td style="text-align: right;">${item.weight} kg</td>
+        </tr>
+      `).join('');
+
+      const html = `
+        <html>
+          <head>
+            <title>${L.title} - ${supplier.name}</title>
+            <style>
+              body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; line-height: 1.4; color: #333; }
+              .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #F0C80E; padding-bottom: 20px; }
+              .title-block h1 { margin: 0; font-size: 32px; letter-spacing: 1px; color: #000; }
+              .meta { text-align: right; font-size: 14px; }
+              .grid { display: flex; gap: 40px; margin-bottom: 30px; }
+              .box { flex: 1; }
+              .box h3 { margin-top: 0; font-size: 12px; text-transform: uppercase; color: #666; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+              .box p { margin: 5px 0; font-size: 14px; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13px; }
+              th { background: #f4f4f5; text-align: left; padding: 10px; font-weight: bold; border-bottom: 2px solid #ddd; }
+              td { padding: 10px; border-bottom: 1px solid #eee; }
+              .notes { margin-top: 30px; padding: 15px; background: #fffbeb; border: 1px solid #fde68a; font-size: 13px; }
+              .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #888; border-top: 1px solid #eee; padding-top: 20px; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+                <div class="title-block">
+                    <h1>${L.title}</h1>
+                    <p style="margin: 5px 0 0 0; font-weight: bold;">${data.meta.projectNumber || ''}</p>
+                </div>
+                <div class="meta">
+                    <p><strong>${L.date}:</strong> ${new Date().toLocaleDateString()}</p>
+                    <p><strong>${L.ref}:</strong> ${supplier.offerNumber || '-'}</p>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="box">
+                    <h3>${L.buyer}</h3>
+                    <p><strong>${data.orderingParty.name}</strong></p>
+                    <p>${data.orderingParty.street}</p>
+                    <p>${data.orderingParty.zip} ${data.orderingParty.city}</p>
+                    <p>NIP: ${data.orderingParty.nip}</p>
+                    ${data.meta.salesPerson ? `<p>${L.contact}: ${data.meta.salesPerson}</p>` : ''}
+                </div>
+                <div class="box">
+                    <h3>${L.supplier}</h3>
+                    <p><strong>${supplier.name}</strong></p>
+                    <p>${supplier.street || '---'}</p>
+                    <p>${supplier.zip || ''} ${supplier.city || ''}</p>
+                    <p>${supplier.nip ? `NIP: ${supplier.nip}` : ''}</p>
+                    ${supplier.phone ? `<p>Tel: ${supplier.phone}</p>` : ''}
+                    ${supplier.contactPerson ? `<p>${L.contact}: ${supplier.contactPerson}</p>` : ''}
+                    ${supplier.email ? `<p>Email: ${supplier.email}</p>` : ''}
+                </div>
+            </div>
+
+            <div class="grid" style="margin-bottom: 10px;">
+                 <div class="box">
+                    <h3>${L.deliveryAddr}</h3>
+                    <p><strong>${data.recipient.name}</strong></p>
+                    <p>${data.recipient.street}</p>
+                    <p>${data.recipient.zip} ${data.recipient.city}</p>
+                    ${supplier.deliveryDate ? `<p><strong>Delivery: ${supplier.deliveryDate}</strong></p>` : ''}
+                 </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 30px;">#</th>
+                        <th>${L.desc}</th>
+                        <th style="width: 120px;">${L.partNo}</th>
+                        <th style="text-align: center; width: 80px;">${L.qty}</th>
+                        <th style="text-align: right; width: 80px;">${L.weight}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${itemsHtml}
+                </tbody>
+            </table>
+
+            ${supplier.notes ? `
+                <div class="notes">
+                    <strong>${L.notes}:</strong><br/>
+                    ${supplier.notes}
+                </div>
+            ` : ''}
+
+            <div class="footer">
+                ${L.footer}<br/>
+                ${L.offerRef}: ${supplier.offerNumber}
+            </div>
+            
+            <script>window.print();</script>
+          </body>
+        </html>
+      `;
+      printWindow.document.write(html);
+      printWindow.document.close();
   };
 
   // --- GANTT CHART DATA PREP ---
@@ -180,14 +318,25 @@ export const LogisticsView: React.FC<Props> = ({ data, onUpdateSupplier }) => {
                         <option value={SupplierStatus.ORDERED}>Zamówione</option>
                     </select>
 
-                    {/* PDF Button */}
-                    <button 
-                        className="text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 border border-zinc-200 dark:border-zinc-600 hover:border-zinc-300 dark:hover:border-zinc-500 rounded-sm p-2 transition-colors bg-white dark:bg-zinc-800"
-                        title="Generuj PDF Zamówienia"
-                        onClick={() => {/* Trigger PDF gen logic from parent or local */}} 
-                    >
-                        <Printer size={16} />
-                    </button>
+                    <div className="flex items-center border border-zinc-200 dark:border-zinc-600 rounded-sm overflow-hidden h-[34px]">
+                        {/* Language Toggle */}
+                        <button
+                            onClick={() => onUpdateSupplier(supplier.id, { language: supplier.language === Language.PL ? Language.EN : Language.PL })}
+                            className="h-full px-2 bg-zinc-50 dark:bg-zinc-800 text-[10px] font-bold text-zinc-600 dark:text-zinc-300 border-r border-zinc-200 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors w-10"
+                            title="Zmień język zamówienia"
+                        >
+                            {supplier.language}
+                        </button>
+                        
+                        {/* Print Button */}
+                        <button 
+                            className="h-full px-3 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors bg-white dark:bg-zinc-900"
+                            title="Drukuj Zamówienie (PDF)"
+                            onClick={() => handlePrintOrder(supplier)} 
+                        >
+                            <Printer size={16} />
+                        </button>
+                    </div>
                 </div>
             </div>
 

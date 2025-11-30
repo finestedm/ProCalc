@@ -1,8 +1,7 @@
 
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CalculationData, Currency, Supplier, TransportItem, OtherCostItem, InstallationData, FinalInstallationItem, SupplierStatus, Language, CalculationMode } from '../types';
-import { FileText, Truck, Wrench, Receipt, Plus, Trash2, AlertCircle, ArrowRight, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
+import { FileText, Truck, Wrench, Receipt, Plus, Trash2, AlertCircle, ArrowRight, DollarSign, TrendingUp, TrendingDown, AlertTriangle, AlertOctagon, Printer } from 'lucide-react';
 import { convert, formatCurrency, formatNumber, calculateProjectCosts } from '../services/calculationService';
 
 interface Props {
@@ -29,6 +28,31 @@ export const FinalCalculationView: React.FC<Props> = ({
 }) => {
     const [isEditingPrice, setIsEditingPrice] = useState(false);
     const [localPriceInput, setLocalPriceInput] = useState('');
+
+    // --- Print Theme Logic ---
+    useEffect(() => {
+        const handleBeforePrint = () => {
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                document.documentElement.dataset.wasDark = 'true';
+            }
+        };
+
+        const handleAfterPrint = () => {
+            if (document.documentElement.dataset.wasDark === 'true') {
+                document.documentElement.classList.add('dark');
+                delete document.documentElement.dataset.wasDark;
+            }
+        };
+
+        window.addEventListener('beforeprint', handleBeforePrint);
+        window.addEventListener('afterprint', handleAfterPrint);
+
+        return () => {
+            window.removeEventListener('beforeprint', handleBeforePrint);
+            window.removeEventListener('afterprint', handleAfterPrint);
+        };
+    }, []);
 
     // --- Actions --- (Same logic as before, just styling update)
 
@@ -216,20 +240,6 @@ export const FinalCalculationView: React.FC<Props> = ({
     const finalRentalItems = finalInstItems.filter(i => i.category === 'RENTAL');
 
     // Calculations for Summary
-    // NOTE: For Final mode, we use default ormFee (or derived inside service if needed), 
-    // but here we are comparing total values. The service now expects ormFeePercent.
-    // However, FinalCalculationView props don't have globalSettings yet.
-    // We can assume standard 1.6 or update parent to pass it.
-    // For now, let's assume 1.6 as default since we don't have access to globalSettings here yet.
-    // Ideally parent should pass it.
-    
-    // UPDATE: To be correct, we should get this prop. But to minimize churn, let's default to 1.6 here
-    // or assume the parent passes updated logic eventually.
-    // Actually, `FinalCalculationView` is called in `App.tsx` where we have `appState`.
-    // We should update the Props here too if we want perfect accuracy, but the prompt didn't explicitly ask to update Final view props.
-    // However, to compile without errors if I changed the service signature, I must update this call.
-    // I made ormFeePercent optional in service with default 1.6, so this is safe.
-    
     const finalCosts = calculateProjectCosts(data, exchangeRate, offerCurrency, CalculationMode.FINAL);
     const totalFinalCost = finalCosts.total;
 
@@ -247,6 +257,15 @@ export const FinalCalculationView: React.FC<Props> = ({
     const actualMargin = sellingPrice > 0 ? (1 - (totalFinalCost / sellingPrice)) * 100 : 0;
     const profit = sellingPrice - totalFinalCost;
 
+    // Margin Alert Logic
+    const isCritical = actualMargin < 6;
+    const isWarning = actualMargin < 7 && !isCritical;
+    const marginColor = isCritical 
+        ? 'text-red-600 dark:text-red-500' 
+        : isWarning 
+            ? 'text-orange-500' 
+            : (actualMargin < targetMargin ? 'text-yellow-500' : 'text-green-600');
+
     const handlePriceFocus = () => {
         setIsEditingPrice(true);
         setLocalPriceInput(sellingPrice ? sellingPrice.toFixed(2) : '');
@@ -263,6 +282,10 @@ export const FinalCalculationView: React.FC<Props> = ({
 
     const handlePriceBlur = () => {
         setIsEditingPrice(false);
+    };
+
+    const handlePrint = () => {
+        window.print();
     };
 
     // Style constants
@@ -290,6 +313,12 @@ export const FinalCalculationView: React.FC<Props> = ({
                             <p className="text-xs text-zinc-500 dark:text-zinc-400">Wprowadź faktyczne koszty z faktur</p>
                         </div>
                     </div>
+                    <button 
+                        onClick={handlePrint}
+                        className="bg-white hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-600 px-3 py-2 rounded-sm flex items-center gap-2 text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
+                    >
+                        <Printer size={16}/> Drukuj
+                    </button>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -720,8 +749,12 @@ export const FinalCalculationView: React.FC<Props> = ({
                 {/* 3. Result (Profit & Margin) */}
                 <div className="flex-1 w-full lg:w-auto flex justify-around lg:justify-end gap-8 border-t lg:border-t-0 lg:border-l border-zinc-200 dark:border-zinc-800 pt-4 lg:pt-0 pl-0 lg:pl-8">
                     <div className="text-center lg:text-right">
-                        <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1">Marża Rzeczywista</div>
-                        <div className={`text-2xl font-bold font-mono ${actualMargin < 0 ? 'text-red-500' : actualMargin < targetMargin ? 'text-yellow-500' : 'text-green-600'}`}>
+                        <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest mb-1 flex items-center gap-1 justify-end">
+                            {isCritical && <AlertOctagon size={12} className="text-red-500"/>}
+                            {isWarning && <AlertTriangle size={12} className="text-orange-500"/>}
+                            Marża Rzeczywista
+                        </div>
+                        <div className={`text-2xl font-bold font-mono ${marginColor}`}>
                             {actualMargin.toFixed(2)}%
                         </div>
                     </div>

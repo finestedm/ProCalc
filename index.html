@@ -181,6 +181,76 @@
       .mask-gradient-right {
         mask-image: linear-gradient(to right, black 85%, transparent 100%);
       }
+
+      /* PRINT STYLES */
+      @media print {
+        @page {
+            size: landscape;
+            margin: 0.5cm;
+        }
+
+        /* HIDE UI ELEMENTS */
+        header, 
+        .fixed, 
+        .sticky, 
+        button, 
+        input[type="file"],
+        .xl\:col-span-2 { /* Hides sidebar based on grid class */
+            display: none !important;
+        }
+
+        /* RESET LAYOUT */
+        body, #root, main {
+            height: auto !important;
+            overflow: visible !important;
+            display: block !important;
+            background: white !important;
+            color: black !important;
+        }
+
+        /* EXPAND CONTENT */
+        .xl\:col-span-10 {
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            display: block !important;
+        }
+
+        /* RESET INPUTS TO LOOK LIKE TEXT */
+        input, select {
+            border: none !important;
+            background: transparent !important;
+            padding: 0 !important;
+            -webkit-appearance: none;
+            box-shadow: none !important;
+            font-weight: bold;
+        }
+        
+        /* Placeholder styling for empty inputs */
+        input::placeholder {
+            color: transparent !important;
+        }
+
+        /* Ensure colors print (esp. cyan sections) */
+        * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        /* Hide specific containers that might add padding */
+        .p-6, .pb-32 {
+            padding: 0 !important;
+        }
+        
+        /* Table adjustments */
+        table {
+            width: 100% !important;
+            font-size: 10px !important;
+        }
+        th, td {
+            padding: 4px 2px !important;
+        }
+      }
     </style>
   <script type="importmap">
 {

@@ -1,5 +1,4 @@
 
-
 import React, { useState } from 'react';
 import { AppState, CalculationMode } from '../types';
 import { calculateProjectCosts, formatCurrency, formatNumber } from '../services/calculationService';
@@ -64,6 +63,15 @@ export const SidePanel: React.FC<Props> = ({ appState }) => {
         ? (costs.total > 0 ? costs.total * 999 : 0) 
         : costs.total / (1 - marginDecimal);
   }
+
+  // Margin Alert Colors
+  const isCritical = marginPercent < 6;
+  const isWarning = marginPercent < 7 && !isCritical;
+  const marginColor = isCritical 
+    ? 'text-red-600 dark:text-red-500' 
+    : isWarning 
+        ? 'text-orange-500' 
+        : 'text-green-800 dark:text-green-300';
 
   return (
     <div className="animate-fadeIn space-y-6">
@@ -137,16 +145,16 @@ export const SidePanel: React.FC<Props> = ({ appState }) => {
             </div>
             
             {/* Added Price & Margin Display */}
-            <div className="bg-green-50 dark:bg-green-900/10 p-3 rounded-sm border border-green-100 dark:border-green-900/30 space-y-2">
+            <div className={`p-3 rounded-sm border space-y-2 ${isCritical ? 'bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-800' : isWarning ? 'bg-orange-50 dark:bg-orange-900/10 border-orange-100 dark:border-orange-800' : 'bg-green-50 dark:bg-green-900/10 border-green-100 dark:border-green-900/30'}`}>
                 <div className="flex justify-between items-center">
-                    <span className="text-[10px] uppercase font-bold text-green-700 dark:text-green-400">Cena Sprzedaży</span>
-                    <span className="font-mono font-bold text-sm text-green-800 dark:text-green-300">
+                    <span className={`text-[10px] uppercase font-bold ${isCritical ? 'text-red-700 dark:text-red-400' : isWarning ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400'}`}>Cena Sprzedaży</span>
+                    <span className={`font-mono font-bold text-sm ${isCritical ? 'text-red-800 dark:text-red-300' : isWarning ? 'text-orange-800 dark:text-orange-300' : 'text-green-800 dark:text-green-300'}`}>
                         {formatCurrency(sellingPrice, currency)}
                     </span>
                 </div>
-                <div className="flex justify-between items-center border-t border-green-200 dark:border-green-800 pt-2">
-                    <span className="text-[10px] uppercase font-bold text-green-700 dark:text-green-400">Marża</span>
-                    <span className="font-mono font-bold text-sm text-green-800 dark:text-green-300">
+                <div className={`flex justify-between items-center border-t pt-2 ${isCritical ? 'border-red-200 dark:border-red-800' : isWarning ? 'border-orange-200 dark:border-orange-800' : 'border-green-200 dark:border-green-800'}`}>
+                    <span className={`text-[10px] uppercase font-bold ${isCritical ? 'text-red-700 dark:text-red-400' : isWarning ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400'}`}>Marża</span>
+                    <span className={`font-mono font-bold text-sm ${marginColor}`}>
                         {formatNumber(marginPercent, 2)}%
                     </span>
                 </div>

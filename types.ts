@@ -81,6 +81,15 @@ export interface Supplier {
   finalCostOverride?: number; // For Final Calculation Mode
   finalVendorName?: string;   // Actual provider name on invoice
   isManualFinal?: boolean;    // Added manually in Final Calculation stage
+  
+  // Address Data for Orders
+  street?: string;
+  zip?: string;
+  city?: string;
+  nip?: string;
+  email?: string;
+  phone?: string;
+  contactPerson?: string;
 }
 
 // --- SHEET TYPES ---
