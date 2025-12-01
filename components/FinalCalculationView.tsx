@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { CalculationData, Currency, Supplier, TransportItem, OtherCostItem, InstallationData, FinalInstallationItem, SupplierStatus, Language, CalculationMode } from '../types';
-import { FileText, Truck, Wrench, Receipt, Plus, Trash2, AlertCircle, ArrowRight, DollarSign, TrendingUp, TrendingDown, AlertTriangle, AlertOctagon, Printer } from 'lucide-react';
+import { FileText, Truck, Wrench, Receipt, Plus, Trash2, AlertCircle, ArrowRight, DollarSign, TrendingUp, TrendingDown, AlertTriangle, AlertOctagon, Printer, CheckCircle, Mail } from 'lucide-react';
 import { convert, formatCurrency, formatNumber, calculateProjectCosts } from '../services/calculationService';
 
 interface Props {
@@ -10,10 +10,10 @@ interface Props {
     onChange: (data: CalculationData) => void;
     exchangeRate: number;
     offerCurrency: Currency;
-    // New Props for Footer Summary
     manualPrice: number | null;
     targetMargin: number;
     onUpdateState: (updates: { manualPrice?: number | null, targetMargin?: number }) => void;
+    onApprove?: () => Promise<boolean>;
 }
 
 export const FinalCalculationView: React.FC<Props> = ({ 
@@ -24,7 +24,8 @@ export const FinalCalculationView: React.FC<Props> = ({
     offerCurrency,
     manualPrice,
     targetMargin,
-    onUpdateState
+    onUpdateState,
+    onApprove
 }) => {
     const [isEditingPrice, setIsEditingPrice] = useState(false);
     const [localPriceInput, setLocalPriceInput] = useState('');
@@ -54,7 +55,9 @@ export const FinalCalculationView: React.FC<Props> = ({
         };
     }, []);
 
-    // --- Actions --- (Same logic as before, just styling update)
+    // ... (Actions omitted for brevity, keeping all existing logic same) ...
+    // NOTE: In real implementation, all update/add/remove functions from original file must be here.
+    // I am including them all below to ensure file integrity.
 
     const updateSupplierOverride = (id: string, updates: Partial<Supplier>) => {
         const existingInFinal = data.suppliers.find(s => s.id === id);
@@ -169,7 +172,6 @@ export const FinalCalculationView: React.FC<Props> = ({
         onChange({ ...data, otherCosts: data.otherCosts.filter(c => c.id !== id) });
     };
 
-    // --- INSTALLATION SPLIT LOGIC ---
     const addFinalInstallationItem = (category: 'LABOR' | 'RENTAL') => {
         const newItem: FinalInstallationItem = {
             id: Math.random().toString(36).substr(2, 9),
@@ -206,9 +208,6 @@ export const FinalCalculationView: React.FC<Props> = ({
         });
     };
 
-
-    // --- Helpers for Display Values ---
-
     const getEstimatedSupplierCost = (s: Supplier) => {
         const subtotal = s.items.reduce((sum, i) => sum + (i.quantity * (s.isOrm ? i.unitPrice * 0.5 : i.unitPrice)), 0);
         return subtotal * (1 - s.discount / 100);
@@ -216,7 +215,6 @@ export const FinalCalculationView: React.FC<Props> = ({
 
     const getEstimatedTransportCost = (t: TransportItem) => t.totalPrice;
 
-    // Splits initial estimates into Labor vs Rental
     const getEstimatedInstallationSplit = () => {
         const i = initialData.installation;
         const custom = i.customItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
@@ -229,27 +227,21 @@ export const FinalCalculationView: React.FC<Props> = ({
         return { labor, rental };
     };
 
-    // --- Data Prep ---
     const allSupplierIds = Array.from(new Set([...initialData.suppliers.map(s => s.id), ...data.suppliers.map(s => s.id)]));
     const allTransportIds = Array.from(new Set([...initialData.transport.map(t => t.id), ...data.transport.map(t => t.id)]));
     const allOtherIds = Array.from(new Set([...initialData.otherCosts.map(c => c.id), ...data.otherCosts.map(c => c.id)]));
     
-    // Installation Items
     const finalInstItems = data.installation.finalInstallationCosts || [];
     const finalLaborItems = finalInstItems.filter(i => i.category === 'LABOR');
     const finalRentalItems = finalInstItems.filter(i => i.category === 'RENTAL');
 
-    // Calculations for Summary
     const finalCosts = calculateProjectCosts(data, exchangeRate, offerCurrency, CalculationMode.FINAL);
     const totalFinalCost = finalCosts.total;
 
-    // Calculate Initial Price to use as default (Copy from Initial Calculation)
     const initialCosts = calculateProjectCosts(initialData, exchangeRate, offerCurrency, CalculationMode.INITIAL);
     const initialMarginDecimal = targetMargin / 100;
     const initialPrice = initialMarginDecimal >= 1 ? 0 : initialCosts.total / (1 - initialMarginDecimal);
 
-    // Selling Price & Margin
-    // Defaults to Initial Price if no manual price is set, instead of recalculating based on Final Costs
     const sellingPrice = manualPrice !== null 
         ? manualPrice 
         : initialPrice;
@@ -257,7 +249,6 @@ export const FinalCalculationView: React.FC<Props> = ({
     const actualMargin = sellingPrice > 0 ? (1 - (totalFinalCost / sellingPrice)) * 100 : 0;
     const profit = sellingPrice - totalFinalCost;
 
-    // Margin Alert Logic
     const isCritical = actualMargin < 6;
     const isWarning = actualMargin < 7 && !isCritical;
     const marginColor = isCritical 
@@ -288,6 +279,35 @@ export const FinalCalculationView: React.FC<Props> = ({
         window.print();
     };
 
+    const handleApprove = async () => {
+        if (onApprove) {
+            const success = await onApprove();
+            if (success) {
+                // Generate Settlement Email Logic here
+                const subject = encodeURIComponent(`ROZLICZENIE | Projekt: ${data.meta.projectNumber || 'XXX'}`);
+                const body = encodeURIComponent(`
+Dzień dobry,
+
+Zatwierdzam koszty dla projektu i proszę o zamknięcie.
+
+Numer SAP: ${data.meta.sapProjectNumber || 'BRAK'}
+Projekt CRM: ${data.meta.projectNumber}
+Klient: ${data.orderingParty.name}
+
+Wartość Faktur Sprzedaży: ${formatCurrency(sellingPrice, offerCurrency)}
+Koszt Rzeczywisty: ${formatCurrency(totalFinalCost, offerCurrency)}
+Wynik: ${formatCurrency(profit, offerCurrency)} (${actualMargin.toFixed(2)}%)
+
+Proszę o wystawienie faktury końcowej (jeśli dotyczy).
+
+Pozdrawiam,
+${data.meta.salesPerson}
+                `.trim());
+                window.location.href = `mailto:?subject=${subject}&body=${body}`;
+            }
+        }
+    };
+
     // Style constants
     const headerClass = "p-2 border-b dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-semibold uppercase text-xs tracking-wider sticky top-0 z-10";
     const headerCyanClass = "p-2 border-b dark:border-zinc-700 bg-cyan-50 dark:bg-cyan-900/30 text-cyan-800 dark:text-cyan-400 font-bold uppercase text-xs tracking-wider sticky top-0 z-10 border-l border-cyan-100 dark:border-cyan-800";
@@ -313,12 +333,22 @@ export const FinalCalculationView: React.FC<Props> = ({
                             <p className="text-xs text-zinc-500 dark:text-zinc-400">Wprowadź faktyczne koszty z faktur</p>
                         </div>
                     </div>
-                    <button 
-                        onClick={handlePrint}
-                        className="bg-white hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-600 px-3 py-2 rounded-sm flex items-center gap-2 text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
-                    >
-                        <Printer size={16}/> Drukuj
-                    </button>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={handlePrint}
+                            className="bg-white hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-600 px-3 py-2 rounded-sm flex items-center gap-2 text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
+                        >
+                            <Printer size={16}/> Drukuj
+                        </button>
+                        {onApprove && (
+                            <button 
+                                onClick={handleApprove}
+                                className="bg-purple-600 hover:bg-purple-700 text-white border border-purple-700 px-4 py-2 rounded-sm flex items-center gap-2 text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
+                            >
+                                <Mail size={16}/> Zatwierdź i Zamknij
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 <div className="overflow-x-auto">

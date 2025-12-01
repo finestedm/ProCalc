@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import { ProjectMeta, CalculationMode } from '../types';
-import { Briefcase, Calendar, User, ChevronDown, Hash, ScanLine } from 'lucide-react';
+import { Briefcase, Calendar, User, ChevronDown, Hash, ScanLine, Search } from 'lucide-react';
+import { SALES_PEOPLE, SUPPORT_PEOPLE } from '../services/employeesDatabase';
 
 interface Props {
   data: ProjectMeta;
@@ -34,6 +35,33 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
 
   const inputClass = "w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-sm text-xs text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all";
   const labelClass = "block text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase mb-1 ml-1 tracking-wider";
+
+  const renderPersonSelect = (label: string, value: string, onChange: (val: string) => void, options: string[]) => {
+      return (
+          <div>
+              <label className={labelClass}>{label}</label>
+              <div className="relative group">
+                  <User className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600 pointer-events-none" size={14}/>
+                  <input 
+                      list={`${label}-list`}
+                      type="text" 
+                      className={`${inputClass} pl-9`}
+                      placeholder="Wybierz z listy..."
+                      value={value}
+                      onChange={(e) => onChange(e.target.value)}
+                  />
+                  <datalist id={`${label}-list`}>
+                      {options.map((name, i) => (
+                          <option key={i} value={name} />
+                      ))}
+                  </datalist>
+                  <div className="absolute right-2 top-2.5 text-zinc-300 pointer-events-none">
+                      <ChevronDown size={14} />
+                  </div>
+              </div>
+          </div>
+      );
+  };
 
   return (
     <div className="bg-white dark:bg-zinc-950 rounded-sm border border-zinc-200 dark:border-zinc-800 mb-6 overflow-hidden transition-all duration-300 h-full flex flex-col">
@@ -138,32 +166,10 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
                         />
                     </div>
                 </div>
-                <div>
-                    <label className={labelClass}>Handlowiec</label>
-                    <div className="relative group">
-                        <User className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600" size={14}/>
-                        <input
-                            type="text"
-                            value={data.salesPerson}
-                            onChange={(e) => handleChange('salesPerson', e.target.value)}
-                            className={`${inputClass} pl-9`}
-                            placeholder="Imię Nazwisko"
-                        />
-                    </div>
-                </div>
-                <div>
-                    <label className={labelClass}>Wsparcie Sprzedaży</label>
-                    <div className="relative group">
-                        <User className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600" size={14}/>
-                        <input
-                            type="text"
-                            value={data.assistantPerson}
-                            onChange={(e) => handleChange('assistantPerson', e.target.value)}
-                            className={`${inputClass} pl-9`}
-                            placeholder="Imię Nazwisko"
-                        />
-                    </div>
-                </div>
+                
+                {renderPersonSelect("Handlowiec", data.salesPerson, (v) => handleChange('salesPerson', v), SALES_PEOPLE)}
+                {renderPersonSelect("Wsparcie Sprzedaży", data.assistantPerson, (v) => handleChange('assistantPerson', v), SUPPORT_PEOPLE)}
+
             </div>
           </div>
       </div>

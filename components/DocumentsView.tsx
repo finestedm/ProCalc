@@ -1,14 +1,18 @@
 
 import React from 'react';
-import { CalculationData, SupplierStatus } from '../types';
-import { FileText, Mail, Printer, Copy, CheckCircle, ArrowLeft, Send } from 'lucide-react';
+import { CalculationData, SupplierStatus, AppState, CalculationMode } from '../types';
+import { FileText, Mail, Printer, Copy, CheckCircle, ArrowLeft, Send, CheckCircle2, Lock } from 'lucide-react';
+import { calculateProjectCosts, formatCurrency, formatNumber } from '../services/calculationService';
 
 interface Props {
   data: CalculationData;
   onBack: () => void;
+  onApproveOpening?: () => Promise<boolean>;
+  onApproveClosing?: () => Promise<boolean>;
+  appState: AppState;
 }
 
-export const DocumentsView: React.FC<Props> = ({ data, onBack }) => {
+export const DocumentsView: React.FC<Props> = ({ data, onBack, onApproveOpening, onApproveClosing, appState }) => {
   const [copied, setCopied] = React.useState(false);
 
   // --- PROTOCOL GENERATION ---
@@ -95,15 +99,15 @@ export const DocumentsView: React.FC<Props> = ({ data, onBack }) => {
       printWindow.document.close();
   };
 
-  // --- EMAIL GENERATION ---
+  // --- OPENING EMAIL GENERATION (Logistics) ---
   const logisticsSuppliers = data.suppliers.filter(s => s.isIncluded !== false && s.status === SupplierStatus.TO_ORDER);
   
-  const emailSubject = `ZAMÓWIENIE | Projekt: ${data.meta.projectNumber || 'XXX'} | ${data.orderingParty.name || 'Klient'}`;
+  const openingSubject = `ZAMÓWIENIE | Projekt: ${data.meta.projectNumber || 'XXX'} | ${data.orderingParty.name || 'Klient'}`;
   
-  const emailBody = `
+  const openingBody = `
 Dzień dobry,
 
-Proszę o złożenie zamówień dla projektu:
+Zatwierdzam do realizacji. Proszę o złożenie zamówień dla projektu:
 Numer Projektu: ${data.meta.projectNumber || 'BRAK'}
 Numer SAP: ${data.meta.sapProjectNumber || 'BRAK'}
 Klient: ${data.orderingParty.name}
@@ -126,16 +130,82 @@ Pozdrawiam,
 ${data.meta.salesPerson || 'Handlowiec'}
   `.trim();
 
-  const handleCopyEmail = () => {
-      navigator.clipboard.writeText(emailBody);
+  const handleCopyOpening = () => {
+      navigator.clipboard.writeText(openingBody);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleSendEmail = () => {
-      const subject = encodeURIComponent(emailSubject);
-      const body = encodeURIComponent(emailBody);
-      window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  const handleApproveAndSendOpening = async () => {
+      if (onApproveOpening) {
+          const success = await onApproveOpening();
+          if (success) {
+              const subject = encodeURIComponent(openingSubject);
+              const body = encodeURIComponent(openingBody);
+              window.location.href = `mailto:?subject=${subject}&body=${body}`;
+          }
+      }
+  };
+
+  // --- CLOSING EMAIL GENERATION (Settlement) ---
+  const closingSubject = `ROZLICZENIE | Projekt: ${data.meta.projectNumber || 'XXX'}`;
+  
+  // Calculate financials for Closing Email
+  const rate = appState.exchangeRate;
+  const currency = appState.offerCurrency;
+  const ormFee = appState.globalSettings.ormFeePercent;
+  
+  // Costs based on CURRENT mode (data provided)
+  const finalCosts = calculateProjectCosts(data, rate, currency, appState.mode, ormFee);
+  const totalFinalCost = finalCosts.total;
+
+  let sellingPrice = 0;
+  let marginPercent = 0;
+  let profit = 0;
+
+  if (appState.manualPrice !== null) {
+      sellingPrice = appState.manualPrice;
+      if (sellingPrice !== 0) {
+          marginPercent = (1 - (totalFinalCost / sellingPrice)) * 100;
+      }
+      profit = sellingPrice - totalFinalCost;
+  } else {
+      marginPercent = appState.targetMargin;
+      const marginDecimal = marginPercent / 100;
+      sellingPrice = marginDecimal >= 1 
+        ? (totalFinalCost > 0 ? totalFinalCost * 999 : 0) 
+        : totalFinalCost / (1 - marginDecimal);
+      profit = sellingPrice - totalFinalCost;
+  }
+
+  const closingBody = `
+Dzień dobry,
+
+Zatwierdzam koszty dla projektu i proszę o zamknięcie.
+
+Numer SAP: ${data.meta.sapProjectNumber || 'BRAK'}
+Projekt CRM: ${data.meta.projectNumber}
+Klient: ${data.orderingParty.name}
+
+Wartość Faktur Sprzedaży: ${formatCurrency(sellingPrice, currency)}
+Koszt Rzeczywisty: ${formatCurrency(totalFinalCost, currency)}
+Wynik: ${formatCurrency(profit, currency)} (${marginPercent.toFixed(2)}%)
+
+Proszę o wystawienie faktury końcowej (jeśli dotyczy).
+
+Pozdrawiam,
+${data.meta.salesPerson}
+  `.trim();
+
+  const handleApproveAndSendClosing = async () => {
+      if (onApproveClosing) {
+          const success = await onApproveClosing();
+          if (success) {
+              const subject = encodeURIComponent(closingSubject);
+              const body = encodeURIComponent(closingBody);
+              window.location.href = `mailto:?subject=${subject}&body=${body}`;
+          }
+      }
   };
 
   return (
@@ -152,7 +222,7 @@ ${data.meta.salesPerson || 'Handlowiec'}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             
             {/* CARD 1: PROTOCOL */}
-            <div className="bg-white dark:bg-zinc-950 p-0 rounded-sm shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+            <div className="bg-white dark:bg-zinc-950 p-0 rounded-sm shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden h-fit">
                 <div className="p-6 border-b border-zinc-100 dark:border-zinc-800">
                     <div className="flex items-center gap-3 mb-4 text-zinc-800 dark:text-zinc-100 font-bold text-lg">
                         <div className="bg-zinc-100 dark:bg-zinc-800 p-3 rounded-full text-zinc-600 dark:text-zinc-300"><FileText size={24}/></div>
@@ -173,36 +243,66 @@ ${data.meta.salesPerson || 'Handlowiec'}
                 </div>
             </div>
 
-            {/* CARD 2: LOGISTICS EMAIL */}
+            {/* CARD 2: OPENING EMAIL */}
             <div className="bg-white dark:bg-zinc-950 p-0 rounded-sm shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden">
                 <div className="p-6 border-b border-zinc-100 dark:border-zinc-800">
                     <div className="flex items-center gap-3 mb-4 text-zinc-800 dark:text-zinc-100 font-bold text-lg">
-                        <div className="bg-cyan-100 dark:bg-cyan-900/30 p-3 rounded-full text-cyan-600 dark:text-cyan-400"><Mail size={24}/></div>
-                        Mail do Logistyki
+                        <div className="bg-green-100 dark:bg-green-900/30 p-3 rounded-full text-green-600 dark:text-green-400"><Mail size={24}/></div>
+                        Mail do Logistyki (Otwarcie)
                     </div>
                     
                     <div className="bg-zinc-50 dark:bg-zinc-900 p-3 rounded-sm border border-zinc-200 dark:border-zinc-700 mb-4 font-mono text-xs overflow-y-auto max-h-48 whitespace-pre-wrap text-zinc-600 dark:text-zinc-300">
-                        <div className="font-bold text-zinc-800 dark:text-zinc-100 border-b dark:border-zinc-700 pb-1 mb-2">{emailSubject}</div>
-                        {emailBody}
+                        <div className="font-bold text-zinc-800 dark:text-zinc-100 border-b dark:border-zinc-700 pb-1 mb-2">{openingSubject}</div>
+                        {openingBody}
                     </div>
 
                     <div className="flex gap-2">
                         <button 
-                            onClick={handleSendEmail}
-                            className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-sm font-bold flex items-center justify-center gap-2 transition-colors uppercase text-xs tracking-wider"
+                            onClick={handleApproveAndSendOpening}
+                            className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-sm font-bold flex items-center justify-center gap-2 transition-colors uppercase text-xs tracking-wider"
                         >
-                            <Send size={16}/> Wyślij (App)
+                            <CheckCircle2 size={16}/> Zatwierdź i Wyślij
                         </button>
                         <button 
-                            onClick={handleCopyEmail}
+                            onClick={handleCopyOpening}
                             className={`flex-1 py-3 rounded-sm font-bold flex items-center justify-center gap-2 transition-colors border uppercase text-xs tracking-wider ${copied ? 'bg-green-500 text-white border-green-500' : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'}`}
                         >
-                            {copied ? <><CheckCircle size={16}/> Skopiowano</> : <><Copy size={16}/> Kopiuj Treść</>}
+                            {copied ? <><CheckCircle size={16}/> Skopiowano</> : <><Copy size={16}/> Kopiuj</>}
                         </button>
                     </div>
                 </div>
                 <div className="bg-zinc-50 dark:bg-zinc-900 p-4 text-[10px] text-zinc-400 text-center uppercase font-bold tracking-wider">
-                    Generuje gotowy szablon wiadomości
+                    Waliduje dane, zapisuje wersję "OPENING" i tworzy maila.
+                </div>
+            </div>
+
+            {/* CARD 3: CLOSING EMAIL */}
+            <div className="bg-white dark:bg-zinc-950 p-0 rounded-sm shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden md:col-span-2 lg:col-span-1">
+                <div className="p-6 border-b border-zinc-100 dark:border-zinc-800">
+                    <div className="flex items-center gap-3 mb-4 text-zinc-800 dark:text-zinc-100 font-bold text-lg">
+                        <div className="bg-purple-100 dark:bg-purple-900/30 p-3 rounded-full text-purple-600 dark:text-purple-400"><Lock size={24}/></div>
+                        Mail do Logistyki (Zamknięcie)
+                    </div>
+                    
+                    <div className="bg-zinc-50 dark:bg-zinc-900 p-3 rounded-sm border border-zinc-200 dark:border-zinc-700 mb-4 font-mono text-xs overflow-y-auto max-h-48 whitespace-pre-wrap text-zinc-600 dark:text-zinc-300">
+                        <div className="font-bold text-zinc-800 dark:text-zinc-100 border-b dark:border-zinc-700 pb-1 mb-2">{closingSubject}</div>
+                        {closingBody}
+                    </div>
+
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={handleApproveAndSendClosing}
+                            disabled={appState.mode !== CalculationMode.FINAL}
+                            className="flex-1 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-sm font-bold flex items-center justify-center gap-2 transition-colors uppercase text-xs tracking-wider"
+                        >
+                            <CheckCircle2 size={16}/> Zatwierdź i Wyślij
+                        </button>
+                    </div>
+                </div>
+                <div className="bg-zinc-50 dark:bg-zinc-900 p-4 text-[10px] text-zinc-400 text-center uppercase font-bold tracking-wider">
+                    {appState.mode === CalculationMode.FINAL 
+                        ? 'Zapisuje wersję "FINAL" i tworzy maila z wynikiem.' 
+                        : 'Wymaga trybu "Końcowa" do aktywacji.'}
                 </div>
             </div>
 

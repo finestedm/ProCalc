@@ -1,9 +1,7 @@
 
-
-
 import React, { useMemo } from 'react';
 import { CalculationData, Supplier, SupplierStatus, TransportItem, Currency, Language } from '../types';
-import { Truck, Calendar, Package, AlertCircle, BarChart3, Printer, CheckCircle2, UserCircle, Globe, Combine, Layers, ArrowRight, Clock } from 'lucide-react';
+import { Truck, Calendar, Package, AlertCircle, BarChart3, Printer, CheckCircle2, UserCircle, Globe, Combine, Layers, ArrowRight, Clock, Send } from 'lucide-react';
 
 interface Props {
   data: CalculationData;
@@ -454,8 +452,6 @@ export const LogisticsView: React.FC<Props> = ({ data, onUpdateSupplier }) => {
             
             <div className="relative overflow-x-auto custom-scrollbar bg-white dark:bg-zinc-950">
                 <div className="min-w-[800px] p-6 pb-2" style={{ width: Math.max(800, chartWidth + 300) + 'px' }}>
-                    {/* Time Axis (Dates at bottom logic needs space, so we render graph first then dates) */}
-                    
                     {/* Rows */}
                     <div className="space-y-4 mb-12 relative z-10 pt-6">
                         {/* Vertical line for "Order Start" */}

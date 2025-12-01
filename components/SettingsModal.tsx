@@ -1,7 +1,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { GlobalSettings } from '../types';
-import { Settings, X, Save, AlertCircle } from 'lucide-react';
+import { Settings, X, Save, AlertCircle, UserCheck } from 'lucide-react';
+import { SALES_PEOPLE, SUPPORT_PEOPLE } from '../services/employeesDatabase';
 
 interface Props {
   isOpen: boolean;
@@ -83,6 +84,41 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, settings, onSa
                         <span className="absolute right-3 top-2.5 text-zinc-400 text-sm">kg</span>
                     </div>
                     <p className="text-[10px] text-zinc-400 mt-1">Używana do automatycznego obliczania liczby aut</p>
+                </div>
+
+                <div className="border-t border-zinc-200 dark:border-zinc-700 pt-4">
+                    <h3 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase mb-3 flex items-center gap-2">
+                        <UserCheck size={14}/> Moja Tożsamość (Domyślne)
+                    </h3>
+                    
+                    <div className="space-y-3">
+                        <div>
+                            <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Domyślny Handlowiec</label>
+                            <input 
+                                list="settings-sales-list"
+                                className="w-full p-2 border border-zinc-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 text-xs focus:ring-2 focus:ring-amber-400 outline-none"
+                                value={localSettings.defaultSalesPerson || ''}
+                                onChange={(e) => setLocalSettings(prev => ({ ...prev, defaultSalesPerson: e.target.value }))}
+                                placeholder="Wybierz..."
+                            />
+                            <datalist id="settings-sales-list">
+                                {SALES_PEOPLE.map((p, i) => <option key={i} value={p} />)}
+                            </datalist>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Domyślne Wsparcie</label>
+                            <input 
+                                list="settings-support-list"
+                                className="w-full p-2 border border-zinc-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 text-xs focus:ring-2 focus:ring-amber-400 outline-none"
+                                value={localSettings.defaultSupportPerson || ''}
+                                onChange={(e) => setLocalSettings(prev => ({ ...prev, defaultSupportPerson: e.target.value }))}
+                                placeholder="Wybierz..."
+                            />
+                            <datalist id="settings-support-list">
+                                {SUPPORT_PEOPLE.map((p, i) => <option key={i} value={p} />)}
+                            </datalist>
+                        </div>
+                    </div>
                 </div>
             </div>
 

@@ -1,5 +1,6 @@
 
 
+
 export enum Currency {
   PLN = 'PLN',
   EUR = 'EUR'
@@ -27,6 +28,8 @@ export enum ViewMode {
   NOTES = 'NOTES',
   DOCUMENTS = 'DOCUMENTS'
 }
+
+export type ProjectStage = 'DRAFT' | 'OPENING' | 'FINAL';
 
 export interface AddressData {
   name: string;
@@ -280,6 +283,8 @@ export interface PaymentTerms {
 export interface GlobalSettings {
     ormFeePercent: number; // e.g. 1.6
     truckLoadCapacity: number; // e.g. 22000 kg
+    defaultSalesPerson?: string;
+    defaultSupportPerson?: string;
 }
 
 export interface CalculationData {
@@ -322,6 +327,7 @@ export interface HistoryEntry {
 export interface ProjectFile {
   version: string;
   timestamp: number;
+  stage: ProjectStage;
   appState: AppState;
   historyLog: HistoryEntry[];
   past: AppState[];
@@ -367,7 +373,9 @@ export const EMPTY_PAYMENT_TERMS: PaymentTerms = {
 
 export const DEFAULT_SETTINGS: GlobalSettings = {
     ormFeePercent: 1.6,
-    truckLoadCapacity: 22000
+    truckLoadCapacity: 22000,
+    defaultSalesPerson: '',
+    defaultSupportPerson: ''
 };
 
 export const EMPTY_CALCULATION: CalculationData = {

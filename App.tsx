@@ -13,7 +13,9 @@ import {
   ProjectFile,
   VariantItemType,
   VariantItem,
-  DEFAULT_SETTINGS
+  DEFAULT_SETTINGS,
+  ProjectStage,
+  AddressData
 } from './types';
 import { CustomerSection } from './components/CustomerSection';
 import { ProjectMetaForm } from './components/ProjectMetaForm';
@@ -174,7 +176,9 @@ const App: React.FC = () => {
         if(parsed.initial && !parsed.initial.otherCostsScratchpad) parsed.initial.otherCostsScratchpad = [];
         if(parsed.final && !parsed.final.otherCostsScratchpad) parsed.final.otherCostsScratchpad = [];
         // Init global settings if missing
-        if(!parsed.globalSettings) parsed.globalSettings = { ...DEFAULT_SETTINGS };
+        if(!parsed.appState?.globalSettings && !parsed.globalSettings) {
+             // Handle migration if needed
+        }
 
         const mergedState = { ...appState, ...parsed };
         setAppState(mergedState);
@@ -182,6 +186,12 @@ const App: React.FC = () => {
       } catch (e) {
         console.error("Failed to load save state", e);
       }
+    } else {
+        // First load defaults if no storage
+        const defaultSettings = { ...DEFAULT_SETTINGS };
+        const init = JSON.parse(JSON.stringify(EMPTY_CALCULATION));
+        const fin = JSON.parse(JSON.stringify(EMPTY_CALCULATION));
+        setAppState(prev => ({ ...prev, initial: init, final: fin, globalSettings: defaultSettings }));
     }
     
     setIsLoaded(true);
@@ -238,6 +248,130 @@ const App: React.FC = () => {
           if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
       };
   }, [appState, isLoaded]);
+
+  // --- VALIDATION & AUTO-SAVE LOGIC ---
+
+  const validateProject = (stage: ProjectStage): string[] => {
+      const errors: string[] = [];
+      const init = appState.initial;
+      
+      if (stage === 'OPENING' || stage === 'FINAL') {
+          // Common requirements for Opening & Final
+          if (!init.meta.orderNumber) errors.push("Brak Numeru Zamówienia.");
+          if (!init.meta.projectNumber) errors.push("Brak Numeru Projektu (CRM).");
+          if (!init.meta.orderDate) errors.push("Brak Daty Zamówienia.");
+          
+          if (!init.meta.salesPerson) errors.push("Brak Handlowca (Wymagane z listy).");
+          if (!init.meta.assistantPerson) errors.push("Brak Wsparcia Sprzedaży (Wymagane z listy).");
+          
+          // Strict Customer Data Validation
+          const checkAddress = (addr: AddressData, type: string) => {
+              if (!addr.name) errors.push(`Brak nazwy (${type}).`);
+              if (!addr.street) errors.push(`Brak ulicy (${type}).`);
+              if (!addr.zip) errors.push(`Brak kodu pocztowego (${type}).`);
+              if (!addr.city) errors.push(`Brak miasta (${type}).`);
+              if (!addr.nip) errors.push(`Brak NIP (${type}).`);
+          };
+
+          checkAddress(init.payer, "Płatnik");
+          checkAddress(init.recipient, "Odbiorca");
+          checkAddress(init.orderingParty, "Zamawiający");
+          
+          // Check suppliers
+          init.suppliers.forEach(s => {
+              if (s.isIncluded !== false && !s.isOrm) {
+                  if ((!s.street || !s.nip) && (s.name === 'Inny Dostawca' || s.name === 'Nowy Dostawca')) {
+                      errors.push(`Dostawca "${s.customTabName || s.name}" wymaga uzupełnienia danych adresowych.`);
+                  }
+              }
+          });
+      }
+
+      if (stage === 'FINAL') {
+          if (!init.meta.sapProjectNumber || init.meta.sapProjectNumber.length < 5) errors.push("Brak poprawnego numeru projektu SAP.");
+          
+          // Check if any final costs are entered (Basic check)
+          const hasFinalData = 
+              appState.final.suppliers.some(s => s.finalCostOverride !== undefined) ||
+              appState.final.transport.some(t => t.finalCostOverride !== undefined) ||
+              appState.final.otherCosts.some(c => c.finalCostOverride !== undefined) ||
+              (appState.final.installation.finalInstallationCosts && appState.final.installation.finalInstallationCosts.length > 0);
+          
+          if (!hasFinalData) errors.push("Brak wprowadzonych kosztów rzeczywistych (Faktur) w Rozliczeniu Końcowym.");
+      }
+
+      return errors;
+  };
+
+  const handleSmartSave = async (stage: ProjectStage): Promise<boolean> => {
+      if (!dirHandle) {
+          triggerConfirm(
+              "Wybierz folder projektów",
+              "Aby zapisać projekt i przejść dalej, musisz wskazać folder roboczy w Menedżerze Projektów.",
+              () => setShowProjectManager(true)
+          );
+          return false;
+      }
+
+      // Always use the INITIAL project number for the filename to ensure
+      // versions stay grouped together, even if we are saving the Final stage.
+      const projectNum = appState.initial.meta.projectNumber || 'BezNumeru';
+      
+      // Use local time for filename to avoid UTC confusion and ensure uniqueness
+      const now = new Date();
+      const offset = now.getTimezoneOffset() * 60000;
+      const timestamp = new Date(now.getTime() - offset).toISOString().slice(0, 19).replace('T', '_').replace(/[:]/g, '-');
+      
+      const filename = `PROCALC_${projectNum}_${stage}_${timestamp}.json`;
+
+      const fileData: ProjectFile = {
+          version: '1.0',
+          timestamp: Date.now(),
+          stage: stage,
+          appState,
+          historyLog,
+          past: [],
+          future: []
+      };
+
+      try {
+          // @ts-ignore
+          const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+          // @ts-ignore
+          const writable = await fileHandle.createWritable();
+          await writable.write(JSON.stringify(fileData, null, 2));
+          await writable.close();
+          
+          showSnackbar(`Zapisano automatycznie: ${filename}`);
+          return true;
+      } catch (err) {
+          console.error("Auto-save failed", err);
+          showSnackbar("Błąd automatycznego zapisu pliku. Sprawdź uprawnienia.");
+          return false;
+      }
+  };
+
+  const processLogisticsHandover = async (): Promise<boolean> => {
+      const errors = validateProject('OPENING');
+      if (errors.length > 0) {
+          triggerConfirm("Braki w Danych", "Nie można wysłać do logistyki:\n\n" + errors.join('\n'), () => {}, true);
+          return false;
+      }
+
+      const saved = await handleSmartSave('OPENING');
+      return saved;
+  };
+
+  const processFinalSettlement = async (): Promise<boolean> => {
+      const errors = validateProject('FINAL');
+      if (errors.length > 0) {
+          triggerConfirm("Braki w Rozliczeniu", "Nie można zamknąć projektu:\n\n" + errors.join('\n'), () => {}, true);
+          return false;
+      }
+
+      const saved = await handleSmartSave('FINAL');
+      return saved;
+  };
 
   // --- PICKING MODE LOGIC ---
   const handleVariantItemPick = (item: { id: string, type: VariantItemType, label: string }, origin?: {x: number, y: number}) => {
@@ -389,6 +523,7 @@ const App: React.FC = () => {
       const fileData: ProjectFile = {
           version: '1.0',
           timestamp: Date.now(),
+          stage: 'DRAFT', // Default export is Draft
           appState,
           historyLog,
           past,
@@ -458,9 +593,22 @@ const App: React.FC = () => {
           "Nowy Projekt", 
           "Czy na pewno chcesz wyczyścić wszystkie dane? Niezapisane zmiany zostaną utracone.",
           () => {
+              const init = JSON.parse(JSON.stringify(EMPTY_CALCULATION));
+              const fin = JSON.parse(JSON.stringify(EMPTY_CALCULATION));
+              
+              // Apply Default Users
+              if (appState.globalSettings.defaultSalesPerson) {
+                  init.meta.salesPerson = appState.globalSettings.defaultSalesPerson;
+                  fin.meta.salesPerson = appState.globalSettings.defaultSalesPerson;
+              }
+              if (appState.globalSettings.defaultSupportPerson) {
+                  init.meta.assistantPerson = appState.globalSettings.defaultSupportPerson;
+                  fin.meta.assistantPerson = appState.globalSettings.defaultSupportPerson;
+              }
+
               setAppState({
-                initial: JSON.parse(JSON.stringify(EMPTY_CALCULATION)),
-                final: JSON.parse(JSON.stringify(EMPTY_CALCULATION)),
+                initial: init,
+                final: fin,
                 mode: CalculationMode.INITIAL,
                 viewMode: ViewMode.CALCULATOR,
                 exchangeRate: appState.exchangeRate, 
@@ -468,7 +616,7 @@ const App: React.FC = () => {
                 clientCurrency: Currency.PLN, 
                 targetMargin: 20,
                 manualPrice: null,
-                globalSettings: { ...DEFAULT_SETTINGS }
+                globalSettings: appState.globalSettings 
               });
               setPast([]);
               setFuture([]);
@@ -540,6 +688,7 @@ const App: React.FC = () => {
                             manualPrice={appState.manualPrice}
                             targetMargin={appState.targetMargin}
                             onUpdateState={(updates) => setAppState(prev => ({ ...prev, ...updates }))}
+                            onApprove={processFinalSettlement}
                         />
                     ) : (
                         <>
@@ -637,10 +786,13 @@ const App: React.FC = () => {
         {/* FULL SCREEN MODES */}
         {appState.viewMode === ViewMode.LOGISTICS && (
             <div className="xl:col-span-12 animate-fadeIn p-6">
-                 <LogisticsView data={data} onUpdateSupplier={(id, updates) => {
-                     const updatedSuppliers = data.suppliers.map(s => s.id === id ? { ...s, ...updates } : s);
-                     updateCalculationData({ suppliers: updatedSuppliers });
-                 }}/>
+                 <LogisticsView 
+                    data={data} 
+                    onUpdateSupplier={(id, updates) => {
+                        const updatedSuppliers = data.suppliers.map(s => s.id === id ? { ...s, ...updates } : s);
+                        updateCalculationData({ suppliers: updatedSuppliers });
+                    }}
+                 />
             </div>
         )}
 
@@ -668,6 +820,9 @@ const App: React.FC = () => {
                 <DocumentsView 
                     data={data} 
                     onBack={() => setAppState(prev => ({...prev, viewMode: ViewMode.CALCULATOR}))} 
+                    onApproveOpening={processLogisticsHandover}
+                    onApproveClosing={processFinalSettlement}
+                    appState={appState}
                 />
             </div>
         )}

@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { FolderOpen, FileJson, Save, X, RefreshCw, AlertTriangle, HardDrive, Search, User, Hash, Calendar, DollarSign, Loader2 } from 'lucide-react';
+import { FolderOpen, FileJson, Save, X, RefreshCw, AlertTriangle, HardDrive, Search, User, Hash, Calendar, DollarSign, Loader2, PenLine, Filter, Trash2, ListFilter } from 'lucide-react';
 import { AppState, ProjectFile } from '../types';
+import { SALES_PEOPLE, SUPPORT_PEOPLE } from '../services/employeesDatabase';
 
 interface Props {
   isOpen: boolean;
@@ -32,6 +33,7 @@ interface FileSystemDirectoryHandle extends FileSystemHandle {
     kind: 'directory';
     values: () => AsyncIterableIterator<FileSystemHandle>;
     getFileHandle: (name: string, options?: { create?: boolean }) => Promise<FileSystemFileHandle>;
+    removeEntry: (name: string) => Promise<void>;
 }
 
 interface FileSystemWritableFileStream extends WritableStream {
@@ -46,6 +48,9 @@ interface ProjectMetadata {
     totalValue?: string;
     currency?: string;
     scanned: boolean;
+    stage?: string;
+    salesPerson?: string;
+    assistantPerson?: string;
 }
 
 export const ProjectManagerModal: React.FC<Props> = ({ 
@@ -63,7 +68,21 @@ export const ProjectManagerModal: React.FC<Props> = ({
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  
+  // Deletion State
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  // Filtering
   const [searchTerm, setSearchTerm] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [filenameSuffix, setFilenameSuffix] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // New Filters
+  const [filterStage, setFilterStage] = useState('');
+  const [filterSales, setFilterSales] = useState('');
+  const [filterSupport, setFilterSupport] = useState('');
   
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -168,25 +187,27 @@ export const ProjectManagerModal: React.FC<Props> = ({
                   const text = await file.text();
                   const json = JSON.parse(text);
                   
-                  // Extract data safely
+                  // Safe Data Extraction Logic
                   const initial = json.appState?.initial || json.initial;
                   const final = json.appState?.final || json.final;
-                  const mode = json.appState?.mode || 'INITIAL';
+                  const stage = json.stage;
                   
-                  // Use Final data if mode is Final, else Initial
-                  const targetData = mode === 'FINAL' && final ? final : initial;
+                  const clientName = initial?.orderingParty?.name || final?.orderingParty?.name || '-';
+                  const projectNumber = initial?.meta?.projectNumber || final?.meta?.projectNumber || '-';
                   
-                  // Try to find total value
-                  // Note: Calculating total value exactly is complex without the service, 
-                  // we'll try to find a saved total or estimate it.
-                  // For now, let's look for ordering party and project number
-                  
+                  // Extract People
+                  const salesPerson = initial?.meta?.salesPerson || final?.meta?.salesPerson;
+                  const assistantPerson = initial?.meta?.assistantPerson || final?.meta?.assistantPerson;
+
                   setFileMetadata(prev => ({
                       ...prev,
                       [fileEntry.name]: {
-                          clientName: targetData?.orderingParty?.name || '-',
-                          projectNumber: targetData?.meta?.projectNumber || '-',
-                          scanned: true
+                          clientName: clientName,
+                          projectNumber: projectNumber,
+                          stage: stage,
+                          scanned: true,
+                          salesPerson,
+                          assistantPerson
                       }
                   }));
 
@@ -194,7 +215,7 @@ export const ProjectManagerModal: React.FC<Props> = ({
                   // If parse fails
                   setFileMetadata(prev => ({
                       ...prev,
-                      [fileEntry.name]: { scanned: true, clientName: 'Błąd pliku' }
+                      [fileEntry.name]: { scanned: true, clientName: 'Błąd pliku', projectNumber: 'ERR' }
                   }));
               }
           }));
@@ -211,13 +232,25 @@ export const ProjectManagerModal: React.FC<Props> = ({
   const handleSave = async () => {
       if (!currentDirHandle) return;
       
+      // Always use INITIAL project number for identity to keep grouped
       const projectNum = appState.initial.meta.projectNumber || 'BezNumeru';
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      const filename = `PROCALC_${projectNum}_${timestamp}.json`;
+      
+      // Use local time to ensure uniqueness per second and match App.tsx logic
+      const now = new Date();
+      const offset = now.getTimezoneOffset() * 60000;
+      const timestamp = new Date(now.getTime() - offset).toISOString().slice(0, 19).replace('T', '_').replace(/[:]/g, '-');
+      
+      let filename = `PROCALC_${projectNum}_DRAFT_${timestamp}`;
+      if (filenameSuffix.trim()) {
+          const safeSuffix = filenameSuffix.replace(/[^a-zA-Z0-9-_ ]/g, '');
+          filename += `_${safeSuffix}`;
+      }
+      filename += '.json';
 
       const fileData: ProjectFile = {
           version: '1.0',
           timestamp: Date.now(),
+          stage: 'DRAFT',
           appState,
           historyLog: [],
           past: [],
@@ -231,6 +264,7 @@ export const ProjectManagerModal: React.FC<Props> = ({
           await writable.close();
           
           showSnackbar(`Zapisano: ${filename}`);
+          setFilenameSuffix(''); // Reset suffix after save
           // Reload list to see new file
           listFiles(currentDirHandle); 
       } catch (err) {
@@ -252,22 +286,111 @@ export const ProjectManagerModal: React.FC<Props> = ({
       }
   };
 
-  // Filter Logic
-  const filteredFiles = useMemo(() => {
-      if (!searchTerm) return files;
+  const handleDeleteFile = async () => {
+      if (!currentDirHandle || !deleteConfirm) return;
+      
+      try {
+          await currentDirHandle.removeEntry(deleteConfirm);
+          showSnackbar(`Usunięto plik: ${deleteConfirm}`);
+          await listFiles(currentDirHandle); // Refresh
+      } catch (err) {
+          console.error(err);
+          showSnackbar("Nie udało się usunąć pliku");
+      } finally {
+          setDeleteConfirm(null);
+      }
+  };
+
+  // Grouping & Filtering Logic - 2 Levels
+  const groupedHierarchy = useMemo(() => {
+      // 1. Filter
+      let filtered = files;
       const lowerTerm = searchTerm.toLowerCase();
       
-      return files.filter(f => {
+      filtered = files.filter(f => {
           const meta = fileMetadata[f.name];
-          const matchesName = f.name.toLowerCase().includes(lowerTerm);
-          const matchesClient = meta?.clientName?.toLowerCase().includes(lowerTerm);
-          const matchesProject = meta?.projectNumber?.toLowerCase().includes(lowerTerm);
           
-          return matchesName || matchesClient || matchesProject;
-      });
-  }, [files, searchTerm, fileMetadata]);
+          // Text Filter
+          let matchesText = true;
+          if (searchTerm) {
+              const matchesName = f.name.toLowerCase().includes(lowerTerm);
+              const matchesClient = meta?.clientName?.toLowerCase().includes(lowerTerm);
+              const matchesProject = meta?.projectNumber?.toLowerCase().includes(lowerTerm);
+              matchesText = matchesName || matchesClient || matchesProject;
+          }
 
-  if (!isOpen) return null;
+          // Date Filter
+          let matchesDate = true;
+          const fileDate = f.date.setHours(0,0,0,0);
+          if (dateFrom) {
+              const dFrom = new Date(dateFrom).setHours(0,0,0,0);
+              if (fileDate < dFrom) matchesDate = false;
+          }
+          if (dateTo) {
+              const dTo = new Date(dateTo).setHours(23,59,59,999);
+              if (f.date.getTime() > dTo) matchesDate = false;
+          }
+
+          // Advanced Filters
+          let matchesStage = true;
+          if (filterStage && meta?.stage !== filterStage) matchesStage = false;
+
+          let matchesSales = true;
+          if (filterSales && meta?.salesPerson !== filterSales) matchesSales = false;
+
+          let matchesSupport = true;
+          if (filterSupport && meta?.assistantPerson !== filterSupport) matchesSupport = false;
+
+          return matchesText && matchesDate && matchesStage && matchesSales && matchesSupport;
+      });
+
+      // 2. Group by CLIENT -> PROJECT
+      const clientGroups: Record<string, Record<string, typeof files>> = {};
+
+      filtered.forEach(f => {
+          const meta = fileMetadata[f.name];
+          const clientName = (meta?.clientName && meta.clientName !== '-' && meta.clientName !== 'Błąd pliku') 
+              ? meta.clientName 
+              : 'Pozostali Klienci';
+          
+          const projectNum = (meta?.projectNumber && meta.projectNumber !== '-' && meta.projectNumber !== 'BRAK') 
+              ? meta.projectNumber 
+              : 'Inne Projekty';
+
+          if (!clientGroups[clientName]) {
+              clientGroups[clientName] = {};
+          }
+          if (!clientGroups[clientName][projectNum]) {
+              clientGroups[clientName][projectNum] = [];
+          }
+          clientGroups[clientName][projectNum].push(f);
+      });
+
+      // 3. Flatten
+      const result = Object.entries(clientGroups).map(([clientName, projectsMap]) => {
+          const projects = Object.entries(projectsMap).map(([projectNum, files]) => {
+              files.sort((a, b) => b.date.getTime() - a.date.getTime());
+              return { projectNum, files };
+          });
+
+          projects.sort((a, b) => {
+              const dateA = a.files[0]?.date.getTime() || 0;
+              const dateB = b.files[0]?.date.getTime() || 0;
+              return dateB - dateA;
+          });
+
+          return { clientName, projects };
+      });
+
+      result.sort((a, b) => {
+          const dateA = a.projects[0]?.files[0]?.date.getTime() || 0;
+          const dateB = b.projects[0]?.files[0]?.date.getTime() || 0;
+          return dateB - dateA;
+      });
+
+      return result;
+
+  }, [files, searchTerm, dateFrom, dateTo, filterStage, filterSales, filterSupport, fileMetadata]);
 
   return (
     <div 
@@ -275,9 +398,40 @@ export const ProjectManagerModal: React.FC<Props> = ({
       onClick={onClose}
     >
       <div 
-        className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-slideUp border border-zinc-200 dark:border-zinc-700"
+        className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden animate-slideUp border border-zinc-200 dark:border-zinc-700 relative"
         onClick={(e) => e.stopPropagation()}
       >
+        
+        {/* DELETE CONFIRMATION OVERLAY */}
+        {deleteConfirm && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/80 dark:bg-black/80 backdrop-blur-sm animate-fadeIn">
+                <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-2xl border border-red-200 dark:border-red-800 p-6 max-w-md w-full animate-scaleIn">
+                    <div className="flex items-center gap-3 text-red-600 dark:text-red-500 mb-4">
+                        <AlertTriangle size={24} />
+                        <h3 className="text-lg font-bold">Potwierdź usunięcie</h3>
+                    </div>
+                    <p className="text-zinc-600 dark:text-zinc-300 text-sm mb-6">
+                        Czy na pewno chcesz trwale usunąć plik: <br/>
+                        <span className="font-mono font-bold text-zinc-900 dark:text-white block mt-1 break-all bg-zinc-100 dark:bg-zinc-800 p-2 rounded">{deleteConfirm}</span>
+                    </p>
+                    <div className="flex justify-end gap-3">
+                        <button 
+                            onClick={() => setDeleteConfirm(null)}
+                            className="px-4 py-2 rounded text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 text-sm font-bold"
+                        >
+                            Anuluj
+                        </button>
+                        <button 
+                            onClick={handleDeleteFile}
+                            className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white text-sm font-bold shadow-sm"
+                        >
+                            Usuń trwale
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800">
             <div className="flex flex-col">
@@ -308,7 +462,7 @@ export const ProjectManagerModal: React.FC<Props> = ({
                         <h3 className="text-xl font-bold text-zinc-700 dark:text-zinc-200">Wskaż folder projektów</h3>
                         <p className="text-zinc-500 dark:text-zinc-400 mt-2 max-w-lg mx-auto">
                             Wybierz folder sieciowy lub lokalny, w którym przechowywane są pliki `.json`. 
-                            Aplikacja przeskanuje pliki, aby umożliwić wyszukiwanie.
+                            Aplikacja przeskanuje pliki, aby umożliwić wyszukiwanie i grupowanie.
                         </p>
                     </div>
                     
@@ -334,34 +488,125 @@ export const ProjectManagerModal: React.FC<Props> = ({
             ) : (
                 <div className="flex flex-col h-full animate-fadeIn">
                     {/* Toolbar */}
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4 shrink-0">
-                         {/* Search Bar */}
-                         <div className="relative w-full md:max-w-md">
-                             <Search className="absolute left-3 top-2.5 text-zinc-400" size={18}/>
-                             <input 
-                                type="text" 
-                                placeholder="Szukaj: Klient, Nr Projektu, Nazwa pliku..." 
-                                className="w-full pl-10 p-2.5 border border-zinc-200 dark:border-zinc-700 rounded-xl bg-zinc-50 dark:bg-zinc-800 focus:border-yellow-400 outline-none text-sm shadow-sm"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                             />
+                    <div className="flex flex-col gap-2 mb-4 shrink-0 bg-white dark:bg-zinc-900 z-10">
+                         {/* Primary Bar */}
+                         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                             {/* Filters Group */}
+                             <div className="flex flex-col sm:flex-row gap-2 w-full xl:max-w-3xl">
+                                 <div className="relative flex-1">
+                                     <Search className="absolute left-3 top-2.5 text-zinc-400" size={16}/>
+                                     <input 
+                                        type="text" 
+                                        placeholder="Szukaj: Klient, Projekt, Plik..." 
+                                        className="w-full pl-9 p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg bg-zinc-50 dark:bg-zinc-800 focus:border-yellow-400 outline-none text-sm shadow-sm"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                     />
+                                 </div>
+                                 <button 
+                                    onClick={() => setShowFilters(!showFilters)}
+                                    className={`px-3 py-2 border rounded-lg flex items-center gap-2 text-sm font-bold transition-colors ${showFilters ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-zinc-50 border-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300'}`}
+                                 >
+                                     <ListFilter size={16}/> Filtry
+                                 </button>
+                             </div>
+
+                             {/* Actions Group */}
+                             <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto">
+                                 <div className="relative flex-1 sm:flex-none">
+                                    <PenLine className="absolute left-3 top-2.5 text-zinc-400" size={16}/>
+                                    <input 
+                                        type="text" 
+                                        placeholder="Dopisek (np. v2)"
+                                        className="w-full sm:w-32 pl-9 p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg bg-zinc-50 dark:bg-zinc-800 focus:border-yellow-400 outline-none text-sm h-[38px]"
+                                        value={filenameSuffix}
+                                        onChange={(e) => setFilenameSuffix(e.target.value)}
+                                        maxLength={20}
+                                    />
+                                 </div>
+                                 
+                                 <button 
+                                    onClick={handleSave}
+                                    className="bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900 px-4 py-2 rounded-lg font-bold hover:opacity-90 flex items-center justify-center gap-2 shadow-sm whitespace-nowrap text-sm h-[38px]"
+                                 >
+                                     <Save size={16}/> Zapisz
+                                 </button>
+
+                                 <button 
+                                    onClick={() => listFiles(currentDirHandle)}
+                                    className="p-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors border border-zinc-200 dark:border-zinc-700 h-[38px] w-[38px] flex items-center justify-center"
+                                    title="Odśwież i przeskanuj ponownie"
+                                 >
+                                     <RefreshCw size={16} className={isLoading || isScanning ? 'animate-spin' : ''}/>
+                                 </button>
+                             </div>
                          </div>
 
-                         <div className="flex gap-2 w-full md:w-auto">
-                             <button 
-                                onClick={() => listFiles(currentDirHandle)}
-                                className="p-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors border border-zinc-200 dark:border-zinc-700"
-                                title="Odśwież i przeskanuj ponownie"
-                             >
-                                 <RefreshCw size={18} className={isLoading || isScanning ? 'animate-spin' : ''}/>
-                             </button>
-                             <button 
-                                onClick={handleSave}
-                                className="flex-1 md:flex-none bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900 px-6 py-2.5 rounded-lg font-bold hover:opacity-90 flex items-center justify-center gap-2 shadow-sm"
-                             >
-                                 <Save size={18}/> Zapisz Projekt
-                             </button>
-                         </div>
+                         {/* Expanded Filters */}
+                         {showFilters && (
+                             <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg grid grid-cols-1 md:grid-cols-4 gap-4 animate-slideUp">
+                                 <div className="flex gap-2 items-center md:col-span-2 lg:col-span-1">
+                                    <span className="text-[10px] uppercase font-bold text-zinc-400">Data:</span>
+                                    <input 
+                                        type="date" 
+                                        className="p-1 border rounded text-xs bg-white dark:bg-zinc-900"
+                                        value={dateFrom}
+                                        onChange={(e) => setDateFrom(e.target.value)}
+                                    />
+                                    <span>-</span>
+                                    <input 
+                                        type="date" 
+                                        className="p-1 border rounded text-xs bg-white dark:bg-zinc-900"
+                                        value={dateTo}
+                                        onChange={(e) => setDateTo(e.target.value)}
+                                    />
+                                 </div>
+                                 <div>
+                                     <select 
+                                        className="w-full p-1.5 border rounded text-xs bg-white dark:bg-zinc-900"
+                                        value={filterStage}
+                                        onChange={(e) => setFilterStage(e.target.value)}
+                                     >
+                                         <option value="">Wszystkie Etapy</option>
+                                         <option value="DRAFT">Draft</option>
+                                         <option value="OPENING">Opening</option>
+                                         <option value="FINAL">Final</option>
+                                     </select>
+                                 </div>
+                                 <div>
+                                     <input 
+                                        list="filter-sales-list"
+                                        placeholder="Handlowiec..."
+                                        className="w-full p-1.5 border rounded text-xs bg-white dark:bg-zinc-900"
+                                        value={filterSales}
+                                        onChange={(e) => setFilterSales(e.target.value)}
+                                     />
+                                     <datalist id="filter-sales-list">
+                                         {SALES_PEOPLE.map((p, i) => <option key={i} value={p} />)}
+                                     </datalist>
+                                 </div>
+                                 <div>
+                                     <input 
+                                        list="filter-support-list"
+                                        placeholder="Wsparcie..."
+                                        className="w-full p-1.5 border rounded text-xs bg-white dark:bg-zinc-900"
+                                        value={filterSupport}
+                                        onChange={(e) => setFilterSupport(e.target.value)}
+                                     />
+                                     <datalist id="filter-support-list">
+                                         {SUPPORT_PEOPLE.map((p, i) => <option key={i} value={p} />)}
+                                     </datalist>
+                                 </div>
+                                 {(dateFrom || dateTo || filterStage || filterSales || filterSupport) && (
+                                     <button 
+                                        onClick={() => { setDateFrom(''); setDateTo(''); setFilterStage(''); setFilterSales(''); setFilterSupport(''); }}
+                                        className="text-xs text-red-500 hover:underline md:col-span-4 text-right"
+                                     >
+                                         Wyczyść filtry
+                                     </button>
+                                 )}
+                             </div>
+                         )}
                     </div>
 
                     {/* Scanning Progress Bar */}
@@ -377,81 +622,115 @@ export const ProjectManagerModal: React.FC<Props> = ({
                         </div>
                     )}
 
-                    {/* File List */}
-                    <div className="flex-1 overflow-y-auto border border-zinc-200 dark:border-zinc-700 rounded-xl bg-white dark:bg-zinc-900 shadow-inner custom-scrollbar">
-                        {files.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-zinc-400 italic">
-                                {isLoading ? <Loader2 className="animate-spin mb-2" size={24}/> : <FileJson size={32} className="mb-2 opacity-50"/>}
-                                {isLoading ? 'Wczytywanie listy...' : 'Brak plików .json w tym folderze.'}
+                    {/* Hierarchy List */}
+                    <div className="flex-1 overflow-y-auto rounded-lg bg-transparent custom-scrollbar space-y-6 pr-2 pb-4">
+                        {files.length === 0 && !isLoading && (
+                            <div className="flex flex-col items-center justify-center h-full text-zinc-400 italic bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-700">
+                                <FileJson size={32} className="mb-2 opacity-50"/>
+                                Brak plików .json w tym folderze.
                             </div>
-                        ) : filteredFiles.length === 0 ? (
-                             <div className="flex flex-col items-center justify-center h-full text-zinc-400 italic">
-                                Brak wyników dla "{searchTerm}".
-                            </div>
-                        ) : (
-                            <table className="w-full text-left border-collapse">
-                                <thead className="bg-zinc-50 dark:bg-zinc-800/80 text-zinc-500 sticky top-0 z-10 text-[10px] uppercase font-bold tracking-wider backdrop-blur-sm">
-                                    <tr>
-                                        <th className="p-3 border-b dark:border-zinc-700 pl-4">Nazwa Pliku</th>
-                                        <th className="p-3 border-b dark:border-zinc-700 w-1/4"><div className="flex items-center gap-1"><Hash size={12}/> Nr Projektu</div></th>
-                                        <th className="p-3 border-b dark:border-zinc-700 w-1/4"><div className="flex items-center gap-1"><User size={12}/> Klient</div></th>
-                                        <th className="p-3 border-b dark:border-zinc-700 w-32 text-right"><div className="flex items-center justify-end gap-1"><Calendar size={12}/> Data</div></th>
-                                        <th className="p-3 border-b dark:border-zinc-700 w-24"></th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                                    {filteredFiles.map((file, idx) => {
-                                        const meta = fileMetadata[file.name];
-                                        return (
-                                            <tr 
-                                                key={file.name} 
-                                                className="hover:bg-yellow-50 dark:hover:bg-yellow-900/10 group transition-colors cursor-pointer"
-                                                onClick={() => handleLoad(file.handle)}
-                                            >
-                                                <td className="p-3 pl-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded text-zinc-400 group-hover:text-yellow-600 transition-colors">
-                                                            <FileJson size={18}/>
-                                                        </div>
-                                                        <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200 group-hover:text-zinc-900 dark:group-hover:text-white truncate max-w-[250px]">
-                                                            {file.name}
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                                <td className="p-3 text-sm text-zinc-600 dark:text-zinc-400">
-                                                    {meta ? (
-                                                        <span className="font-mono bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-xs">{meta.projectNumber}</span>
-                                                    ) : (
-                                                        <div className="h-4 w-16 bg-zinc-100 dark:bg-zinc-800 rounded animate-pulse"></div>
-                                                    )}
-                                                </td>
-                                                <td className="p-3 text-sm text-zinc-600 dark:text-zinc-400">
-                                                    {meta ? (
-                                                        <span className="truncate block max-w-[200px]">{meta.clientName}</span>
-                                                    ) : (
-                                                        <div className="h-4 w-24 bg-zinc-100 dark:bg-zinc-800 rounded animate-pulse"></div>
-                                                    )}
-                                                </td>
-                                                <td className="p-3 text-right text-xs text-zinc-500 font-mono">
-                                                    {file.date.toLocaleDateString()} <span className="text-zinc-300">|</span> {file.date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                                </td>
-                                                <td className="p-3 text-right pr-4">
-                                                    <button 
-                                                        onClick={(e) => { e.stopPropagation(); handleLoad(file.handle); }}
-                                                        className="px-3 py-1.5 bg-white border border-zinc-200 hover:border-yellow-400 hover:text-yellow-600 dark:bg-zinc-800 dark:border-zinc-700 dark:hover:border-yellow-500 dark:text-zinc-300 rounded text-xs font-bold transition-all shadow-sm"
-                                                    >
-                                                        Wczytaj
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
                         )}
-                    </div>
-                    <div className="text-right text-[10px] text-zinc-400 mt-2 px-1">
-                        Wyświetlono {filteredFiles.length} z {files.length} plików.
+                        
+                        {groupedHierarchy.length === 0 && files.length > 0 && (
+                             <div className="flex flex-col items-center justify-center h-full text-zinc-400 italic bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-700">
+                                Brak wyników dla obecnych filtrów.
+                            </div>
+                        )}
+
+                        {groupedHierarchy.map(clientGroup => (
+                            <div key={clientGroup.clientName} className="animate-fadeIn">
+                                {/* LEVEL 1: CLIENT HEADER */}
+                                <div className="flex items-center gap-3 mb-2 sticky top-0 bg-zinc-100 dark:bg-black/90 backdrop-blur-sm z-10 py-2 border-b-2 border-zinc-300 dark:border-zinc-700">
+                                    <div className="bg-zinc-800 dark:bg-zinc-100 text-white dark:text-black p-1.5 rounded-md shadow-sm">
+                                        <User size={16} />
+                                    </div>
+                                    <h3 className="text-base font-bold text-zinc-900 dark:text-white uppercase tracking-tight">
+                                        {clientGroup.clientName}
+                                    </h3>
+                                    <span className="text-xs text-zinc-400 font-normal">({clientGroup.projects.length} projekty)</span>
+                                </div>
+
+                                <div className="space-y-4 pl-2 border-l-2 border-zinc-200 dark:border-zinc-800 ml-3">
+                                    {clientGroup.projects.map(projectGroup => (
+                                        <div key={projectGroup.projectNum} className="bg-white dark:bg-zinc-900 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+                                            {/* LEVEL 2: PROJECT HEADER */}
+                                            <div className="bg-zinc-50 dark:bg-zinc-800/50 p-3 flex justify-between items-center border-b border-zinc-100 dark:border-zinc-700">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="bg-white dark:bg-zinc-900 px-2 py-1 rounded border border-zinc-200 dark:border-zinc-600 text-xs font-mono font-bold text-zinc-700 dark:text-zinc-200 flex items-center gap-2">
+                                                        <Hash size={12} className="text-zinc-400"/>
+                                                        {projectGroup.projectNum}
+                                                    </div>
+                                                </div>
+                                                <div className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">
+                                                    {projectGroup.files.length} wersji
+                                                </div>
+                                            </div>
+
+                                            {/* LEVEL 3: FILES TABLE */}
+                                            <table className="w-full text-left border-collapse">
+                                                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
+                                                    {projectGroup.files.map(file => {
+                                                        const meta = fileMetadata[file.name];
+                                                        let statusColor = 'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300';
+                                                        let statusLabel = 'DRAFT';
+                                                        
+                                                        if (meta?.stage === 'OPENING') {
+                                                            statusColor = 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-900';
+                                                            statusLabel = 'OPENING';
+                                                        } else if (meta?.stage === 'FINAL') {
+                                                            statusColor = 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200 dark:border-purple-900';
+                                                            statusLabel = 'FINAL';
+                                                        }
+
+                                                        return (
+                                                            <tr 
+                                                                key={file.name} 
+                                                                className="hover:bg-yellow-50 dark:hover:bg-yellow-900/10 group transition-colors cursor-pointer"
+                                                                onClick={() => handleLoad(file.handle)}
+                                                            >
+                                                                <td className="p-2 pl-4 w-24 align-top">
+                                                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded shadow-sm ${statusColor}`}>
+                                                                        {statusLabel}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="p-2 align-top">
+                                                                    <div className="text-sm font-medium text-zinc-700 dark:text-zinc-200 group-hover:text-zinc-900 dark:group-hover:text-white break-all leading-snug">
+                                                                        {file.name}
+                                                                    </div>
+                                                                    {/* Show metadata preview in advanced view mode implicitly */}
+                                                                    <div className="text-[10px] text-zinc-400 mt-0.5 flex gap-2">
+                                                                        {meta?.salesPerson && <span>H: {meta.salesPerson}</span>}
+                                                                        {meta?.assistantPerson && <span>W: {meta.assistantPerson}</span>}
+                                                                    </div>
+                                                                </td>
+                                                                <td className="p-2 text-right text-xs text-zinc-500 font-mono w-48 whitespace-nowrap align-top">
+                                                                    {file.date.toLocaleDateString()} <span className="text-zinc-300 mx-1">|</span> {file.date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                                </td>
+                                                                <td className="p-2 pr-4 w-24 align-top flex justify-end gap-2">
+                                                                    <button 
+                                                                        onClick={(e) => { e.stopPropagation(); setDeleteConfirm(file.name); }}
+                                                                        className="p-1 text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                                                        title="Usuń plik"
+                                                                    >
+                                                                        <Trash2 size={14}/>
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={(e) => { e.stopPropagation(); handleLoad(file.handle); }}
+                                                                        className="px-3 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:border-yellow-400 hover:text-yellow-600 dark:hover:border-yellow-500 dark:text-zinc-300 rounded text-xs font-bold transition-all shadow-sm opacity-0 group-hover:opacity-100"
+                                                                    >
+                                                                        Wczytaj
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             )}
