@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { OtherCostItem, Currency, VariantItemType, SheetRow } from '../types';
-import { Receipt, Plus, Trash2, ChevronDown, Calculator, Grid3X3, Eraser, Check, X, ArrowRight, ArrowDown as ArrowDownIcon, RefreshCw, Copy, Clipboard } from 'lucide-react';
+import { Receipt, Plus, Trash2, ChevronDown, Calculator, Grid3X3, Eraser, Check, X, ArrowRight, ArrowDown as ArrowDownIcon, RefreshCw, Copy, Clipboard, ClipboardCheck, AlertTriangle } from 'lucide-react';
 import { convert, formatCurrency } from '../services/calculationService';
+import { SmartInput } from './SmartInput';
+import { EmptyState } from './EmptyState';
 
 interface Props {
   costs: OtherCostItem[];
@@ -13,6 +15,7 @@ interface Props {
   offerCurrency: Currency;
   isPickingMode?: boolean;
   onPick?: (item: { id: string, type: VariantItemType, label: string }, origin?: {x: number, y: number}) => void;
+  totalPalletSpots?: number; // New prop for IBL calculation
 }
 
 // --- HELPER FUNCTIONS ---
@@ -134,11 +137,25 @@ const adjustFormula = (formula: string, rowOffset: number, colOffset: number): s
 
 export const OtherCostsSection: React.FC<Props> = ({ 
     costs, onChange, exchangeRate, offerCurrency,
-    isPickingMode, onPick
+    isPickingMode, onPick,
+    totalPalletSpots = 0
 }) => {
   const [isOpen, setIsOpen] = useState(false); 
   const [activeCostIdForEditing, setActiveCostIdForEditing] = useState<string | null>(null);
   const [isSheetVisible, setIsSheetVisible] = useState(false);
+
+  // IBL State
+  const [iblCount, setIblCount] = useState(1);
+  const [iblRate, setIblRate] = useState(660); // Default flat rate per inspection
+
+  // Update IBL Rate based on pallet spots threshold
+  useEffect(() => {
+      if (totalPalletSpots >= 1000) {
+          setIblRate(750);
+      } else {
+          setIblRate(660);
+      }
+  }, [totalPalletSpots]);
 
   // --- SHEET STATE ---
   const [columns, setColumns] = useState<string[]>(['A', 'B', 'C', 'D']);
@@ -214,6 +231,18 @@ export const OtherCostsSection: React.FC<Props> = ({
     const updated = [...costs];
     updated[index] = { ...updated[index], [field]: value };
     onChange(updated);
+  };
+
+  const handleAddIblCost = () => {
+      if (totalPalletSpots <= 0) return;
+      // Logic: Rate per inspection * Number of inspections
+      const calculatedValue = iblRate * iblCount;
+      onChange([...costs, {
+          id: Math.random().toString(36).substr(2, 9),
+          description: `Przegląd IBL (${totalPalletSpots} m.p. - ${iblCount}x)`,
+          price: calculatedValue,
+          currency: Currency.PLN
+      }]);
   };
 
   // --- SHEET ACTIONS ---
@@ -858,84 +887,150 @@ export const OtherCostsSection: React.FC<Props> = ({
                 )}
 
                 {/* COSTS LIST */}
-                <div className="overflow-x-auto min-h-[100px] border border-zinc-100 dark:border-zinc-800 mb-6">
-                    <table className="w-full text-left border-collapse min-w-[600px]">
-                        <thead>
-                            <tr>
-                                <th className="p-2 bg-zinc-100/50 dark:bg-zinc-800 text-zinc-500 font-bold uppercase text-[10px] w-10 text-center">#</th>
-                                <th className="p-2 bg-zinc-100/50 dark:bg-zinc-800 text-zinc-500 font-bold uppercase text-[10px] text-left">Opis kosztu</th>
-                                <th className="p-2 bg-zinc-100/50 dark:bg-zinc-800 text-zinc-500 font-bold uppercase text-[10px] text-right w-32">Wartość</th>
-                                <th className="p-2 bg-zinc-100/50 dark:bg-zinc-800 text-zinc-500 font-bold uppercase text-[10px] w-24 text-center">Waluta</th>
-                                <th className="p-2 bg-zinc-100/50 dark:bg-zinc-800 text-zinc-500 font-bold uppercase text-[10px] w-16"></th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white dark:bg-zinc-950">
-                            {costs.length === 0 && (
+                <div className="overflow-x-auto min-h-[150px] border border-zinc-100 dark:border-zinc-800 mb-6 flex flex-col">
+                    {costs.length === 0 ? (
+                        <div className="flex-1 flex items-center justify-center bg-zinc-50/30 dark:bg-zinc-900/30 py-8">
+                            <EmptyState 
+                                icon={Receipt}
+                                title="Brak Innych Kosztów"
+                                description="Brak dodatkowych kosztów (hotele, delegacje itp.)."
+                                action={{
+                                    label: "Dodaj koszt",
+                                    onClick: addCost,
+                                    icon: Plus
+                                }}
+                            />
+                        </div>
+                    ) : (
+                        <table className="w-full text-left border-collapse min-w-[600px]">
+                            <thead>
                                 <tr>
-                                    <td colSpan={5} className="p-6 text-center text-zinc-400 italic text-xs">Brak dodatkowych kosztów.</td>
+                                    <th className="p-2 bg-zinc-100/50 dark:bg-zinc-800 text-zinc-500 font-bold uppercase text-[10px] w-10 text-center">#</th>
+                                    <th className="p-2 bg-zinc-100/50 dark:bg-zinc-800 text-zinc-500 font-bold uppercase text-[10px] text-left">Opis kosztu</th>
+                                    <th className="p-2 bg-zinc-100/50 dark:bg-zinc-800 text-zinc-500 font-bold uppercase text-[10px] text-right w-32">Wartość</th>
+                                    <th className="p-2 bg-zinc-100/50 dark:bg-zinc-800 text-zinc-500 font-bold uppercase text-[10px] w-24 text-center">Waluta</th>
+                                    <th className="p-2 bg-zinc-100/50 dark:bg-zinc-800 text-zinc-500 font-bold uppercase text-[10px] w-16"></th>
                                 </tr>
-                            )}
-                            {costs.map((cost, idx) => (
-                                <tr 
-                                    key={cost.id} 
-                                    className={`${pickingClass} transition-colors`}
-                                    onClick={(e) => handlePick(e, cost)}
-                                >
-                                    <td className="p-2 border-b border-zinc-50 dark:border-zinc-800/50 text-xs text-center text-zinc-400">{idx + 1}</td>
-                                    <td className="p-2 border-b border-zinc-50 dark:border-zinc-800/50 text-xs">
-                                        <input 
-                                            type="text" 
-                                            placeholder="np. Hotel, Paliwo" 
-                                            className="w-full bg-transparent border-none outline-none font-medium" 
-                                            value={cost.description} 
-                                            onChange={(e) => updateCost(idx, 'description', e.target.value)} 
-                                            onClick={(e) => e.stopPropagation()}
-                                        />
-                                    </td>
-                                    <td className="p-2 border-b border-zinc-50 dark:border-zinc-800/50 text-xs relative group">
-                                        {cost.attachedSheet ? (
-                                            <div className="flex items-center justify-end gap-2 h-full">
-                                                <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200 cursor-default" title="Wartość z arkusza">{cost.price.toFixed(2)}</span>
-                                                <button 
-                                                    onClick={(e) => { e.stopPropagation(); editCostSheet(cost); }}
-                                                    className="p-1 text-green-600 bg-green-50 dark:bg-green-900/20 rounded hover:bg-green-100 transition-colors"
-                                                    title="Edytuj Obliczenia (Arkusz)"
-                                                >
-                                                    <Calculator size={14}/>
-                                                </button>
-                                            </div>
-                                        ) : (
+                            </thead>
+                            <tbody className="bg-white dark:bg-zinc-950">
+                                {costs.map((cost, idx) => (
+                                    <tr 
+                                        key={cost.id} 
+                                        className={`${pickingClass} transition-colors`}
+                                        onClick={(e) => handlePick(e, cost)}
+                                    >
+                                        <td className="p-2 border-b border-zinc-50 dark:border-zinc-800/50 text-xs text-center text-zinc-400">{idx + 1}</td>
+                                        <td className="p-2 border-b border-zinc-50 dark:border-zinc-800/50 text-xs">
                                             <input 
-                                                type="number" 
-                                                min="0" 
-                                                step="0.01" 
-                                                className="w-full text-right bg-transparent border-none outline-none font-mono font-bold focus:bg-zinc-100 dark:focus:bg-zinc-800 rounded p-1" 
-                                                value={cost.price} 
-                                                onChange={(e) => updateCost(idx, 'price', parseFloat(e.target.value) || 0)} 
+                                                type="text" 
+                                                placeholder="np. Hotel, Paliwo" 
+                                                className="w-full bg-transparent border-none outline-none font-medium" 
+                                                value={cost.description} 
+                                                onChange={(e) => updateCost(idx, 'description', e.target.value)} 
                                                 onClick={(e) => e.stopPropagation()}
                                             />
-                                        )}
-                                    </td>
-                                    <td className="p-2 border-b border-zinc-50 dark:border-zinc-800/50 text-xs">
-                                        <select 
-                                            className="w-full bg-transparent border-none outline-none text-center cursor-pointer" 
-                                            value={cost.currency} 
-                                            onChange={(e) => updateCost(idx, 'currency', e.target.value)} 
-                                            onClick={(e) => e.stopPropagation()}
-                                        >
-                                            <option value={Currency.PLN}>PLN</option>
-                                            <option value={Currency.EUR}>EUR</option>
-                                        </select>
-                                    </td>
-                                    <td className="p-2 border-b border-zinc-50 dark:border-zinc-800/50 text-xs text-center">
-                                        <button onClick={(e) => { e.stopPropagation(); removeCost(idx); }} className="p-1 rounded text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                                            <Trash2 size={12}/>
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                                        </td>
+                                        <td className="p-2 border-b border-zinc-50 dark:border-zinc-800/50 text-xs relative group">
+                                            {cost.attachedSheet ? (
+                                                <div className="flex items-center justify-end gap-2 h-full">
+                                                    <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200 cursor-default" title="Wartość z arkusza">{cost.price.toFixed(2)}</span>
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); editCostSheet(cost); }}
+                                                        className="p-1 text-green-600 bg-green-50 dark:bg-green-900/20 rounded hover:bg-green-100 transition-colors"
+                                                        title="Edytuj Obliczenia (Arkusz)"
+                                                    >
+                                                        <Calculator size={14}/>
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <SmartInput 
+                                                    className="w-full text-right bg-transparent border-none outline-none font-mono font-bold focus:bg-zinc-100 dark:focus:bg-zinc-800 rounded p-1" 
+                                                    value={cost.price} 
+                                                    onChange={(val) => updateCost(idx, 'price', val)} 
+                                                    onClick={(e) => e.stopPropagation()}
+                                                />
+                                            )}
+                                        </td>
+                                        <td className="p-2 border-b border-zinc-50 dark:border-zinc-800/50 text-xs">
+                                            <select 
+                                                className="w-full bg-transparent border-none outline-none text-center cursor-pointer" 
+                                                value={cost.currency} 
+                                                onChange={(e) => updateCost(idx, 'currency', e.target.value)} 
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <option value={Currency.PLN}>PLN</option>
+                                                <option value={Currency.EUR}>EUR</option>
+                                            </select>
+                                        </td>
+                                        <td className="p-2 border-b border-zinc-50 dark:border-zinc-800/50 text-xs text-center">
+                                            <button onClick={(e) => { e.stopPropagation(); removeCost(idx); }} className="p-1 rounded text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                                                <Trash2 size={12}/>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+
+                {/* IBL CALCULATOR */}
+                <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700 p-4 rounded-sm mb-4">
+                    <div className="flex items-center gap-2 mb-3 text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wide">
+                        <ClipboardCheck size={14} className="text-amber-500"/> Kalkulator Przeglądów IBL
+                    </div>
+                    
+                    <div className="flex flex-wrap items-end gap-4">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] text-zinc-400 font-bold uppercase mb-1">Miejsca Paletowe</span>
+                            <div className={`h-8 px-3 flex items-center bg-zinc-200 dark:bg-zinc-800 rounded-sm font-mono text-xs font-bold ${totalPalletSpots === 0 ? 'text-red-500 border border-red-300' : 'text-zinc-700 dark:text-zinc-300'}`}>
+                                {totalPalletSpots}
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col w-32">
+                            <label className="text-[10px] text-zinc-400 font-bold uppercase mb-1">Liczba Przeglądów</label>
+                            <input 
+                                type="number" 
+                                min="1" 
+                                className="h-8 w-full p-2 text-xs border border-zinc-300 dark:border-zinc-600 rounded-sm bg-white dark:bg-zinc-800 focus:border-amber-400 outline-none text-center font-bold"
+                                value={iblCount}
+                                onChange={(e) => setIblCount(Math.max(1, parseInt(e.target.value) || 1))}
+                            />
+                        </div>
+
+                        <div className="flex flex-col w-32">
+                            <label className="text-[10px] text-zinc-400 font-bold uppercase mb-1">Stawka za przegląd</label>
+                            <div className="relative">
+                                <SmartInput 
+                                    className="h-8 w-full p-2 text-xs border border-zinc-300 dark:border-zinc-600 rounded-sm bg-white dark:bg-zinc-800 focus:border-amber-400 outline-none text-right font-bold pr-8"
+                                    value={iblRate}
+                                    onChange={setIblRate}
+                                />
+                                <span className="absolute right-2 top-2 text-[10px] text-zinc-400 font-bold">PLN</span>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 text-right">
+                            <div className="text-[10px] text-zinc-400 font-bold uppercase mb-1">Razem</div>
+                            <div className="font-mono text-xl font-bold text-zinc-800 dark:text-white">
+                                {formatCurrency(iblRate * iblCount, 'PLN')}
+                            </div>
+                        </div>
+
+                        <button 
+                            onClick={handleAddIblCost}
+                            disabled={totalPalletSpots <= 0}
+                            className="h-8 px-4 bg-amber-500 hover:bg-amber-600 disabled:bg-zinc-300 disabled:cursor-not-allowed text-white text-xs font-bold rounded-sm flex items-center gap-2 transition-colors shadow-sm"
+                        >
+                            <Plus size={14}/> Dodaj Koszt IBL
+                        </button>
+                    </div>
+                    {totalPalletSpots === 0 && (
+                        <div className="mt-2 text-[10px] text-red-500 flex items-center gap-1 font-bold animate-pulse">
+                            <AlertTriangle size={12}/> Uzupełnij liczbę miejsc paletowych w sekcji Montaż!
+                        </div>
+                    )}
                 </div>
 
             </div>

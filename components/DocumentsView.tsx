@@ -1,4 +1,6 @@
 
+
+
 import React from 'react';
 import { CalculationData, SupplierStatus, AppState, CalculationMode } from '../types';
 import { FileText, Mail, Printer, Copy, CheckCircle, ArrowLeft, Send, CheckCircle2, Lock } from 'lucide-react';
@@ -156,7 +158,7 @@ ${data.meta.salesPerson || 'Handlowiec'}
   const ormFee = appState.globalSettings.ormFeePercent;
   
   // Costs based on CURRENT mode (data provided)
-  const finalCosts = calculateProjectCosts(data, rate, currency, appState.mode, ormFee);
+  const finalCosts = calculateProjectCosts(data, rate, currency, appState.mode, ormFee, appState.targetMargin, appState.manualPrice);
   const totalFinalCost = finalCosts.total;
 
   let sellingPrice = 0;

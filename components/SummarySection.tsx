@@ -1,9 +1,12 @@
 
+
+
 import React, { useState } from 'react';
 import { CalculationData, Currency, AppState, CalculationMode, EMPTY_PAYMENT_TERMS, PaymentTerms } from '../types';
 import { RefreshCw, Unlock, DollarSign, ToggleLeft, ToggleRight, AlertTriangle, AlertOctagon } from 'lucide-react';
 import { fetchEurRate } from '../services/currencyService';
 import { calculateProjectCosts, formatCurrency, formatNumber } from '../services/calculationService';
+import { SmartInput } from './SmartInput';
 
 interface Props {
   appState: AppState;
@@ -13,7 +16,6 @@ interface Props {
 
 export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [tempPrice, setTempPrice] = useState("");
   const [isEditingPrice, setIsEditingPrice] = useState(false);
   // Specific override toggle for invoice currency payment
   const [paymentInPln, setPaymentInPln] = useState(false);
@@ -22,7 +24,7 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
   const rate = appState.exchangeRate;
   const ormFee = appState.globalSettings.ormFeePercent;
 
-  const costs = calculateProjectCosts(data, rate, targetCurrency, appState.mode, ormFee);
+  const costs = calculateProjectCosts(data, rate, targetCurrency, appState.mode, ormFee, appState.targetMargin, appState.manualPrice);
   const totalCost = costs.total;
   
   let sellingPrice = 0; 
@@ -84,23 +86,12 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
     setIsRefreshing(false);
   };
 
-  const handleFinalPriceBlur = () => {
-      setIsEditingPrice(false);
-      const newPrice = parseFloat(tempPrice);
-      if (!isNaN(newPrice)) onUpdateState({ manualPrice: newPrice });
-  };
-
   const handleMarginChange = (newMargin: number) => {
       onUpdateState({ targetMargin: newMargin, manualPrice: null });
   };
 
   const handlePriceFocus = () => {
       setIsEditingPrice(true);
-      setTempPrice(sellingPrice.toFixed(2));
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter') e.currentTarget.blur();
   };
 
   const isFinalMode = appState.mode === CalculationMode.FINAL;
@@ -295,13 +286,11 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                   </span>
                   <div className="flex flex-col items-start gap-1 mb-2">
                       {isEditingPrice ? (
-                          <input 
-                              type="number" 
+                          <SmartInput 
                               className="bg-transparent text-4xl font-mono font-bold text-amber-500 outline-none w-full border-b border-transparent focus:border-amber-500 transition-colors"
-                              value={tempPrice}
-                              onChange={(e) => setTempPrice(e.target.value)}
-                              onBlur={handleFinalPriceBlur}
-                              onKeyDown={handleKeyDown}
+                              value={sellingPrice}
+                              onChange={(val) => onUpdateState({ manualPrice: val })}
+                              onBlur={() => setIsEditingPrice(false)}
                               autoFocus
                           />
                       ) : (

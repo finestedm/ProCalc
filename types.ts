@@ -1,6 +1,5 @@
 
 
-
 export enum Currency {
   PLN = 'PLN',
   EUR = 'EUR'
@@ -50,8 +49,14 @@ export interface ProjectMeta {
   protocolDate: string;
   projectNumber: string;
   sapProjectNumber: string;
-  salesPerson: string;
-  assistantPerson: string;
+  salesPerson: string; // Now "Inżynier"
+  assistantPerson: string; // Now "Specjalista"
+  actualSalesPerson?: string; // "Handlowiec 1"
+  actualSalesPersonPercentage?: number; // % share
+  actualSalesPerson2?: string; // "Handlowiec 2"
+  actualSalesPerson2Percentage?: number; // % share
+  installationType?: string; 
+  invoiceText?: string;      
 }
 
 export interface SupplierItem {
@@ -75,6 +80,7 @@ export interface Supplier {
   deliveryDate: string;
   currency: Currency;
   discount: number;
+  extraMarkupPercent?: number; // New field for manual +/- adjustment
   language: Language;
   items: SupplierItem[];
   isOrm?: boolean;
@@ -199,12 +205,14 @@ export interface InstallationStage {
 
   // Equipment & Custom Items (Per Stage)
   forkliftDailyRate: number; 
-  forkliftDays: number;      
+  forkliftDays: number;
+  forkliftStartOffset?: number; // Days after stage start
   forkliftTransportPrice: number;
   forkliftProvider?: string;
 
   scissorLiftDailyRate: number; 
-  scissorLiftDays: number;      
+  scissorLiftDays: number;
+  scissorLiftStartOffset?: number; // Days after stage start
   scissorLiftTransportPrice: number;
   scissorLiftProvider?: string;
 
@@ -216,18 +224,42 @@ export interface InstallationStage {
 
   // Variant Exclusion Flags
   isExcluded?: boolean;
+
+  // Scheduling (Gantt)
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface CustomTimelineItem {
+    id: string;
+    name: string;
+    startDate: string;
+    endDate: string;
+}
+
+export interface Dependency {
+    id: string;
+    fromId: string;
+    toId: string;
+    type: 'finish-to-start'; // Extensible for later
 }
 
 export interface InstallationData {
   calcMethod?: InstallationCalcMethod; // Legacy/Global switch (kept for types compatibility if needed)
   
   stages: InstallationStage[]; 
+  customTimelineItems: CustomTimelineItem[]; // Manual items on Gantt
+  dependencies: Dependency[]; // Links between stages/items
 
   // Global fields (Legacy or General Ryczałt)
   otherInstallationCosts: number;
   
   finalCostOverride?: number; // Legacy global override (backwards compatibility)
   finalInstallationCosts?: FinalInstallationItem[]; // Granular final costs
+
+  // Planning Dates (Logistics)
+  plannedStart?: string;
+  plannedEnd?: string;
 
   // Legacy fields (kept to avoid immediate breaking, though logic moves to stages)
   palletSpots: number; 
@@ -252,6 +284,10 @@ export interface ProjectTask {
   id: string;
   text: string;
   isCompleted: boolean;
+  dueDate?: string; // YYYY-MM-DD
+  linkedItemId?: string; // ID of the Gantt row (Stage, Supplier, etc.)
+  linkedItemType?: string; // Type of linked item
+  reminderShown?: boolean; // Track if notification was triggered
 }
 
 // --- VARIANTS SYSTEM ---
@@ -308,12 +344,14 @@ export interface AppState {
   initial: CalculationData;
   final: CalculationData;
   mode: CalculationMode;
+  stage: ProjectStage; // Added Stage Tracking
   viewMode: ViewMode;
   exchangeRate: number;
   offerCurrency: Currency; 
   clientCurrency: Currency; 
   targetMargin: number;
-  manualPrice: number | null;
+  manualPrice: number | null; // For Initial Calculation override
+  finalManualPrice: number | null; // For Final Calculation override
   globalSettings: GlobalSettings;
 }
 
@@ -334,17 +372,32 @@ export interface ProjectFile {
   future: AppState[];
 }
 
+// Cost Breakdown including new Financing field
+export interface CostBreakdown {
+    suppliers: number;
+    transport: number;
+    other: number;
+    installation: number;
+    ormFee: number;
+    financing: number; // New Field: Koszty finansowania
+    total: number;
+    excluded: number;
+}
+
 export const EMPTY_ADDRESS: AddressData = {
   name: '', street: '', city: '', zip: '', nip: '', clientId: '', projectId: '', email: '', phone: '', contactPerson: ''
 };
 
 export const EMPTY_META: ProjectMeta = {
-  orderNumber: '', orderDate: '', protocolDate: '', projectNumber: '', sapProjectNumber: '', salesPerson: '', assistantPerson: ''
+  orderNumber: '', orderDate: '', protocolDate: '', projectNumber: '', sapProjectNumber: '', salesPerson: '', assistantPerson: '', actualSalesPerson: '', actualSalesPersonPercentage: 100, actualSalesPerson2: '', actualSalesPerson2Percentage: 0,
+  installationType: '', invoiceText: ''
 };
 
 export const EMPTY_INSTALLATION: InstallationData = {
   calcMethod: 'PALLETS',
   stages: [],
+  customTimelineItems: [],
+  dependencies: [],
   palletSpots: 0, 
   palletSpotPrice: 0, 
   palletSpotsPerDay: 0,

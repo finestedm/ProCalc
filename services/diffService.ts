@@ -33,6 +33,9 @@ export const generateDiff = (oldState: AppState, newState: AppState): string[] =
                 changes.push(`${labelPrefix}Dodano dostawcę: ${newS.name}`);
             } else {
                 if (oldS.discount !== newS.discount) changes.push(`${labelPrefix}Rabat dostawcy ${newS.name}: ${oldS.discount}% -> ${newS.discount}%`);
+                if (oldS.extraMarkupPercent !== newS.extraMarkupPercent) changes.push(`${labelPrefix}Korekta dostawcy ${newS.name}: ${oldS.extraMarkupPercent || 0}% -> ${newS.extraMarkupPercent || 0}%`);
+                if (oldS.deliveryDate !== newS.deliveryDate) changes.push(`${labelPrefix}Zmiana daty dostawy ${newS.name}: ${newS.deliveryDate}`);
+                if (oldS.notes !== newS.notes) changes.push(`${labelPrefix}Zmiana uwag dla ${newS.name}`);
                 if (oldS.isIncluded !== newS.isIncluded) changes.push(`${labelPrefix}${newS.isIncluded ? 'Włączono' : 'Wyłączono'} dostawcę: ${newS.name}`);
                 
                 // Items
@@ -66,6 +69,7 @@ export const generateDiff = (oldState: AppState, newState: AppState): string[] =
                 if (oldT) {
                     if (oldT.trucksCount !== newT.trucksCount) changes.push(`${labelPrefix}Zmiana ilości aut: ${oldT.trucksCount} -> ${newT.trucksCount}`);
                     if (oldT.pricePerTruck !== newT.pricePerTruck) changes.push(`${labelPrefix}Zmiana ceny transp.: ${oldT.pricePerTruck} -> ${newT.pricePerTruck}`);
+                    if (oldT.currency !== newT.currency) changes.push(`${labelPrefix}Zmiana waluty transp.: ${oldT.currency} -> ${newT.currency}`);
                 }
             });
         }
@@ -77,7 +81,10 @@ export const generateDiff = (oldState: AppState, newState: AppState): string[] =
         } else {
             newD.otherCosts.forEach(newC => {
                 const oldC = oldD.otherCosts.find(c => c.id === newC.id);
-                if (oldC && oldC.price !== newC.price) changes.push(`${labelPrefix}Zmiana kosztu [${newC.description}]: ${oldC.price} -> ${newC.price}`);
+                if (oldC) {
+                    if (oldC.price !== newC.price) changes.push(`${labelPrefix}Zmiana kosztu [${newC.description}]: ${oldC.price} -> ${newC.price}`);
+                    if (oldC.description !== newC.description) changes.push(`${labelPrefix}Zmiana opisu kosztu: ${newC.description}`);
+                }
             });
         }
 
@@ -89,10 +96,14 @@ export const generateDiff = (oldState: AppState, newState: AppState): string[] =
                 const oldSt = oldD.installation.stages.find(s => s.id === newSt.id);
                 if (oldSt) {
                     if (oldSt.palletSpots !== newSt.palletSpots) changes.push(`${labelPrefix}Zmiana m.p. [${newSt.name}]: ${oldSt.palletSpots} -> ${newSt.palletSpots}`);
-                    if (oldSt.calculatedCost !== newSt.calculatedCost) {
-                        // More granular?
-                        if(oldSt.installersCount !== newSt.installersCount) changes.push(`${labelPrefix}Zmiana ekipy [${newSt.name}]: ${oldSt.installersCount} -> ${newSt.installersCount}`);
-                    }
+                    if (oldSt.palletSpotPrice !== newSt.palletSpotPrice) changes.push(`${labelPrefix}Zmiana stawki m.p. [${newSt.name}]: ${oldSt.palletSpotPrice} -> ${newSt.palletSpotPrice}`);
+                    
+                    if(oldSt.installersCount !== newSt.installersCount) changes.push(`${labelPrefix}Zmiana ekipy [${newSt.name}]: ${oldSt.installersCount} -> ${newSt.installersCount}`);
+                    if(oldSt.workDayHours !== newSt.workDayHours) changes.push(`${labelPrefix}Zmiana godzin [${newSt.name}]: ${oldSt.workDayHours} -> ${newSt.workDayHours}`);
+                    if(oldSt.manDayRate !== newSt.manDayRate) changes.push(`${labelPrefix}Zmiana stawki roboczogodziny [${newSt.name}]: ${oldSt.manDayRate} -> ${newSt.manDayRate}`);
+                    
+                    if(oldSt.forkliftDays !== newSt.forkliftDays) changes.push(`${labelPrefix}Zmiana dni wózka [${newSt.name}]: ${oldSt.forkliftDays} -> ${newSt.forkliftDays}`);
+                    if(oldSt.scissorLiftDays !== newSt.scissorLiftDays) changes.push(`${labelPrefix}Zmiana dni podnośnika [${newSt.name}]: ${oldSt.scissorLiftDays} -> ${newSt.scissorLiftDays}`);
                 }
             });
         }

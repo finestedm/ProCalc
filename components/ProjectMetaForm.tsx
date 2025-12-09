@@ -1,8 +1,9 @@
 
 import React, { useState } from 'react';
 import { ProjectMeta, CalculationMode } from '../types';
-import { Briefcase, Calendar, User, ChevronDown, Hash, ScanLine, Search } from 'lucide-react';
-import { SALES_PEOPLE, SUPPORT_PEOPLE } from '../services/employeesDatabase';
+import { Briefcase, Calendar, User, ChevronDown, Hash, ScanLine, Search, Layers, FileText, UserCheck } from 'lucide-react';
+import { SALES_PEOPLE, SUPPORT_PEOPLE, ACTUAL_SALES_PEOPLE } from '../services/employeesDatabase';
+import { INSTALLATION_TYPES, INVOICE_TEXTS } from '../services/optionsDatabase';
 
 interface Props {
   data: ProjectMeta;
@@ -19,7 +20,7 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
   const showContent = onToggle ? isOpen : internalOpen;
   const toggleHandler = onToggle || (() => setInternalOpen(!internalOpen));
 
-  const handleChange = (key: keyof ProjectMeta, value: string) => {
+  const handleChange = (key: keyof ProjectMeta, value: string | number) => {
     onChange({ ...data, [key]: value });
   };
 
@@ -33,24 +34,25 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
       handleChange('sapProjectNumber', sapPrefix + cleanVal);
   };
 
-  const inputClass = "w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-sm text-xs text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all";
+  // UPDATED: Removed py-2, added h-[34px] to enforce exact height match across all inputs/selects
+  const inputClass = "w-full px-3 h-[34px] bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-sm text-xs text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all";
   const labelClass = "block text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase mb-1 ml-1 tracking-wider";
 
   const renderPersonSelect = (label: string, value: string, onChange: (val: string) => void, options: string[]) => {
       return (
-          <div>
+          <div className="w-full">
               <label className={labelClass}>{label}</label>
               <div className="relative group">
                   <User className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600 pointer-events-none" size={14}/>
                   <input 
-                      list={`${label}-list`}
+                      list={`${label.replace(/\s+/g, '')}-list`}
                       type="text" 
                       className={`${inputClass} pl-9`}
                       placeholder="Wybierz z listy..."
                       value={value}
                       onChange={(e) => onChange(e.target.value)}
                   />
-                  <datalist id={`${label}-list`}>
+                  <datalist id={`${label.replace(/\s+/g, '')}-list`}>
                       {options.map((name, i) => (
                           <option key={i} value={name} />
                       ))}
@@ -166,9 +168,105 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
                         />
                     </div>
                 </div>
+
+                {/* NEW FIELDS START */}
+                <div>
+                    <label className={labelClass}>Typ Instalacji</label>
+                    <div className="relative group">
+                        <Layers className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600 pointer-events-none" size={14}/>
+                        <select
+                            value={data.installationType || ''}
+                            onChange={(e) => handleChange('installationType', e.target.value)}
+                            className={`${inputClass} pl-9 appearance-none cursor-pointer`}
+                        >
+                            <option value="">Wybierz...</option>
+                            {INSTALLATION_TYPES.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                        <div className="absolute right-2 top-2.5 text-zinc-300 pointer-events-none">
+                            <ChevronDown size={14} />
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label className={labelClass}>Tekst na Fakturze</label>
+                    <div className="relative group">
+                        <FileText className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600 pointer-events-none" size={14}/>
+                        <select
+                            value={data.invoiceText || ''}
+                            onChange={(e) => handleChange('invoiceText', e.target.value)}
+                            className={`${inputClass} pl-9 appearance-none cursor-pointer`}
+                        >
+                            <option value="">Wybierz...</option>
+                            {INVOICE_TEXTS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                        <div className="absolute right-2 top-2.5 text-zinc-300 pointer-events-none">
+                            <ChevronDown size={14} />
+                        </div>
+                    </div>
+                </div>
+                {/* NEW FIELDS END */}
                 
-                {renderPersonSelect("Handlowiec", data.salesPerson, (v) => handleChange('salesPerson', v), SALES_PEOPLE)}
-                {renderPersonSelect("Wsparcie Sprzedaży", data.assistantPerson, (v) => handleChange('assistantPerson', v), SUPPORT_PEOPLE)}
+                <div className="md:col-span-2 border-t border-zinc-100 dark:border-zinc-800 my-1"></div>
+
+                {/* PERSONEL SECTION - REORGANIZED */}
+                {/* Row 1: Engineer & Specialist */}
+                <div className="md:col-span-2 grid grid-cols-2 gap-4">
+                    {renderPersonSelect("Inżynier", data.salesPerson, (v) => handleChange('salesPerson', v), SALES_PEOPLE)}
+                    {renderPersonSelect("Specjalista", data.assistantPerson, (v) => handleChange('assistantPerson', v), SUPPORT_PEOPLE)}
+                </div>
+                
+                {/* Row 2: Sales Person 1 (Handlowiec 1) */}
+                <div className="md:col-span-2 flex gap-2 items-end">
+                    <div className="flex-1">
+                        {renderPersonSelect("Handlowiec 1", data.actualSalesPerson || '', (v) => handleChange('actualSalesPerson', v), ACTUAL_SALES_PEOPLE)}
+                    </div>
+                    <div className="w-20">
+                         <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1 ml-1 tracking-wider">%</label>
+                         <div className="relative">
+                             <select 
+                                className={`${inputClass} px-2 appearance-none cursor-pointer font-bold text-center`}
+                                value={data.actualSalesPersonPercentage ?? 100}
+                                onChange={(e) => handleChange('actualSalesPersonPercentage', parseInt(e.target.value))}
+                             >
+                                 <option value={100}>100%</option>
+                                 <option value={75}>75%</option>
+                                 <option value={50}>50%</option>
+                                 <option value={25}>25%</option>
+                                 <option value={0}>0%</option>
+                             </select>
+                             <div className="absolute right-1 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none">
+                                <ChevronDown size={12} />
+                             </div>
+                         </div>
+                    </div>
+                </div>
+
+                {/* Row 3: Sales Person 2 (Handlowiec 2) */}
+                <div className="md:col-span-2 flex gap-2 items-end">
+                    <div className="flex-1">
+                        {renderPersonSelect("Handlowiec 2", data.actualSalesPerson2 || '', (v) => handleChange('actualSalesPerson2', v), ACTUAL_SALES_PEOPLE)}
+                    </div>
+                    <div className="w-20">
+                         <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1 ml-1 tracking-wider">%</label>
+                         <div className="relative">
+                             <select 
+                                className={`${inputClass} px-2 appearance-none cursor-pointer font-bold text-center`}
+                                value={data.actualSalesPerson2Percentage ?? 0}
+                                onChange={(e) => handleChange('actualSalesPerson2Percentage', parseInt(e.target.value))}
+                             >
+                                 <option value={100}>100%</option>
+                                 <option value={75}>75%</option>
+                                 <option value={50}>50%</option>
+                                 <option value={25}>25%</option>
+                                 <option value={0}>0%</option>
+                             </select>
+                             <div className="absolute right-1 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none">
+                                <ChevronDown size={12} />
+                             </div>
+                         </div>
+                    </div>
+                </div>
 
             </div>
           </div>

@@ -1,5 +1,6 @@
 
 
+
 import React, { useEffect } from 'react';
 import { CalculationData, Currency, AppState, CalculationMode } from '../types';
 import { X, Scale, TrendingUp, TrendingDown } from 'lucide-react';
@@ -26,20 +27,22 @@ export const CalculationComparisonView: React.FC<Props> = ({ initial, final, app
     const currency = appState.offerCurrency;
     const ormFee = appState.globalSettings.ormFeePercent;
     
-    const costsInitial = calculateProjectCosts(initial, rate, currency, CalculationMode.INITIAL, ormFee);
-    const costsFinal = calculateProjectCosts(final, rate, currency, CalculationMode.FINAL, ormFee);
+    // We pass the global margin settings to both to ensure fair comparison based on current app configuration
+    const costsInitial = calculateProjectCosts(initial, rate, currency, CalculationMode.INITIAL, ormFee, appState.targetMargin, appState.manualPrice);
+    const costsFinal = calculateProjectCosts(final, rate, currency, CalculationMode.FINAL, ormFee, appState.targetMargin, appState.manualPrice);
 
     const getSellingPrice = (costs: { total: number }) => {
+        if (appState.manualPrice !== null) return appState.manualPrice;
         const marginDecimal = appState.targetMargin / 100;
         const sellingPrice = marginDecimal >= 1 ? 0 : costs.total / (1 - marginDecimal);
         return sellingPrice;
     };
 
     const priceInitial = getSellingPrice(costsInitial);
-    // For Final, if manual price exists, it overrides the margin calc
-    const priceFinal = appState.manualPrice !== null 
-        ? appState.manualPrice
-        : getSellingPrice(costsFinal);
+    // For Final, if final manual price exists, use it, else fallback to initial price
+    const priceFinal = appState.finalManualPrice !== null 
+        ? appState.finalManualPrice
+        : priceInitial;
 
     const renderRow = (label: string, valInitial: number, valFinal: number, isCurrency: boolean = true) => {
         const diff = valFinal - valInitial;
@@ -93,6 +96,7 @@ export const CalculationComparisonView: React.FC<Props> = ({ initial, final, app
                     {renderRow('Transport', costsInitial.transport, costsFinal.transport)}
                     {renderRow('Inne', costsInitial.other, costsFinal.other)}
                     {renderRow('Montaż', costsInitial.installation, costsFinal.installation)}
+                    {costsFinal.financing > 0 && renderRow('Finansowanie', costsInitial.financing, costsFinal.financing)}
                     
                     <div className="my-4 border-t-2 border-zinc-200 dark:border-zinc-600"></div>
                     {renderRow('SUMA KOSZTÓW', costsInitial.total, costsFinal.total)}

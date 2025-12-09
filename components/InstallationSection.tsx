@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { InstallationData, CustomInstallationItem, Currency, Supplier, InstallationStage, LinkedSource, VariantItemType } from '../types';
-import { Wrench, Plus, Trash2, ChevronUp, ChevronDown, Eye, EyeOff, Link, Search, X, Box, Package, Clock, Users, Combine, Info, RefreshCw, Settings, Truck, Edit2, Lock, Unlock, CheckSquare, Square, AlertCircle } from 'lucide-react';
+import { Wrench, Plus, Trash2, ChevronUp, ChevronDown, Eye, EyeOff, Link, Search, X, Box, Package, Clock, Users, Combine, Info, RefreshCw, Settings, Truck, Edit2, Lock, Unlock, CheckSquare, Square, AlertCircle, Calendar } from 'lucide-react';
 import { convert, calculateStageCost, formatCurrency, formatNumber } from '../services/calculationService';
+import { SmartInput } from './SmartInput';
 
 interface Props {
   data: InstallationData;
@@ -269,9 +270,25 @@ export const InstallationSection: React.FC<Props> = ({
       const stageHours = stageMinutes / 60;
       const stageTotalHours = stageHours + (stage.manualLaborHours || 0);
       const stageCapacity = (stage.workDayHours || 10) * (stage.installersCount || 1);
-      const stageDuration = stage.calcMethod === 'TIME' 
-        ? (stageCapacity > 0 ? Math.ceil(stageTotalHours / stageCapacity) : 0)
-        : (stage.palletSpotsPerDay > 0 ? Math.ceil(stage.palletSpots / stage.palletSpotsPerDay) : 0);
+      
+      // Separate Calculations
+      const timeBasedDuration = stageCapacity > 0 ? Math.ceil(stageTotalHours / stageCapacity) : 0;
+      const palletBasedDuration = stage.palletSpotsPerDay > 0 ? Math.ceil(stage.palletSpots / stage.palletSpotsPerDay) : 0;
+
+      // Smart Duration Logic
+      let stageDuration = 0;
+      if (stage.calcMethod === 'TIME') {
+          stageDuration = timeBasedDuration;
+      } else {
+          // If PALLETS or BOTH
+          // Only use Pallet calculation if we have valid efficiency (palletSpotsPerDay > 0)
+          // Otherwise, fallback to Time if available
+          if (stage.palletSpots > 0 && stage.palletSpotsPerDay > 0) {
+              stageDuration = palletBasedDuration;
+          } else {
+              stageDuration = timeBasedDuration;
+          }
+      }
 
       const addCustomItem = () => updateStage(stage.id, { customItems: [...stage.customItems, { id: Math.random().toString(36).substr(2, 9), description: '', quantity: 1, unitPrice: 0 }] });
       const removeCustomItem = (idx: number) => updateStage(stage.id, { customItems: stage.customItems.filter((_, i) => i !== idx) });
@@ -332,6 +349,18 @@ export const InstallationSection: React.FC<Props> = ({
           const newItems = [...stage.customItems];
           newItems[idx] = { ...item, quantity: newQty, isAutoQuantity: true };
           updateStage(stage.id, { customItems: newItems });
+      };
+
+      const handleForkliftOffsetChange = (newOffset: number) => {
+          // Rule: Rental Days = Stage Duration - Offset
+          const newDays = Math.max(0, stageDuration - newOffset);
+          updateStage(stage.id, { forkliftStartOffset: newOffset, forkliftDays: newDays });
+      };
+
+      const handleScissorOffsetChange = (newOffset: number) => {
+          // Rule: Rental Days = Stage Duration - Offset
+          const newDays = Math.max(0, stageDuration - newOffset);
+          updateStage(stage.id, { scissorLiftStartOffset: newOffset, scissorLiftDays: newDays });
       };
 
       return (
@@ -420,7 +449,10 @@ export const InstallationSection: React.FC<Props> = ({
                                             {stage.calcMethod === 'BOTH' && <div className="col-span-3 text-[10px] font-bold text-amber-600 uppercase border-b border-amber-100 pb-1 mb-1">Część 1: Miejsca Paletowe</div>}
                                             <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Ilość Miejsc</label><input type="number" className="w-full p-2 border-0 rounded-none text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400" value={stage.palletSpots} onChange={(e) => updateStage(stage.id, { palletSpots: parseFloat(e.target.value) || 0 })} /></div>
                                             <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Wydajność (szt/dzień)</label><input type="number" className="w-full p-2 border-0 rounded-none text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400" value={stage.palletSpotsPerDay} onChange={(e) => updateStage(stage.id, { palletSpotsPerDay: parseFloat(e.target.value) || 0 })} /></div>
-                                            <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Cena / Miejsce</label><input type="number" className="w-full p-2 border-0 rounded-none text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400" value={stage.palletSpotPrice} onChange={(e) => updateStage(stage.id, { palletSpotPrice: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div>
+                                                <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Cena / Miejsce</label>
+                                                <SmartInput className="w-full p-2 border-0 rounded-none text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400" value={stage.palletSpotPrice} onChange={(val) => updateStage(stage.id, { palletSpotPrice: val })} />
+                                            </div>
                                         </div>
                                     )}
 
@@ -434,7 +466,10 @@ export const InstallationSection: React.FC<Props> = ({
                                             </div>
                                             <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Osoby</label><input type="number" className="w-full p-2 border-0 rounded-none text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-400" value={stage.installersCount} onChange={(e) => updateStage(stage.id, { installersCount: parseFloat(e.target.value) || 0 })} /></div>
                                             <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">h/Dzień</label><input type="number" className="w-full p-2 border-0 rounded-none text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-400" value={stage.workDayHours} onChange={(e) => updateStage(stage.id, { workDayHours: parseFloat(e.target.value) || 0 })} /></div>
-                                            <div className="col-span-2"><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Stawka (osobodzień)</label><input type="number" className="w-full p-2 border-0 rounded-none text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-400" value={stage.manDayRate} onChange={(e) => updateStage(stage.id, { manDayRate: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div className="col-span-2">
+                                                <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Stawka (osobodzień)</label>
+                                                <SmartInput className="w-full p-2 border-0 rounded-none text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-400" value={stage.manDayRate} onChange={(val) => updateStage(stage.id, { manDayRate: val })} />
+                                            </div>
                                         </div>
                                     )}
                                     
@@ -447,38 +482,62 @@ export const InstallationSection: React.FC<Props> = ({
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="bg-zinc-50 dark:bg-zinc-900/30 p-3 border border-zinc-100 dark:border-zinc-800">
                                             <div className="flex justify-between mb-2"><span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Wózek Widłowy</span></div>
-                                            <div className="grid grid-cols-3 gap-2 text-[9px] text-zinc-400 font-bold uppercase mb-0.5">
+                                            <div className="grid grid-cols-4 gap-2 text-[9px] text-zinc-400 font-bold uppercase mb-0.5">
                                                 <div>Stawka dzienna</div>
                                                 <div>Ilość Dni</div>
+                                                <div>Start (+dni)</div>
                                                 <div>Koszt Transportu</div>
                                             </div>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                <input type="number" placeholder="0.00" className="p-1.5 border-0 text-xs bg-white dark:bg-zinc-800" value={stage.forkliftDailyRate} onChange={e => updateStage(stage.id, { forkliftDailyRate: parseFloat(e.target.value) || 0 })} />
+                                            <div className="grid grid-cols-4 gap-2">
+                                                <SmartInput placeholder="0.00" className="p-1.5 border-0 text-xs bg-white dark:bg-zinc-800" value={stage.forkliftDailyRate} onChange={val => updateStage(stage.id, { forkliftDailyRate: val })} />
                                                 <div className="relative">
-                                                    <input type="number" placeholder="0" className={`p-1.5 border-0 text-xs w-full bg-white dark:bg-zinc-800 ${stage.forkliftDays !== stageDuration ? 'ring-1 ring-orange-300' : ''}`} value={stage.forkliftDays} onChange={e => updateStage(stage.id, { forkliftDays: parseFloat(e.target.value) || 0 })} />
+                                                    <input type="number" placeholder="0" className={`p-1.5 border-0 text-xs w-full bg-white dark:bg-zinc-800 ${stage.forkliftDays !== Math.max(0, stageDuration - (stage.forkliftStartOffset || 0)) ? 'ring-1 ring-orange-300' : ''}`} value={stage.forkliftDays} onChange={e => updateStage(stage.id, { forkliftDays: parseFloat(e.target.value) || 0 })} />
                                                     {stage.forkliftDays !== stageDuration && stageDuration > 0 && (
                                                         <button onClick={() => updateStage(stage.id, { forkliftDays: stageDuration })} className="absolute right-1 top-1 text-blue-500 hover:text-blue-700 p-0.5" title="Sync"><RefreshCw size={10}/></button>
                                                     )}
                                                 </div>
-                                                <input type="number" placeholder="0.00" className="p-1.5 border-0 text-xs bg-white dark:bg-zinc-800" value={stage.forkliftTransportPrice} onChange={e => updateStage(stage.id, { forkliftTransportPrice: parseFloat(e.target.value) || 0 })} />
+                                                <div className="relative">
+                                                    <Calendar size={10} className="absolute left-1.5 top-2 text-zinc-400 pointer-events-none"/>
+                                                    <input 
+                                                        type="number" 
+                                                        placeholder="0" 
+                                                        className="p-1.5 pl-5 border-0 text-xs w-full bg-white dark:bg-zinc-800 text-zinc-500" 
+                                                        value={stage.forkliftStartOffset || 0} 
+                                                        onChange={e => handleForkliftOffsetChange(parseFloat(e.target.value) || 0)} 
+                                                        title="Opóźnienie względem startu etapu (dni)"
+                                                    />
+                                                </div>
+                                                <SmartInput placeholder="0.00" className="p-1.5 border-0 text-xs bg-white dark:bg-zinc-800" value={stage.forkliftTransportPrice} onChange={val => updateStage(stage.id, { forkliftTransportPrice: val })} />
                                             </div>
                                         </div>
                                         <div className="bg-zinc-50 dark:bg-zinc-900/30 p-3 border border-zinc-100 dark:border-zinc-800">
                                             <div className="flex justify-between mb-2"><span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Podnośnik</span></div>
-                                            <div className="grid grid-cols-3 gap-2 text-[9px] text-zinc-400 font-bold uppercase mb-0.5">
+                                            <div className="grid grid-cols-4 gap-2 text-[9px] text-zinc-400 font-bold uppercase mb-0.5">
                                                 <div>Stawka dzienna</div>
                                                 <div>Ilość Dni</div>
+                                                <div>Start (+dni)</div>
                                                 <div>Koszt Transportu</div>
                                             </div>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                <input type="number" placeholder="0.00" className="p-1.5 border-0 text-xs bg-white dark:bg-zinc-800" value={stage.scissorLiftDailyRate} onChange={e => updateStage(stage.id, { scissorLiftDailyRate: parseFloat(e.target.value) || 0 })} />
+                                            <div className="grid grid-cols-4 gap-2">
+                                                <SmartInput placeholder="0.00" className="p-1.5 border-0 text-xs bg-white dark:bg-zinc-800" value={stage.scissorLiftDailyRate} onChange={val => updateStage(stage.id, { scissorLiftDailyRate: val })} />
                                                 <div className="relative">
-                                                    <input type="number" placeholder="0" className={`p-1.5 border-0 text-xs w-full bg-white dark:bg-zinc-800 ${stage.scissorLiftDays !== stageDuration ? 'ring-1 ring-orange-300' : ''}`} value={stage.scissorLiftDays} onChange={e => updateStage(stage.id, { scissorLiftDays: parseFloat(e.target.value) || 0 })} />
+                                                    <input type="number" placeholder="0" className={`p-1.5 border-0 text-xs w-full bg-white dark:bg-zinc-800 ${stage.scissorLiftDays !== Math.max(0, stageDuration - (stage.scissorLiftStartOffset || 0)) ? 'ring-1 ring-orange-300' : ''}`} value={stage.scissorLiftDays} onChange={e => updateStage(stage.id, { scissorLiftDays: parseFloat(e.target.value) || 0 })} />
                                                     {stage.scissorLiftDays !== stageDuration && stageDuration > 0 && (
                                                         <button onClick={() => updateStage(stage.id, { scissorLiftDays: stageDuration })} className="absolute right-1 top-1 text-blue-500 hover:text-blue-700 p-0.5" title="Sync"><RefreshCw size={10}/></button>
                                                     )}
                                                 </div>
-                                                <input type="number" placeholder="0.00" className="p-1.5 border-0 text-xs bg-white dark:bg-zinc-800" value={stage.scissorLiftTransportPrice} onChange={e => updateStage(stage.id, { scissorLiftTransportPrice: parseFloat(e.target.value) || 0 })} />
+                                                <div className="relative">
+                                                    <Calendar size={10} className="absolute left-1.5 top-2 text-zinc-400 pointer-events-none"/>
+                                                    <input 
+                                                        type="number" 
+                                                        placeholder="0" 
+                                                        className="p-1.5 pl-5 border-0 text-xs w-full bg-white dark:bg-zinc-800 text-zinc-500" 
+                                                        value={stage.scissorLiftStartOffset || 0} 
+                                                        onChange={e => handleScissorOffsetChange(parseFloat(e.target.value) || 0)} 
+                                                        title="Opóźnienie względem startu etapu (dni)"
+                                                    />
+                                                </div>
+                                                <SmartInput placeholder="0.00" className="p-1.5 border-0 text-xs bg-white dark:bg-zinc-800" value={stage.scissorLiftTransportPrice} onChange={val => updateStage(stage.id, { scissorLiftTransportPrice: val })} />
                                             </div>
                                         </div>
                                     </div>
@@ -537,7 +596,7 @@ export const InstallationSection: React.FC<Props> = ({
                                                 )}
                                             </div>
 
-                                            <input type="number" className="w-16 p-1.5 border-0 rounded-none text-xs text-right bg-zinc-50 dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-300" value={item.unitPrice} onChange={e => updateCustomItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)} />
+                                            <SmartInput className="w-16 p-1.5 border-0 rounded-none text-xs text-right bg-zinc-50 dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-300" value={item.unitPrice} onChange={val => updateCustomItem(idx, 'unitPrice', val)} />
                                             
                                             <div className="relative">
                                                 <button 
@@ -563,7 +622,7 @@ export const InstallationSection: React.FC<Props> = ({
                                                             <div className="relative">
                                                                 <Search size={10} className="absolute left-2 top-2 text-zinc-400"/>
                                                                 <input 
-                                                                    type="text"
+                                                                    type="text" 
                                                                     autoFocus
                                                                     className="w-full pl-6 p-1 text-xs border-0 rounded-none bg-zinc-100 dark:bg-zinc-900 focus:ring-1 focus:ring-cyan-400 outline-none"
                                                                     placeholder="Szukaj..."
@@ -712,12 +771,10 @@ export const InstallationSection: React.FC<Props> = ({
                             <label className="block text-[10px] font-bold text-zinc-500 mb-0.5 uppercase">Globalne Koszty Dodatkowe (Ryczałt Projektowy)</label>
                             <p className="text-[9px] text-zinc-400">Koszty nieprzypisane do konkretnego etapu (np. dojazd koordynatora).</p>
                         </div>
-                        <input 
-                            type="number" 
-                            min="0" 
-                            value={data.otherInstallationCosts} 
-                            onChange={(e) => onChange({...data, otherInstallationCosts: parseFloat(e.target.value) || 0})} 
+                        <SmartInput 
                             className="w-24 p-2 border-0 bg-white dark:bg-zinc-800 text-right font-bold focus:ring-1 focus:ring-amber-400 outline-none text-sm" 
+                            value={data.otherInstallationCosts} 
+                            onChange={(val) => onChange({...data, otherInstallationCosts: val})} 
                             placeholder="0.00" 
                         />
                     </div>

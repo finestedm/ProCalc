@@ -1,8 +1,10 @@
 
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { FolderOpen, FileJson, Save, X, RefreshCw, AlertTriangle, HardDrive, Search, User, Hash, Calendar, DollarSign, Loader2, PenLine, Filter, Trash2, ListFilter } from 'lucide-react';
-import { AppState, ProjectFile } from '../types';
+import { FolderOpen, FileJson, Save, X, RefreshCw, AlertTriangle, HardDrive, Search, User, Hash, PenLine, Filter, Trash2, ListFilter, BarChart3, TrendingUp, Users, PieChart, Layers, Calendar, Clock, Trophy, Target, Folder, ChevronRight, Home, ArrowUpLeft, Globe, ScanLine } from 'lucide-react';
+import { AppState, ProjectFile, Currency, CalculationMode } from '../types';
 import { SALES_PEOPLE, SUPPORT_PEOPLE } from '../services/employeesDatabase';
+import { calculateProjectCosts, convert, formatNumber } from '../services/calculationService';
 
 interface Props {
   isOpen: boolean;
@@ -33,6 +35,7 @@ interface FileSystemDirectoryHandle extends FileSystemHandle {
     kind: 'directory';
     values: () => AsyncIterableIterator<FileSystemHandle>;
     getFileHandle: (name: string, options?: { create?: boolean }) => Promise<FileSystemFileHandle>;
+    getDirectoryHandle: (name: string, options?: { create?: boolean }) => Promise<FileSystemDirectoryHandle>;
     removeEntry: (name: string) => Promise<void>;
 }
 
@@ -51,6 +54,23 @@ interface ProjectMetadata {
     stage?: string;
     salesPerson?: string;
     assistantPerson?: string;
+    orderDate?: string;
+    protocolDate?: string;
+    
+    // Calculated fields for stats
+    valueOriginal: number;
+    currencyOriginal: Currency;
+    valuePLN: number;
+    timestamp: number;
+}
+
+interface DirectoryItem {
+    kind: 'file' | 'directory';
+    name: string;
+    handle: FileSystemHandle;
+    date?: Date;
+    size?: number;
+    path?: string[]; // Added to track folder structure
 }
 
 export const ProjectManagerModal: React.FC<Props> = ({ 
@@ -62,31 +82,39 @@ export const ProjectManagerModal: React.FC<Props> = ({
     currentDirHandle,
     onSetDirHandle
 }) => {
-  const [files, setFiles] = useState<{name: string, handle: FileSystemFileHandle, date: Date, size: number}[]>([]);
+  // Navigation State
+  const [pathStack, setPathStack] = useState<{name: string, handle: FileSystemDirectoryHandle}[]>([]);
+  const [currentViewItems, setCurrentViewItems] = useState<DirectoryItem[]>([]);
+  
+  // Index State (For Statistics / Global Search)
+  // Stores both files and directories found during recursive scan
+  const [searchIndex, setSearchIndex] = useState<DirectoryItem[]>([]);
+  
   const [fileMetadata, setFileMetadata] = useState<Record<string, ProjectMetadata>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'files' | 'stats'>('files');
   
   // Deletion State
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  // Filtering
+  // Filtering & Search
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchScope, setSearchScope] = useState<'global' | 'local'>('global');
+  
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [filenameSuffix, setFilenameSuffix] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   
-  // New Filters
+  // Advanced Filters
   const [filterStage, setFilterStage] = useState('');
   const [filterSales, setFilterSales] = useState('');
   const [filterSupport, setFilterSupport] = useState('');
   
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  const targetPathHint = "\\\\WAW1S03030\\Departments\\PION_SL\\Projekty manualne (SL1)_PROJEKTY_SL - testowy\\PROCALC";
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -99,12 +127,30 @@ export const ProjectManagerModal: React.FC<Props> = ({
   // Initial load if handle exists
   useEffect(() => {
       if (isOpen && currentDirHandle) {
-          listFiles(currentDirHandle);
+          // Initialize path stack if empty
+          if (pathStack.length === 0) {
+              setPathStack([{ name: 'Katalog Główny', handle: currentDirHandle }]);
+              loadDirectoryContents(currentDirHandle);
+          }
       }
       return () => {
           if (abortControllerRef.current) abortControllerRef.current.abort();
       };
   }, [isOpen, currentDirHandle]);
+
+  // Trigger stat scan when switching to stats tab
+  useEffect(() => {
+      if (activeTab === 'stats' && searchIndex.length === 0 && !isScanning && currentDirHandle) {
+          startRecursiveScan(currentDirHandle);
+      }
+  }, [activeTab]);
+
+  // Auto-trigger recursive scan if searching globally and no index exists
+  useEffect(() => {
+      if (searchTerm.length > 0 && searchScope === 'global' && searchIndex.length === 0 && !isScanning && currentDirHandle) {
+          startRecursiveScan(currentDirHandle);
+      }
+  }, [searchTerm, searchScope]);
 
   const connectToFolder = async () => {
       setErrorMsg(null);
@@ -115,7 +161,11 @@ export const ProjectManagerModal: React.FC<Props> = ({
               startIn: 'desktop'
           });
           onSetDirHandle(handle);
-          await listFiles(handle);
+          setPathStack([{ name: 'Katalog Główny', handle }]);
+          loadDirectoryContents(handle);
+          // Reset deep scan on new connection
+          setSearchIndex([]); 
+          setFileMetadata({});
           showSnackbar("Połączono z folderem");
       } catch (err: any) {
           console.error("Access denied or cancelled", err);
@@ -125,124 +175,303 @@ export const ProjectManagerModal: React.FC<Props> = ({
       }
   };
 
-  const listFiles = async (handle: FileSystemDirectoryHandle) => {
-      // Stop previous scan if running
-      if (abortControllerRef.current) abortControllerRef.current.abort();
-      
-      setIsLoading(true);
-      setIsScanning(false);
-      setScanProgress(0);
-      setErrorMsg(null);
-      setFileMetadata({}); // Reset metadata
+  // --- NAVIGATION LOGIC (SHALLOW) ---
 
-      const jsonFiles: {name: string, handle: FileSystemFileHandle, date: Date, size: number}[] = [];
+  const loadDirectoryContents = async (dirHandle: FileSystemDirectoryHandle) => {
+      setIsLoading(true);
+      const items: DirectoryItem[] = [];
       
       try {
           // @ts-ignore
-          for await (const entry of handle.values()) {
-              if (entry.kind === 'file' && entry.name.endsWith('.json')) {
-                   const fileHandle = entry as FileSystemFileHandle;
-                   const file = await fileHandle.getFile();
-                   jsonFiles.push({
-                       name: entry.name,
-                       handle: fileHandle,
-                       date: new Date(file.lastModified),
-                       size: file.size
-                   });
+          for await (const entry of dirHandle.values()) {
+              if (entry.kind === 'directory') {
+                  items.push({ kind: 'directory', name: entry.name, handle: entry });
+              } else if (entry.kind === 'file' && entry.name.endsWith('.json')) {
+                  const fileHandle = entry as FileSystemFileHandle;
+                  const file = await fileHandle.getFile(); 
+                  items.push({ kind: 'file', name: entry.name, handle: fileHandle, date: new Date(file.lastModified), size: file.size });
               }
           }
-          // Sort by date desc initially
-          jsonFiles.sort((a, b) => b.date.getTime() - a.date.getTime());
-          setFiles(jsonFiles);
           
-          // Start background scan
-          scanFilesContent(jsonFiles);
+          // Sort: Folders first (A-Z), then Files (Date Desc)
+          items.sort((a, b) => {
+              if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1;
+              if (a.kind === 'directory') return a.name.localeCompare(b.name);
+              // Files by date desc
+              return (b.date?.getTime() || 0) - (a.date?.getTime() || 0);
+          });
+
+          setCurrentViewItems(items);
+          
+          // Auto-parse JSONs in current view for metadata display
+          // Type casting safety hack
+          const filesToParse = items.filter(i => i.kind === 'file') as unknown as {name: string, handle: FileSystemFileHandle}[];
+          if (filesToParse.length > 0) {
+              scanFilesContent(filesToParse, false); // False = append to metadata, don't replace
+          }
 
       } catch (e) {
-          console.error("Error listing files", e);
-          showSnackbar("Błąd odczytu listy plików");
+          console.error("Error reading directory", e);
+          showSnackbar("Błąd odczytu katalogu");
       } finally {
           setIsLoading(false);
       }
   };
 
-  // Background scanner to extract metadata
-  const scanFilesContent = async (fileList: {name: string, handle: FileSystemFileHandle}[]) => {
+  const navigateDown = (folder: DirectoryItem) => {
+      if (folder.kind !== 'directory') return;
+      const handle = folder.handle as FileSystemDirectoryHandle;
+      setPathStack(prev => [...prev, { name: folder.name, handle }]);
+      loadDirectoryContents(handle);
+      setSearchTerm(''); // Clear search on nav
+  };
+
+  const navigateUp = () => {
+      if (pathStack.length <= 1) return;
+      const newStack = pathStack.slice(0, -1);
+      setPathStack(newStack);
+      loadDirectoryContents(newStack[newStack.length - 1].handle);
+      setSearchTerm('');
+  };
+
+  const navigateToCrumb = (index: number) => {
+      if (index === pathStack.length - 1) return;
+      const newStack = pathStack.slice(0, index + 1);
+      setPathStack(newStack);
+      loadDirectoryContents(newStack[newStack.length - 1].handle);
+      setSearchTerm('');
+  };
+
+  // --- STATISTICS / SEARCH LOGIC (RECURSIVE) ---
+
+  const startRecursiveScan = async (rootHandle: FileSystemDirectoryHandle) => {
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+      
+      setIsLoading(true);
+      setIsScanning(true);
+      setScanProgress(0);
+      setSearchIndex([]); // Clear index
+
+      const allEntries: DirectoryItem[] = [];
+      const jsonFilesToParse: {name: string, handle: FileSystemFileHandle}[] = [];
+      
+      try {
+          // Recursive scanner
+          const scanDir = async (dir: FileSystemDirectoryHandle, currentPath: string[]) => {
+              // @ts-ignore
+              for await (const entry of dir.values()) {
+                  if (entry.kind === 'directory') {
+                      // Add directory to index
+                      allEntries.push({
+                          kind: 'directory',
+                          name: entry.name,
+                          handle: entry,
+                          path: currentPath
+                      });
+                      await scanDir(entry as FileSystemDirectoryHandle, [...currentPath, entry.name]);
+                  } else if (entry.kind === 'file' && entry.name.endsWith('.json')) {
+                      const fileHandle = entry as FileSystemFileHandle;
+                      const file = await fileHandle.getFile();
+                      const fileEntry: DirectoryItem = {
+                          kind: 'file',
+                          name: entry.name,
+                          handle: fileHandle,
+                          date: new Date(file.lastModified),
+                          size: file.size,
+                          path: currentPath
+                      };
+                      allEntries.push(fileEntry);
+                      jsonFilesToParse.push({ name: entry.name, handle: fileHandle });
+                  }
+              }
+          };
+
+          await scanDir(rootHandle, []);
+          
+          setSearchIndex(allEntries);
+          
+          // Start content scan for metadata
+          scanFilesContent(jsonFilesToParse, true);
+
+      } catch (e) {
+          console.error("Error deep scanning", e);
+          showSnackbar("Błąd skanowania struktury");
+          setIsScanning(false);
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+  // Metadata Extraction
+  const scanFilesContent = async (fileList: {name: string, handle: FileSystemFileHandle}[], isFullScan: boolean) => {
       abortControllerRef.current = new AbortController();
       const signal = abortControllerRef.current.signal;
       
-      setIsScanning(true);
+      if (isFullScan) setIsScanning(true);
       let processed = 0;
-
-      // Process in chunks to not freeze UI
-      const CHUNK_SIZE = 3; 
+      const CHUNK_SIZE = 5; 
       
       for (let i = 0; i < fileList.length; i += CHUNK_SIZE) {
           if (signal.aborted) break;
 
           const chunk = fileList.slice(i, i + CHUNK_SIZE);
           await Promise.all(chunk.map(async (fileEntry) => {
+              // Skip if already has metadata
+              if (fileMetadata[fileEntry.name]) return;
+
               try {
                   const file = await fileEntry.handle.getFile();
                   const text = await file.text();
                   const json = JSON.parse(text);
                   
-                  // Safe Data Extraction Logic
                   const initial = json.appState?.initial || json.initial;
                   const final = json.appState?.final || json.final;
                   const stage = json.stage;
+                  const mode = json.appState?.mode || CalculationMode.INITIAL;
                   
                   const clientName = initial?.orderingParty?.name || final?.orderingParty?.name || '-';
                   const projectNumber = initial?.meta?.projectNumber || final?.meta?.projectNumber || '-';
-                  
-                  // Extract People
                   const salesPerson = initial?.meta?.salesPerson || final?.meta?.salesPerson;
                   const assistantPerson = initial?.meta?.assistantPerson || final?.meta?.assistantPerson;
+                  
+                  // Extract dates for stats
+                  const orderDate = initial?.meta?.orderDate || final?.meta?.orderDate;
+                  const protocolDate = final?.meta?.protocolDate;
+
+                  let valueOriginal = 0;
+                  let valuePLN = 0;
+                  const currency = json.appState?.offerCurrency || Currency.EUR;
+
+                  try {
+                      const activeData = mode === CalculationMode.FINAL ? final : initial;
+                      const rate = json.appState?.exchangeRate || 4.3;
+                      const ormFee = json.appState?.globalSettings?.ormFeePercent || 1.6;
+                      const margin = json.appState?.targetMargin;
+                      const manualPrice = json.appState?.manualPrice;
+                      const finalManualPrice = json.appState?.finalManualPrice;
+                      
+                      // SANITIZATION: Fix missing fields to prevent NaN
+                      if (activeData) {
+                          if (!activeData.suppliers) activeData.suppliers = [];
+                          if (!activeData.transport) activeData.transport = [];
+                          if (!activeData.otherCosts) activeData.otherCosts = [];
+                          if (!activeData.installation) activeData.installation = { stages: [], customItems: [], otherInstallationCosts: 0 };
+                          
+                          const inst = activeData.installation;
+                          const ensureZero = (val: any) => (val === undefined || val === null || isNaN(val)) ? 0 : val;
+                          
+                          inst.palletSpots = ensureZero(inst.palletSpots);
+                          inst.palletSpotPrice = ensureZero(inst.palletSpotPrice);
+                          inst.forkliftDailyRate = ensureZero(inst.forkliftDailyRate);
+                          inst.forkliftDays = ensureZero(inst.forkliftDays);
+                          inst.forkliftTransportPrice = ensureZero(inst.forkliftTransportPrice);
+                          inst.scissorLiftDailyRate = ensureZero(inst.scissorLiftDailyRate);
+                          inst.scissorLiftDays = ensureZero(inst.scissorLiftDays);
+                          inst.scissorLiftTransportPrice = ensureZero(inst.scissorLiftTransportPrice);
+                          inst.otherInstallationCosts = ensureZero(inst.otherInstallationCosts);
+                          
+                          if (!inst.customItems) inst.customItems = [];
+                          
+                          // Ensure Suppliers item fields are numbers
+                          activeData.suppliers.forEach((s: any) => {
+                              if (!s.items) s.items = [];
+                              s.items.forEach((item: any) => {
+                                  item.quantity = ensureZero(item.quantity);
+                                  item.unitPrice = ensureZero(item.unitPrice);
+                              });
+                          });
+                      }
+
+                      const costs = calculateProjectCosts(activeData, rate, currency, mode, ormFee, margin, manualPrice);
+                      
+                      if (manualPrice || finalManualPrice) {
+                          valueOriginal = finalManualPrice || manualPrice;
+                      } else {
+                          const marginDecimal = (margin || 20) / 100;
+                          const totalCost = costs.total; 
+                          valueOriginal = marginDecimal >= 1 ? 0 : totalCost / (1 - marginDecimal);
+                      }
+                      
+                      valuePLN = convert(valueOriginal, currency, Currency.PLN, rate);
+                      
+                      // Guard against NaN
+                      if (isNaN(valuePLN)) valuePLN = 0;
+                      if (isNaN(valueOriginal)) valueOriginal = 0;
+
+                  } catch (e) {
+                      console.warn("Cost calc failed for", fileEntry.name, e);
+                  }
 
                   setFileMetadata(prev => ({
                       ...prev,
                       [fileEntry.name]: {
-                          clientName: clientName,
-                          projectNumber: projectNumber,
-                          stage: stage,
+                          clientName,
+                          projectNumber,
+                          stage,
                           scanned: true,
                           salesPerson,
-                          assistantPerson
+                          assistantPerson,
+                          valueOriginal,
+                          currencyOriginal: currency,
+                          valuePLN,
+                          timestamp: file.lastModified,
+                          orderDate,
+                          protocolDate
                       }
                   }));
 
               } catch (err) {
-                  // If parse fails
                   setFileMetadata(prev => ({
                       ...prev,
-                      [fileEntry.name]: { scanned: true, clientName: 'Błąd pliku', projectNumber: 'ERR' }
+                      [fileEntry.name]: { 
+                          scanned: true, 
+                          clientName: 'Błąd pliku', 
+                          projectNumber: 'ERR',
+                          valueOriginal: 0,
+                          currencyOriginal: Currency.PLN,
+                          valuePLN: 0,
+                          timestamp: 0 
+                      }
                   }));
               }
           }));
 
           processed += chunk.length;
-          setScanProgress(Math.min(100, Math.round((processed / fileList.length) * 100)));
-          
-          // Yield to main thread
-          await new Promise(resolve => setTimeout(resolve, 10));
+          if (isFullScan) {
+              setScanProgress(Math.min(100, Math.round((processed / fileList.length) * 100)));
+          }
+          await new Promise(resolve => setTimeout(resolve, 5));
       }
-      setIsScanning(false);
+      if (isFullScan) setIsScanning(false);
+  };
+
+  const sanitizeName = (name: string): string => {
+      return name.replace(/[^a-zA-Z0-9 \-_ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, '').trim() || 'Nieznany';
   };
 
   const handleSave = async () => {
-      if (!currentDirHandle) return;
+      // Force save to ROOT structure, NOT just current view
+      // We always want to maintain Client -> Project structure
+      if (!pathStack || pathStack.length === 0 || !pathStack[0].handle) {
+          showSnackbar("Błąd: Brak dostępu do katalogu głównego.");
+          return;
+      }
+
+      const rootHandle = pathStack[0].handle;
       
-      // Always use INITIAL project number for identity to keep grouped
+      const clientName = appState.initial.orderingParty.name || 'Nieznany Klient';
       const projectNum = appState.initial.meta.projectNumber || 'BezNumeru';
       
-      // Use local time to ensure uniqueness per second and match App.tsx logic
+      const safeClient = sanitizeName(clientName);
+      const safeProject = sanitizeName(projectNum);
+
       const now = new Date();
       const offset = now.getTimezoneOffset() * 60000;
       const timestamp = new Date(now.getTime() - offset).toISOString().slice(0, 19).replace('T', '_').replace(/[:]/g, '-');
       
-      let filename = `PROCALC_${projectNum}_DRAFT_${timestamp}`;
+      let filename = `PROCALC_${safeProject}_DRAFT_${timestamp}`;
       if (filenameSuffix.trim()) {
-          const safeSuffix = filenameSuffix.replace(/[^a-zA-Z0-9-_ ]/g, '');
+          const safeSuffix = sanitizeName(filenameSuffix);
           filename += `_${safeSuffix}`;
       }
       filename += '.json';
@@ -258,15 +487,27 @@ export const ProjectManagerModal: React.FC<Props> = ({
       };
 
       try {
-          const fileHandle = await currentDirHandle.getFileHandle(filename, { create: true });
+          // Drill down from root: Client -> Project
+          // @ts-ignore
+          let targetHandle = await rootHandle.getDirectoryHandle(safeClient, { create: true });
+          // @ts-ignore
+          targetHandle = await targetHandle.getDirectoryHandle(safeProject, { create: true });
+
+          // @ts-ignore
+          const fileHandle = await targetHandle.getFileHandle(filename, { create: true });
+          // @ts-ignore
           const writable = await fileHandle.createWritable();
           await writable.write(JSON.stringify(fileData, null, 2));
           await writable.close();
           
-          showSnackbar(`Zapisano: ${filename}`);
-          setFilenameSuffix(''); // Reset suffix after save
-          // Reload list to see new file
-          listFiles(currentDirHandle); 
+          showSnackbar(`Zapisano w: ${safeClient}/${safeProject}/${filename}`);
+          setFilenameSuffix('');
+          
+          // If we are currently viewing the folder where we just saved, reload content
+          const currentViewHandle = pathStack[pathStack.length - 1].handle;
+          // Ideally we check if current view matches target, but simple reload is safe
+          loadDirectoryContents(currentViewHandle);
+
       } catch (err) {
           console.error(err);
           showSnackbar("Błąd zapisu pliku");
@@ -287,12 +528,12 @@ export const ProjectManagerModal: React.FC<Props> = ({
   };
 
   const handleDeleteFile = async () => {
-      if (!currentDirHandle || !deleteConfirm) return;
-      
+      const activeDir = pathStack[pathStack.length - 1].handle;
+      if (!activeDir || !deleteConfirm) return;
       try {
-          await currentDirHandle.removeEntry(deleteConfirm);
+          await activeDir.removeEntry(deleteConfirm);
           showSnackbar(`Usunięto plik: ${deleteConfirm}`);
-          await listFiles(currentDirHandle); // Refresh
+          loadDirectoryContents(activeDir);
       } catch (err) {
           console.error(err);
           showSnackbar("Nie udało się usunąć pliku");
@@ -301,441 +542,713 @@ export const ProjectManagerModal: React.FC<Props> = ({
       }
   };
 
-  // Grouping & Filtering Logic - 2 Levels
-  const groupedHierarchy = useMemo(() => {
-      // 1. Filter
-      let filtered = files;
-      const lowerTerm = searchTerm.toLowerCase();
-      
-      filtered = files.filter(f => {
-          const meta = fileMetadata[f.name];
-          
-          // Text Filter
-          let matchesText = true;
-          if (searchTerm) {
-              const matchesName = f.name.toLowerCase().includes(lowerTerm);
-              const matchesClient = meta?.clientName?.toLowerCase().includes(lowerTerm);
-              const matchesProject = meta?.projectNumber?.toLowerCase().includes(lowerTerm);
-              matchesText = matchesName || matchesClient || matchesProject;
-          }
+  // --- DISPLAY LOGIC ---
 
-          // Date Filter
-          let matchesDate = true;
-          const fileDate = f.date.setHours(0,0,0,0);
+  // Unified item list for display (mix of folders and files)
+  const displayItems = useMemo(() => {
+      if (searchTerm) {
+          const lowerTerm = searchTerm.toLowerCase();
+          
+          // Decide source based on scope
+          // Global uses `searchIndex` (if populated), otherwise falls back to current view to avoid empty screen
+          // Local uses `currentViewItems`
+          const source = searchScope === 'global' && searchIndex.length > 0 ? searchIndex : currentViewItems;
+          
+          const matches = source.filter(item => {
+              // Basic Name Match
+              if (item.name.toLowerCase().includes(lowerTerm)) return true;
+              
+              // Folder Path Match (if present)
+              if (item.path && item.path.some(p => p.toLowerCase().includes(lowerTerm))) return true;
+
+              // Metadata Match (Files only)
+              if (item.kind === 'file') {
+                  const meta = fileMetadata[item.name];
+                  if (meta) {
+                      if (meta.clientName?.toLowerCase().includes(lowerTerm)) return true;
+                      if (meta.projectNumber?.toLowerCase().includes(lowerTerm)) return true;
+                  }
+              }
+              return false;
+          });
+
+          // SORTING / PRIORITY LOGIC
+          // 1. Matching Folders (Directory > File)
+          // 2. Matching Client Metadata (File)
+          // 3. Matching Project Metadata (File)
+          // 4. Matching Filename
+          
+          return matches.sort((a, b) => {
+              const aName = a.name.toLowerCase();
+              const bName = b.name.toLowerCase();
+              const aIsDir = a.kind === 'directory';
+              const bIsDir = b.kind === 'directory';
+              
+              const aMeta = fileMetadata[a.name];
+              const bMeta = fileMetadata[b.name];
+
+              // Priority 1: Folders matching name exactly or partially
+              // Put folders first
+              if (aIsDir && !bIsDir) return -1;
+              if (!aIsDir && bIsDir) return 1;
+
+              if (aIsDir && bIsDir) {
+                  // Prefer exact matches or shorter paths (higher up)
+                  const aDepth = a.path?.length || 0;
+                  const bDepth = b.path?.length || 0;
+                  if (aDepth !== bDepth) return aDepth - bDepth;
+                  return aName.localeCompare(bName);
+              }
+
+              // Both are files
+              // Priority 2: Client Name Match in Metadata
+              const aClientMatch = aMeta?.clientName?.toLowerCase().includes(lowerTerm);
+              const bClientMatch = bMeta?.clientName?.toLowerCase().includes(lowerTerm);
+              
+              if (aClientMatch && !bClientMatch) return -1;
+              if (!aClientMatch && bClientMatch) return 1;
+
+              // Priority 3: Project Number Match
+              const aProjMatch = aMeta?.projectNumber?.toLowerCase().includes(lowerTerm);
+              const bProjMatch = bMeta?.projectNumber?.toLowerCase().includes(lowerTerm);
+
+              if (aProjMatch && !bProjMatch) return -1;
+              if (!aProjMatch && bProjMatch) return 1;
+
+              // Priority 4: Filename / Date
+              return (b.date?.getTime() || 0) - (a.date?.getTime() || 0);
+          });
+      }
+      
+      // Default: Current Folder View
+      return currentViewItems;
+  }, [searchTerm, searchScope, currentViewItems, searchIndex, fileMetadata]);
+
+
+  // --- STATISTICS CALCULATION ---
+  const statistics = useMemo(() => {
+      const allFiles = searchIndex.filter(i => i.kind === 'file') as unknown as {name: string, handle: FileSystemFileHandle, date: Date, size: number, path: string[]}[];
+      
+      const monthlyStats: Record<string, { offers: number, opened: number, closed: number }> = {};
+      
+      const projectGroups: Record<string, { 
+          latestFile: ProjectMetadata, 
+          versionCount: number,
+          draftFile?: ProjectMetadata,
+          openingFile?: ProjectMetadata,
+          finalFile?: ProjectMetadata
+      }> = {};
+
+      // Filter Logic for Stats
+      const filesToAnalyze = allFiles.filter(f => {
+          const meta = fileMetadata[f.name];
+          if (!meta || meta.projectNumber === 'ERR' || meta.projectNumber === '-') return false;
+          
+          // 1. Person Filters
+          if (filterSales && meta.salesPerson !== filterSales) return false;
+          if (filterSupport && meta.assistantPerson !== filterSupport) return false;
+          
+          // 2. Stage Filter (Fixed Logic)
+          if (filterStage && meta.stage !== filterStage) return false;
+
+          // 3. Date Filters (Fixed Logic)
+          // Uses file timestamp (lastModified) which is consistent
+          const fileTime = new Date(meta.timestamp).setHours(0,0,0,0);
+          
           if (dateFrom) {
-              const dFrom = new Date(dateFrom).setHours(0,0,0,0);
-              if (fileDate < dFrom) matchesDate = false;
+              const fromTime = new Date(dateFrom).setHours(0,0,0,0);
+              if (fileTime < fromTime) return false;
           }
           if (dateTo) {
-              const dTo = new Date(dateTo).setHours(23,59,59,999);
-              if (f.date.getTime() > dTo) matchesDate = false;
+              const toTime = new Date(dateTo).setHours(23,59,59,999);
+              if (fileTime > toTime) return false;
           }
 
-          // Advanced Filters
-          let matchesStage = true;
-          if (filterStage && meta?.stage !== filterStage) matchesStage = false;
-
-          let matchesSales = true;
-          if (filterSales && meta?.salesPerson !== filterSales) matchesSales = false;
-
-          let matchesSupport = true;
-          if (filterSupport && meta?.assistantPerson !== filterSupport) matchesSupport = false;
-
-          return matchesText && matchesDate && matchesStage && matchesSales && matchesSupport;
+          return true;
       });
 
-      // 2. Group by CLIENT -> PROJECT
-      const clientGroups: Record<string, Record<string, typeof files>> = {};
-
-      filtered.forEach(f => {
+      filesToAnalyze.forEach(f => {
           const meta = fileMetadata[f.name];
-          const clientName = (meta?.clientName && meta.clientName !== '-' && meta.clientName !== 'Błąd pliku') 
-              ? meta.clientName 
-              : 'Pozostali Klienci';
+          if (!projectGroups[meta.projectNumber!]) {
+              projectGroups[meta.projectNumber!] = { latestFile: meta, versionCount: 0 };
+          }
           
-          const projectNum = (meta?.projectNumber && meta.projectNumber !== '-' && meta.projectNumber !== 'BRAK') 
-              ? meta.projectNumber 
-              : 'Inne Projekty';
-
-          if (!clientGroups[clientName]) {
-              clientGroups[clientName] = {};
+          if (meta.timestamp > projectGroups[meta.projectNumber!].latestFile.timestamp) {
+              projectGroups[meta.projectNumber!].latestFile = meta;
           }
-          if (!clientGroups[clientName][projectNum]) {
-              clientGroups[clientName][projectNum] = [];
+          projectGroups[meta.projectNumber!].versionCount++;
+
+          if (meta.stage === 'DRAFT') {
+              if (!projectGroups[meta.projectNumber!].draftFile || meta.timestamp > projectGroups[meta.projectNumber!].draftFile!.timestamp) {
+                  projectGroups[meta.projectNumber!].draftFile = meta;
+              }
+          } else if (meta.stage === 'OPENING') {
+              if (!projectGroups[meta.projectNumber!].openingFile || meta.timestamp > projectGroups[meta.projectNumber!].openingFile!.timestamp) {
+                  projectGroups[meta.projectNumber!].openingFile = meta;
+              }
+          } else if (meta.stage === 'FINAL') {
+              if (!projectGroups[meta.projectNumber!].finalFile || meta.timestamp > projectGroups[meta.projectNumber!].finalFile!.timestamp) {
+                  projectGroups[meta.projectNumber!].finalFile = meta;
+              }
           }
-          clientGroups[clientName][projectNum].push(f);
       });
 
-      // 3. Flatten
-      const result = Object.entries(clientGroups).map(([clientName, projectsMap]) => {
-          const projects = Object.entries(projectsMap).map(([projectNum, files]) => {
-              files.sort((a, b) => b.date.getTime() - a.date.getTime());
-              return { projectNum, files };
-          });
+      const clientStats: Record<string, number> = {};
+      const stageDistribution = { DRAFT: 0, OPENING: 0, FINAL: 0 };
+      let totalProjects = 0;
+      let globalValue = 0;
+      let totalDurationDays = 0;
+      let projectsWithDuration = 0;
 
-          projects.sort((a, b) => {
-              const dateA = a.files[0]?.date.getTime() || 0;
-              const dateB = b.files[0]?.date.getTime() || 0;
-              return dateB - dateA;
-          });
+      const initMonth = (m: string) => {
+          if (!monthlyStats[m]) monthlyStats[m] = { offers: 0, opened: 0, closed: 0 };
+      };
 
-          return { clientName, projects };
+      Object.values(projectGroups).forEach((group) => {
+          const { latestFile, draftFile, openingFile, finalFile } = group;
+          
+          totalProjects++;
+          globalValue += isNaN(latestFile.valuePLN) ? 0 : latestFile.valuePLN;
+
+          const cName = latestFile.clientName || 'Inny';
+          clientStats[cName] = (clientStats[cName] || 0) + (isNaN(latestFile.valuePLN) ? 0 : latestFile.valuePLN);
+
+          const stageKey = latestFile.stage as keyof typeof stageDistribution;
+          if (stageDistribution[stageKey] !== undefined) {
+              stageDistribution[stageKey]++;
+          }
+
+          // Consolidated Start/End Dates for Statistics
+          // START = Order Date (from any file that has it, prioritizing final > opening > draft)
+          const startDateStr = finalFile?.orderDate || openingFile?.orderDate || draftFile?.orderDate;
+          // END = Protocol Date (from Final file only)
+          const endDateStr = finalFile?.protocolDate;
+
+          // Duration Calculation (Requires both specific dates)
+          if (startDateStr && endDateStr) {
+              const start = new Date(startDateStr);
+              const end = new Date(endDateStr);
+              if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+                  const diffMs = end.getTime() - start.getTime();
+                  const diffDays = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+                  totalDurationDays += diffDays;
+                  projectsWithDuration++;
+              }
+          }
+
+          // Monthly Chart Buckets
+          
+          // 1. Offers (Created) - Bucket by File Creation Timestamp of first Draft/Opening
+          const offerSource = draftFile || openingFile;
+          if (offerSource) {
+              const m = new Date(offerSource.timestamp).toISOString().slice(0, 7);
+              initMonth(m);
+              monthlyStats[m].offers += isNaN(offerSource.valuePLN) ? 0 : offerSource.valuePLN;
+          }
+
+          // 2. Opened (In Progress) - Bucket strictly by Order Date
+          if (startDateStr) {
+              const m = startDateStr.slice(0, 7);
+              initMonth(m);
+              // Use opening file value if possible, else latest
+              const val = openingFile ? openingFile.valuePLN : latestFile.valuePLN;
+              monthlyStats[m].opened += isNaN(val) ? 0 : val;
+          }
+
+          // 3. Closed (Finished) - Bucket strictly by Protocol Date
+          if (endDateStr && finalFile) {
+              const m = endDateStr.slice(0, 7);
+              initMonth(m);
+              monthlyStats[m].closed += isNaN(finalFile.valuePLN) ? 0 : finalFile.valuePLN;
+          }
       });
 
-      result.sort((a, b) => {
-          const dateA = a.projects[0]?.files[0]?.date.getTime() || 0;
-          const dateB = b.projects[0]?.files[0]?.date.getTime() || 0;
-          return dateB - dateA;
-      });
+      const chartData = Object.entries(monthlyStats)
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([month, stats]) => ({ month, ...stats }));
 
-      return result;
+      const topClients = Object.entries(clientStats)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5);
 
-  }, [files, searchTerm, dateFrom, dateTo, filterStage, filterSales, filterSupport, fileMetadata]);
+      return {
+          totalProjects,
+          globalValue,
+          avgValue: totalProjects > 0 ? globalValue / totalProjects : 0,
+          avgDuration: projectsWithDuration > 0 ? totalDurationDays / projectsWithDuration : 0,
+          chartData,
+          topClients,
+          stageDistribution,
+          totalFiles: allFiles.length
+      };
+  }, [searchIndex, fileMetadata, filterSales, filterSupport, filterStage, dateFrom, dateTo]); 
+
+  // --- RENDER STATISTICS VIEW ---
+  const renderStatistics = () => {
+      const { totalProjects, globalValue, avgValue, chartData, topClients, stageDistribution, avgDuration, totalFiles } = statistics;
+      const maxChartValue = Math.max(1, ...chartData.map(d => Math.max(d.offers, d.opened, d.closed)));
+      const maxClientValue = topClients.length > 0 ? topClients[0][1] : 1;
+
+      return (
+          <div className="space-y-6 animate-fadeIn p-4 overflow-y-auto h-full custom-scrollbar pb-20">
+              
+              {/* Stats Toolbar */}
+              <div className="flex justify-between items-center bg-zinc-50 dark:bg-zinc-800 p-2 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                  <div className="text-xs text-zinc-500 flex items-center gap-2">
+                      <span className="font-bold">Analiza:</span> {totalFiles} plików (w podfolderach)
+                  </div>
+                  <button 
+                      onClick={() => currentDirHandle && startRecursiveScan(currentDirHandle)}
+                      className={`px-3 py-1.5 rounded bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 text-xs font-bold flex items-center gap-2 transition-colors ${isScanning ? 'animate-pulse cursor-wait' : ''}`}
+                  >
+                      <RefreshCw size={14} className={isScanning ? "animate-spin" : ""}/> 
+                      {isScanning ? 'Skanowanie...' : 'Skanuj Pełną Strukturę'}
+                  </button>
+              </div>
+
+              {/* Filter Notice */}
+              {(filterSales || filterSupport || filterStage || dateFrom || dateTo) && (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-2 rounded text-xs text-amber-800 dark:text-amber-200 flex flex-wrap items-center gap-2">
+                      <Filter size={12}/>
+                      <span className="font-bold">Aktywne Filtry:</span>
+                      {filterSales && <span className="bg-white dark:bg-zinc-800 px-1 rounded">{filterSales}</span>}
+                      {filterSupport && <span className="bg-white dark:bg-zinc-800 px-1 rounded">{filterSupport}</span>}
+                      {filterStage && <span className="bg-white dark:bg-zinc-800 px-1 rounded">{filterStage}</span>}
+                      {(dateFrom || dateTo) && <span className="bg-white dark:bg-zinc-800 px-1 rounded">{dateFrom} - {dateTo}</span>}
+                  </div>
+              )}
+
+              {/* KPI Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl shadow-sm border border-zinc-100 dark:border-zinc-700">
+                      <div className="flex justify-between items-start mb-2">
+                          <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600"><Target size={20}/></div>
+                      </div>
+                      <div className="text-2xl font-bold text-zinc-900 dark:text-white">{totalProjects}</div>
+                      <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-wide">Projektów</div>
+                  </div>
+                  <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl shadow-sm border border-zinc-100 dark:border-zinc-700">
+                      <div className="flex justify-between items-start mb-2">
+                          <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg text-green-600"><TrendingUp size={20}/></div>
+                      </div>
+                      <div className="text-2xl font-bold text-zinc-900 dark:text-white">{formatNumber(globalValue, 0)}</div>
+                      <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-wide">Wartość Całk. (PLN)</div>
+                  </div>
+                  <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl shadow-sm border border-zinc-100 dark:border-zinc-700">
+                      <div className="flex justify-between items-start mb-2">
+                          <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-purple-600"><BarChart3 size={20}/></div>
+                      </div>
+                      <div className="text-2xl font-bold text-zinc-900 dark:text-white">{formatNumber(avgValue, 0)}</div>
+                      <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-wide">Średnia Wartość</div>
+                  </div>
+                  <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl shadow-sm border border-zinc-100 dark:border-zinc-700">
+                      <div className="flex justify-between items-start mb-2">
+                          <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg text-orange-600"><Clock size={20}/></div>
+                      </div>
+                      <div className="text-2xl font-bold text-zinc-900 dark:text-white">{avgDuration.toFixed(1)} <span className="text-sm font-normal">dni</span></div>
+                      <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-wide">Śr. Czas Trwania</div>
+                  </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Top Clients */}
+                  <div className="bg-white dark:bg-zinc-800 p-5 rounded-xl shadow-sm border border-zinc-100 dark:border-zinc-700">
+                      <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 mb-4 flex items-center gap-2">
+                          <Trophy size={16} className="text-yellow-500"/> Top Klienci (Wartość)
+                      </h3>
+                      <div className="space-y-3">
+                          {topClients.map(([name, val], idx) => (
+                              <div key={name} className="relative">
+                                  <div className="flex justify-between text-xs mb-1 relative z-10">
+                                      <span className="font-semibold text-zinc-700 dark:text-zinc-300">{idx+1}. {name}</span>
+                                      <span className="font-mono">{formatNumber(val, 0)} PLN</span>
+                                  </div>
+                                  <div className="h-1.5 w-full bg-zinc-100 dark:bg-zinc-700 rounded-full overflow-hidden">
+                                      <div className="h-full bg-yellow-400 rounded-full" style={{ width: `${(val / maxClientValue) * 100}%` }}></div>
+                                  </div>
+                              </div>
+                          ))}
+                          {topClients.length === 0 && <div className="text-xs text-zinc-400 italic">Brak danych</div>}
+                      </div>
+                  </div>
+
+                  {/* Stage Distribution */}
+                  <div className="bg-white dark:bg-zinc-800 p-5 rounded-xl shadow-sm border border-zinc-100 dark:border-zinc-700">
+                      <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 mb-4 flex items-center gap-2">
+                          <PieChart size={16} className="text-blue-500"/> Etapy Projektów
+                      </h3>
+                      <div className="flex items-end justify-around h-32 gap-2">
+                          <div className="flex flex-col items-center gap-2 w-1/3 group">
+                              <div className="text-xs font-bold text-zinc-600 dark:text-zinc-300 group-hover:scale-110 transition-transform">{stageDistribution.DRAFT}</div>
+                              <div className="w-full bg-zinc-300 dark:bg-zinc-600 rounded-t-lg transition-all hover:bg-zinc-400" style={{ height: `${totalProjects ? (stageDistribution.DRAFT/totalProjects)*100 : 0}%`, minHeight: '4px' }}></div>
+                              <div className="text-[10px] font-bold text-zinc-400 uppercase">Szkic</div>
+                          </div>
+                          <div className="flex flex-col items-center gap-2 w-1/3 group">
+                              <div className="text-xs font-bold text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">{stageDistribution.OPENING}</div>
+                              <div className="w-full bg-blue-400 rounded-t-lg transition-all hover:bg-blue-500" style={{ height: `${totalProjects ? (stageDistribution.OPENING/totalProjects)*100 : 0}%`, minHeight: '4px' }}></div>
+                              <div className="text-[10px] font-bold text-blue-500 uppercase">Otwarte</div>
+                          </div>
+                          <div className="flex flex-col items-center gap-2 w-1/3 group">
+                              <div className="text-xs font-bold text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform">{stageDistribution.FINAL}</div>
+                              <div className="w-full bg-purple-500 rounded-t-lg transition-all hover:bg-purple-600" style={{ height: `${totalProjects ? (stageDistribution.FINAL/totalProjects)*100 : 0}%`, minHeight: '4px' }}></div>
+                              <div className="text-[10px] font-bold text-purple-500 uppercase">Zamknięte</div>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+
+              {/* Monthly Trend Chart */}
+              <div className="bg-white dark:bg-zinc-800 p-5 rounded-xl shadow-sm border border-zinc-100 dark:border-zinc-700">
+                  <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-100 mb-6 flex items-center gap-2">
+                      <Calendar size={16} className="text-zinc-500"/> Aktywność Miesięczna (Wartość PLN)
+                  </h3>
+                  <div className="h-40 flex items-end gap-2 relative">
+                      {chartData.map((d) => (
+                          <div key={d.month} className="flex-1 flex flex-col justify-end gap-0.5 group relative h-full">
+                              {/* Bars */}
+                              <div className="w-full bg-purple-500 opacity-80 hover:opacity-100 transition-opacity rounded-t-sm" style={{ height: `${(d.closed / maxChartValue) * 80}%` }} title={`Zamknięte: ${formatNumber(d.closed,0)}`}></div>
+                              <div className="w-full bg-blue-400 opacity-80 hover:opacity-100 transition-opacity rounded-t-sm" style={{ height: `${(d.opened / maxChartValue) * 80}%` }} title={`Otwarte: ${formatNumber(d.opened,0)}`}></div>
+                              <div className="w-full bg-zinc-300 dark:bg-zinc-600 opacity-80 hover:opacity-100 transition-opacity rounded-t-sm" style={{ height: `${(d.offers / maxChartValue) * 80}%` }} title={`Oferty: ${formatNumber(d.offers,0)}`}></div>
+                              
+                              {/* Label */}
+                              <div className="text-[9px] text-zinc-400 -rotate-45 mt-2 origin-left translate-x-1">{d.month.slice(2)}</div>
+                          </div>
+                      ))}
+                      {chartData.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-xs text-zinc-400 italic">Brak danych historycznych</div>}
+                  </div>
+                  <div className="flex gap-4 justify-center mt-6">
+                      <div className="flex items-center gap-1 text-[10px] text-zinc-500"><div className="w-2 h-2 bg-zinc-300 dark:bg-zinc-600"></div> Oferty</div>
+                      <div className="flex items-center gap-1 text-[10px] text-zinc-500"><div className="w-2 h-2 bg-blue-400"></div> Realizacja</div>
+                      <div className="flex items-center gap-1 text-[10px] text-zinc-500"><div className="w-2 h-2 bg-purple-500"></div> Zamknięte</div>
+                  </div>
+              </div>
+          </div>
+      );
+  };
+
+  const handleGlobalJumpToFolder = (item: DirectoryItem) => {
+      // Since we don't have the parent handle chain to build the stack, we just replace it 
+      // with Root -> This Folder (effectively a "jump")
+      if (item.kind === 'directory' && currentDirHandle) {
+          // Note: Without traversing we can't truly build the stack unless we store handles in recursive scan.
+          // But recursive scan stores handles!
+          const handle = item.handle as FileSystemDirectoryHandle;
+          // Reconstruct path for breadcrumbs string (visual only as we miss intermediate handles)
+          // Actually, we can just push this folder as if it's direct child of root visually for now 
+          // or ideally, we'd need to change how pathStack works.
+          // Simple approach: Clear stack to Root, then load this folder content as current. 
+          // Losing "Up" capability to immediate parent, but gaining navigation.
+          setPathStack([{ name: 'Katalog Główny', handle: currentDirHandle }, { name: item.name, handle }]);
+          loadDirectoryContents(handle);
+          setSearchTerm('');
+      }
+  };
+
+  if (!isOpen) return null;
 
   return (
-    <div 
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn"
-      onClick={onClose}
-    >
-      <div 
-        className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden animate-slideUp border border-zinc-200 dark:border-zinc-700 relative"
-        onClick={(e) => e.stopPropagation()}
-      >
-        
-        {/* DELETE CONFIRMATION OVERLAY */}
-        {deleteConfirm && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/80 dark:bg-black/80 backdrop-blur-sm animate-fadeIn">
-                <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-2xl border border-red-200 dark:border-red-800 p-6 max-w-md w-full animate-scaleIn">
-                    <div className="flex items-center gap-3 text-red-600 dark:text-red-500 mb-4">
-                        <AlertTriangle size={24} />
-                        <h3 className="text-lg font-bold">Potwierdź usunięcie</h3>
-                    </div>
-                    <p className="text-zinc-600 dark:text-zinc-300 text-sm mb-6">
-                        Czy na pewno chcesz trwale usunąć plik: <br/>
-                        <span className="font-mono font-bold text-zinc-900 dark:text-white block mt-1 break-all bg-zinc-100 dark:bg-zinc-800 p-2 rounded">{deleteConfirm}</span>
-                    </p>
-                    <div className="flex justify-end gap-3">
-                        <button 
-                            onClick={() => setDeleteConfirm(null)}
-                            className="px-4 py-2 rounded text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 text-sm font-bold"
-                        >
-                            Anuluj
-                        </button>
-                        <button 
-                            onClick={handleDeleteFile}
-                            className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white text-sm font-bold shadow-sm"
-                        >
-                            Usuń trwale
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {/* Header */}
-        <div className="flex justify-between items-center p-4 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800">
-            <div className="flex flex-col">
-                <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-                    <HardDrive className="text-yellow-500"/> Menedżer Projektów
-                </h2>
-                {currentDirHandle && (
-                    <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold uppercase">Połączono</span>
-                        <span className="text-xs text-zinc-400 truncate max-w-[400px]" title={currentDirHandle.name}>{currentDirHandle.name}</span>
-                    </div>
-                )}
-            </div>
-            <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
-                <X size={24} />
-            </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 flex flex-col p-6 overflow-hidden">
-            
-            {!currentDirHandle ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 animate-fadeIn">
-                    <div className="bg-zinc-100 dark:bg-zinc-800 p-6 rounded-full">
-                        <FolderOpen size={64} className="text-zinc-400" />
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+        <div 
+            className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden animate-slideUp border border-zinc-200 dark:border-zinc-700"
+            onClick={(e) => e.stopPropagation()}
+        >
+            {/* Header */}
+            <div className="p-4 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-4">
+                    <div className="bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 p-2 rounded-lg">
+                        <HardDrive size={24}/>
                     </div>
                     <div>
-                        <h3 className="text-xl font-bold text-zinc-700 dark:text-zinc-200">Wskaż folder projektów</h3>
-                        <p className="text-zinc-500 dark:text-zinc-400 mt-2 max-w-lg mx-auto">
-                            Wybierz folder sieciowy lub lokalny, w którym przechowywane są pliki `.json`. 
-                            Aplikacja przeskanuje pliki, aby umożliwić wyszukiwanie i grupowanie.
-                        </p>
-                    </div>
-                    
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 rounded text-sm text-blue-800 dark:text-blue-300 font-mono max-w-2xl break-all">
-                        Zalecana ścieżka:<br/>
-                        {targetPathHint}
-                    </div>
-
-                    {errorMsg && (
-                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded text-sm text-red-600 dark:text-red-300 max-w-lg flex items-start gap-2 text-left">
-                            <AlertTriangle size={16} className="shrink-0 mt-0.5"/>
-                            {errorMsg}
+                        <h2 className="text-xl font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
+                            Menedżer Projektów
+                            {activeTab === 'stats' && <span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider">Statystyki</span>}
+                        </h2>
+                        
+                        {/* Breadcrumbs */}
+                        <div className="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400 mt-1 overflow-hidden">
+                            <button onClick={() => navigateToCrumb(0)} className="hover:text-amber-500 transition-colors flex items-center gap-1"><Home size={10}/> Root</button>
+                            {pathStack.slice(1).map((crumb, idx) => (
+                                <React.Fragment key={idx}>
+                                    <ChevronRight size={10}/>
+                                    <button 
+                                        onClick={() => navigateToCrumb(idx + 1)}
+                                        className="hover:text-amber-500 transition-colors truncate max-w-[100px]"
+                                        title={crumb.name}
+                                    >
+                                        {crumb.name}
+                                    </button>
+                                </React.Fragment>
+                            ))}
                         </div>
-                    )}
-
-                    <button 
-                        onClick={connectToFolder}
-                        className="bg-yellow-500 hover:bg-yellow-600 text-white dark:text-black font-bold py-3 px-8 rounded-lg shadow-md transition-transform active:scale-95 flex items-center gap-2"
-                    >
-                        <FolderOpen size={20}/> Połącz z folderem
+                    </div>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                    <div className="flex bg-zinc-200 dark:bg-zinc-700 p-1 rounded-lg">
+                        <button 
+                            onClick={() => setActiveTab('files')}
+                            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-2 ${activeTab === 'files' ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'}`}
+                        >
+                            <FolderOpen size={14}/> Pliki
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('stats')}
+                            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-2 ${activeTab === 'stats' ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'}`}
+                        >
+                            <BarChart3 size={14}/> Statystyki
+                        </button>
+                    </div>
+                    <button onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+                        <X size={24}/>
                     </button>
                 </div>
-            ) : (
-                <div className="flex flex-col h-full animate-fadeIn">
-                    {/* Toolbar */}
-                    <div className="flex flex-col gap-2 mb-4 shrink-0 bg-white dark:bg-zinc-900 z-10">
-                         {/* Primary Bar */}
-                         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-                             {/* Filters Group */}
-                             <div className="flex flex-col sm:flex-row gap-2 w-full xl:max-w-3xl">
-                                 <div className="relative flex-1">
-                                     <Search className="absolute left-3 top-2.5 text-zinc-400" size={16}/>
-                                     <input 
-                                        type="text" 
-                                        placeholder="Szukaj: Klient, Projekt, Plik..." 
-                                        className="w-full pl-9 p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg bg-zinc-50 dark:bg-zinc-800 focus:border-yellow-400 outline-none text-sm shadow-sm"
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                     />
-                                 </div>
-                                 <button 
-                                    onClick={() => setShowFilters(!showFilters)}
-                                    className={`px-3 py-2 border rounded-lg flex items-center gap-2 text-sm font-bold transition-colors ${showFilters ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-zinc-50 border-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300'}`}
-                                 >
-                                     <ListFilter size={16}/> Filtry
-                                 </button>
-                             </div>
+            </div>
 
-                             {/* Actions Group */}
-                             <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto">
-                                 <div className="relative flex-1 sm:flex-none">
-                                    <PenLine className="absolute left-3 top-2.5 text-zinc-400" size={16}/>
-                                    <input 
-                                        type="text" 
-                                        placeholder="Dopisek (np. v2)"
-                                        className="w-full sm:w-32 pl-9 p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg bg-zinc-50 dark:bg-zinc-800 focus:border-yellow-400 outline-none text-sm h-[38px]"
-                                        value={filenameSuffix}
-                                        onChange={(e) => setFilenameSuffix(e.target.value)}
-                                        maxLength={20}
-                                    />
-                                 </div>
-                                 
-                                 <button 
-                                    onClick={handleSave}
-                                    className="bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900 px-4 py-2 rounded-lg font-bold hover:opacity-90 flex items-center justify-center gap-2 shadow-sm whitespace-nowrap text-sm h-[38px]"
-                                 >
-                                     <Save size={16}/> Zapisz
-                                 </button>
+            {/* ERROR BANNER */}
+            {errorMsg && (
+                <div className="bg-red-50 dark:bg-red-900/30 p-3 border-b border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-xs flex items-center gap-2 justify-center">
+                    <AlertTriangle size={14}/> {errorMsg}
+                </div>
+            )}
 
-                                 <button 
-                                    onClick={() => listFiles(currentDirHandle)}
-                                    className="p-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors border border-zinc-200 dark:border-zinc-700 h-[38px] w-[38px] flex items-center justify-center"
-                                    title="Odśwież i przeskanuj ponownie"
-                                 >
-                                     <RefreshCw size={16} className={isLoading || isScanning ? 'animate-spin' : ''}/>
-                                 </button>
-                             </div>
-                         </div>
+            {/* SCAN PROGRESS */}
+            {isScanning && (
+                <div className="h-1 w-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                    <div className="h-full bg-amber-500 transition-all duration-300 animate-pulse" style={{ width: `${scanProgress}%` }}></div>
+                </div>
+            )}
 
-                         {/* Expanded Filters */}
-                         {showFilters && (
-                             <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg grid grid-cols-1 md:grid-cols-4 gap-4 animate-slideUp">
-                                 <div className="flex gap-2 items-center md:col-span-2 lg:col-span-1">
-                                    <span className="text-[10px] uppercase font-bold text-zinc-400">Data:</span>
-                                    <input 
-                                        type="date" 
-                                        className="p-1 border rounded text-xs bg-white dark:bg-zinc-900"
-                                        value={dateFrom}
-                                        onChange={(e) => setDateFrom(e.target.value)}
-                                    />
-                                    <span>-</span>
-                                    <input 
-                                        type="date" 
-                                        className="p-1 border rounded text-xs bg-white dark:bg-zinc-900"
-                                        value={dateTo}
-                                        onChange={(e) => setDateTo(e.target.value)}
-                                    />
-                                 </div>
-                                 <div>
-                                     <select 
-                                        className="w-full p-1.5 border rounded text-xs bg-white dark:bg-zinc-900"
-                                        value={filterStage}
-                                        onChange={(e) => setFilterStage(e.target.value)}
-                                     >
-                                         <option value="">Wszystkie Etapy</option>
-                                         <option value="DRAFT">Draft</option>
-                                         <option value="OPENING">Opening</option>
-                                         <option value="FINAL">Final</option>
-                                     </select>
-                                 </div>
-                                 <div>
-                                     <input 
-                                        list="filter-sales-list"
-                                        placeholder="Handlowiec..."
-                                        className="w-full p-1.5 border rounded text-xs bg-white dark:bg-zinc-900"
-                                        value={filterSales}
-                                        onChange={(e) => setFilterSales(e.target.value)}
-                                     />
-                                     <datalist id="filter-sales-list">
-                                         {SALES_PEOPLE.map((p, i) => <option key={i} value={p} />)}
-                                     </datalist>
-                                 </div>
-                                 <div>
-                                     <input 
-                                        list="filter-support-list"
-                                        placeholder="Wsparcie..."
-                                        className="w-full p-1.5 border rounded text-xs bg-white dark:bg-zinc-900"
-                                        value={filterSupport}
-                                        onChange={(e) => setFilterSupport(e.target.value)}
-                                     />
-                                     <datalist id="filter-support-list">
-                                         {SUPPORT_PEOPLE.map((p, i) => <option key={i} value={p} />)}
-                                     </datalist>
-                                 </div>
-                                 {(dateFrom || dateTo || filterStage || filterSales || filterSupport) && (
-                                     <button 
-                                        onClick={() => { setDateFrom(''); setDateTo(''); setFilterStage(''); setFilterSales(''); setFilterSupport(''); }}
-                                        className="text-xs text-red-500 hover:underline md:col-span-4 text-right"
-                                     >
-                                         Wyczyść filtry
-                                     </button>
-                                 )}
-                             </div>
-                         )}
-                    </div>
+            {/* Main Content Area */}
+            <div className="flex flex-1 overflow-hidden">
+                
+                {/* SIDEBAR FILTERS (Visible in both tabs if toggled, or always in stats?) */}
+                {(showFilters || activeTab === 'stats') && (
+                    <div className="w-64 bg-zinc-50 dark:bg-zinc-900/50 border-r border-zinc-200 dark:border-zinc-700 p-4 overflow-y-auto shrink-0 flex flex-col gap-6">
+                        <div>
+                            <h3 className="text-xs font-bold text-zinc-500 uppercase mb-3 flex items-center gap-2"><Filter size={12}/> Filtrowanie</h3>
+                            
+                            {/* Search Scope Switcher */}
+                            {activeTab === 'files' && (
+                                <div className="flex bg-white dark:bg-zinc-800 p-1 rounded-md border border-zinc-200 dark:border-zinc-700 mb-3">
+                                    <button 
+                                        onClick={() => setSearchScope('global')}
+                                        className={`flex-1 text-[10px] font-bold py-1 rounded-sm transition-colors ${searchScope === 'global' ? 'bg-zinc-200 dark:bg-zinc-600 text-zinc-900 dark:text-white' : 'text-zinc-400 hover:text-zinc-600'}`}
+                                        title="Szukaj w całej strukturze (wymaga skanu)"
+                                    >
+                                        <Globe size={12} className="inline mr-1"/> Globalne
+                                    </button>
+                                    <button 
+                                        onClick={() => setSearchScope('local')}
+                                        className={`flex-1 text-[10px] font-bold py-1 rounded-sm transition-colors ${searchScope === 'local' ? 'bg-zinc-200 dark:bg-zinc-600 text-zinc-900 dark:text-white' : 'text-zinc-400 hover:text-zinc-600'}`}
+                                        title="Szukaj tylko w bieżącym folderze"
+                                    >
+                                        <ScanLine size={12} className="inline mr-1"/> Folder
+                                    </button>
+                                </div>
+                            )}
 
-                    {/* Scanning Progress Bar */}
-                    {isScanning && (
-                        <div className="mb-2 shrink-0">
-                            <div className="flex justify-between text-[10px] text-zinc-400 uppercase font-bold mb-1">
-                                <span>Indeksowanie plików...</span>
-                                <span>{scanProgress}%</span>
+                            {/* Search Input */}
+                            <div className="relative mb-3">
+                                <Search className="absolute left-2.5 top-2.5 text-zinc-400" size={14}/>
+                                <input 
+                                    type="text" 
+                                    placeholder={searchScope === 'global' ? "Szukaj w całej bazie..." : "Szukaj tutaj..."}
+                                    className="w-full pl-8 p-2 text-xs border border-zinc-200 dark:border-zinc-700 rounded bg-white dark:bg-zinc-800 outline-none focus:ring-2 focus:ring-amber-400"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
                             </div>
-                            <div className="h-1 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-                                <div className="h-full bg-yellow-400 transition-all duration-300" style={{ width: `${scanProgress}%` }}></div>
-                            </div>
-                        </div>
-                    )}
 
-                    {/* Hierarchy List */}
-                    <div className="flex-1 overflow-y-auto rounded-lg bg-transparent custom-scrollbar space-y-6 pr-2 pb-4">
-                        {files.length === 0 && !isLoading && (
-                            <div className="flex flex-col items-center justify-center h-full text-zinc-400 italic bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-700">
-                                <FileJson size={32} className="mb-2 opacity-50"/>
-                                Brak plików .json w tym folderze.
-                            </div>
-                        )}
-                        
-                        {groupedHierarchy.length === 0 && files.length > 0 && (
-                             <div className="flex flex-col items-center justify-center h-full text-zinc-400 italic bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-700">
-                                Brak wyników dla obecnych filtrów.
-                            </div>
-                        )}
-
-                        {groupedHierarchy.map(clientGroup => (
-                            <div key={clientGroup.clientName} className="animate-fadeIn">
-                                {/* LEVEL 1: CLIENT HEADER */}
-                                <div className="flex items-center gap-3 mb-2 sticky top-0 bg-zinc-100 dark:bg-black/90 backdrop-blur-sm z-10 py-2 border-b-2 border-zinc-300 dark:border-zinc-700">
-                                    <div className="bg-zinc-800 dark:bg-zinc-100 text-white dark:text-black p-1.5 rounded-md shadow-sm">
-                                        <User size={16} />
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="text-[10px] font-bold text-zinc-400 uppercase mb-1 block">Data (Od - Do)</label>
+                                    <div className="flex gap-1">
+                                        <input type="date" className="w-full p-1 text-[10px] border rounded bg-white dark:bg-zinc-800 dark:border-zinc-700" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+                                        <input type="date" className="w-full p-1 text-[10px] border rounded bg-white dark:bg-zinc-800 dark:border-zinc-700" value={dateTo} onChange={e => setDateTo(e.target.value)} />
                                     </div>
-                                    <h3 className="text-base font-bold text-zinc-900 dark:text-white uppercase tracking-tight">
-                                        {clientGroup.clientName}
-                                    </h3>
-                                    <span className="text-xs text-zinc-400 font-normal">({clientGroup.projects.length} projekty)</span>
                                 </div>
 
-                                <div className="space-y-4 pl-2 border-l-2 border-zinc-200 dark:border-zinc-800 ml-3">
-                                    {clientGroup.projects.map(projectGroup => (
-                                        <div key={projectGroup.projectNum} className="bg-white dark:bg-zinc-900 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden">
-                                            {/* LEVEL 2: PROJECT HEADER */}
-                                            <div className="bg-zinc-50 dark:bg-zinc-800/50 p-3 flex justify-between items-center border-b border-zinc-100 dark:border-zinc-700">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="bg-white dark:bg-zinc-900 px-2 py-1 rounded border border-zinc-200 dark:border-zinc-600 text-xs font-mono font-bold text-zinc-700 dark:text-zinc-200 flex items-center gap-2">
-                                                        <Hash size={12} className="text-zinc-400"/>
-                                                        {projectGroup.projectNum}
-                                                    </div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-zinc-400 uppercase mb-1 block">Etap Projektu</label>
+                                    <select className="w-full p-1.5 text-xs border rounded bg-white dark:bg-zinc-800 dark:border-zinc-700" value={filterStage} onChange={e => setFilterStage(e.target.value)}>
+                                        <option value="">Wszystkie</option>
+                                        <option value="DRAFT">Szkic (Draft)</option>
+                                        <option value="OPENING">Otwarte (Realizacja)</option>
+                                        <option value="FINAL">Zamknięte</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="text-[10px] font-bold text-zinc-400 uppercase mb-1 block">Handlowiec</label>
+                                    <input list="filter-sales" className="w-full p-1.5 text-xs border rounded bg-white dark:bg-zinc-800 dark:border-zinc-700" value={filterSales} onChange={e => setFilterSales(e.target.value)} placeholder="Wszyscy" />
+                                    <datalist id="filter-sales">{SALES_PEOPLE.map((p, i) => <option key={i} value={p}/>)}</datalist>
+                                </div>
+
+                                <div>
+                                    <label className="text-[10px] font-bold text-zinc-400 uppercase mb-1 block">Wsparcie</label>
+                                    <input list="filter-support" className="w-full p-1.5 text-xs border rounded bg-white dark:bg-zinc-800 dark:border-zinc-700" value={filterSupport} onChange={e => setFilterSupport(e.target.value)} placeholder="Wszyscy" />
+                                    <datalist id="filter-support">{SUPPORT_PEOPLE.map((p, i) => <option key={i} value={p}/>)}</datalist>
+                                </div>
+                            </div>
+                        </div>
+
+                        {activeTab === 'files' && (
+                            <div className="pt-6 border-t border-zinc-200 dark:border-zinc-700">
+                                <h3 className="text-xs font-bold text-zinc-500 uppercase mb-3 flex items-center gap-2"><Save size={12}/> Zapisz Obecny</h3>
+                                <div className="space-y-2">
+                                    <input 
+                                        type="text" 
+                                        placeholder="Opcjonalny przyrostek nazwy..." 
+                                        className="w-full p-2 text-xs border border-zinc-200 dark:border-zinc-700 rounded bg-white dark:bg-zinc-800 outline-none focus:ring-2 focus:ring-green-400"
+                                        value={filenameSuffix}
+                                        onChange={(e) => setFilenameSuffix(e.target.value)}
+                                    />
+                                    <button 
+                                        onClick={handleSave}
+                                        disabled={!currentDirHandle}
+                                        className="w-full py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded text-xs font-bold transition-colors flex justify-center items-center gap-2"
+                                    >
+                                        <Save size={14}/> Zapisz (DRAFT)
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* CONTENT LIST */}
+                <div className="flex-1 bg-white dark:bg-zinc-900 overflow-y-auto custom-scrollbar relative">
+                    
+                    {activeTab === 'stats' ? renderStatistics() : (
+                        <>
+                            {/* Toolbar in File View */}
+                            {!searchTerm && (
+                                <div className="sticky top-0 z-10 bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700 p-2 flex items-center gap-2">
+                                    <button onClick={navigateUp} disabled={pathStack.length <= 1} className="p-1.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 disabled:opacity-30">
+                                        <ArrowUpLeft size={16}/>
+                                    </button>
+                                    <div className="h-4 w-px bg-zinc-300 dark:bg-zinc-600 mx-1"></div>
+                                    <button onClick={() => setShowFilters(!showFilters)} className={`p-1.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 ${showFilters ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/20' : 'text-zinc-500'}`}>
+                                        <ListFilter size={16}/>
+                                    </button>
+                                    {!currentDirHandle && (
+                                        <button onClick={connectToFolder} className="ml-auto text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-bold transition-colors flex items-center gap-2">
+                                            <FolderOpen size={14}/> Wybierz Folder Roboczy
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* FILE LIST */}
+                            <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                                {!currentDirHandle && (
+                                    <div className="p-12 text-center text-zinc-400 flex flex-col items-center">
+                                        <FolderOpen size={48} className="mb-4 opacity-20"/>
+                                        <p>Nie wybrano folderu roboczego.</p>
+                                        <button onClick={connectToFolder} className="mt-4 text-blue-500 font-bold hover:underline">Wybierz Folder</button>
+                                    </div>
+                                )}
+
+                                {currentDirHandle && displayItems.length === 0 && !isLoading && (
+                                    <div className="p-12 text-center text-zinc-400">
+                                        <p>Folder jest pusty lub brak wyników wyszukiwania.</p>
+                                        {searchScope === 'global' && searchIndex.length === 0 && (
+                                            <p className="text-xs mt-2 text-zinc-500">Aby szukać globalnie, kliknij "Skanuj Pełną Strukturę" w zakładce Statystyki.</p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {displayItems.map((item, idx) => {
+                                    const meta = item.kind === 'file' ? fileMetadata[item.name] : null;
+                                    const isDirectory = item.kind === 'directory';
+                                    
+                                    return (
+                                        <div 
+                                            key={`${item.name}-${idx}`} 
+                                            className="group flex items-center justify-between p-3 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                                            onClick={() => {
+                                                if (isDirectory) {
+                                                    // Standard nav or Jump nav
+                                                    if (searchTerm) handleGlobalJumpToFolder(item);
+                                                    else navigateDown(item);
+                                                } else {
+                                                    handleLoad(item.handle as FileSystemFileHandle);
+                                                }
+                                            }}
+                                        >
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className={`p-2 rounded-lg shrink-0 ${isDirectory ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-500' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'}`}>
+                                                    {isDirectory ? <Folder size={20} fill="currentColor" fillOpacity={0.2}/> : <FileJson size={20}/>}
                                                 </div>
-                                                <div className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">
-                                                    {projectGroup.files.length} wersji
+                                                <div className="min-w-0">
+                                                    <div className="font-medium text-sm text-zinc-800 dark:text-zinc-200 truncate pr-4">
+                                                        {item.name}
+                                                    </div>
+                                                    {/* Path Display in Search Mode */}
+                                                    {searchTerm && item.path && item.path.length > 0 && (
+                                                        <div className="text-[10px] text-zinc-400 flex items-center gap-1">
+                                                            <Folder size={8} /> {item.path.join(' / ')}
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* Metadata Display */}
+                                                    {!isDirectory && (
+                                                        <div className="text-[10px] text-zinc-500 flex items-center gap-3 mt-0.5">
+                                                            <span className="flex items-center gap-1"><Calendar size={10}/> {item.date?.toLocaleDateString()}</span>
+                                                            {meta?.scanned && (
+                                                                <>
+                                                                    <span className="w-px h-3 bg-zinc-300 dark:bg-zinc-700"></span>
+                                                                    <span className="flex items-center gap-1 font-bold text-zinc-600 dark:text-zinc-400">{meta.clientName}</span>
+                                                                    <span className="w-px h-3 bg-zinc-300 dark:bg-zinc-700"></span>
+                                                                    <span className="flex items-center gap-1 font-mono">{meta.projectNumber}</span>
+                                                                    <span className="w-px h-3 bg-zinc-300 dark:bg-zinc-700"></span>
+                                                                    <span className={`font-bold px-1.5 py-0.5 rounded text-[9px] border ${
+                                                                        meta.stage === 'FINAL' ? 'bg-purple-100 text-purple-700 border-purple-200' : 
+                                                                        meta.stage === 'OPENING' ? 'bg-blue-100 text-blue-700 border-blue-200' : 
+                                                                        'bg-zinc-100 text-zinc-600 border-zinc-200'
+                                                                    }`}>
+                                                                        {meta.stage}
+                                                                    </span>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
 
-                                            {/* LEVEL 3: FILES TABLE */}
-                                            <table className="w-full text-left border-collapse">
-                                                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
-                                                    {projectGroup.files.map(file => {
-                                                        const meta = fileMetadata[file.name];
-                                                        let statusColor = 'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300';
-                                                        let statusLabel = 'DRAFT';
-                                                        
-                                                        if (meta?.stage === 'OPENING') {
-                                                            statusColor = 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-900';
-                                                            statusLabel = 'OPENING';
-                                                        } else if (meta?.stage === 'FINAL') {
-                                                            statusColor = 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200 dark:border-purple-900';
-                                                            statusLabel = 'FINAL';
-                                                        }
-
-                                                        return (
-                                                            <tr 
-                                                                key={file.name} 
-                                                                className="hover:bg-yellow-50 dark:hover:bg-yellow-900/10 group transition-colors cursor-pointer"
-                                                                onClick={() => handleLoad(file.handle)}
-                                                            >
-                                                                <td className="p-2 pl-4 w-24 align-top">
-                                                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded shadow-sm ${statusColor}`}>
-                                                                        {statusLabel}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="p-2 align-top">
-                                                                    <div className="text-sm font-medium text-zinc-700 dark:text-zinc-200 group-hover:text-zinc-900 dark:group-hover:text-white break-all leading-snug">
-                                                                        {file.name}
-                                                                    </div>
-                                                                    {/* Show metadata preview in advanced view mode implicitly */}
-                                                                    <div className="text-[10px] text-zinc-400 mt-0.5 flex gap-2">
-                                                                        {meta?.salesPerson && <span>H: {meta.salesPerson}</span>}
-                                                                        {meta?.assistantPerson && <span>W: {meta.assistantPerson}</span>}
-                                                                    </div>
-                                                                </td>
-                                                                <td className="p-2 text-right text-xs text-zinc-500 font-mono w-48 whitespace-nowrap align-top">
-                                                                    {file.date.toLocaleDateString()} <span className="text-zinc-300 mx-1">|</span> {file.date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                                                </td>
-                                                                <td className="p-2 pr-4 w-24 align-top flex justify-end gap-2">
-                                                                    <button 
-                                                                        onClick={(e) => { e.stopPropagation(); setDeleteConfirm(file.name); }}
-                                                                        className="p-1 text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors opacity-0 group-hover:opacity-100"
-                                                                        title="Usuń plik"
-                                                                    >
-                                                                        <Trash2 size={14}/>
-                                                                    </button>
-                                                                    <button 
-                                                                        onClick={(e) => { e.stopPropagation(); handleLoad(file.handle); }}
-                                                                        className="px-3 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:border-yellow-400 hover:text-yellow-600 dark:hover:border-yellow-500 dark:text-zinc-300 rounded text-xs font-bold transition-all shadow-sm opacity-0 group-hover:opacity-100"
-                                                                    >
-                                                                        Wczytaj
-                                                                    </button>
-                                                                </td>
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
+                                            <div className="flex items-center gap-4 shrink-0">
+                                                {meta && meta.scanned && (
+                                                    <div className="text-right hidden sm:block">
+                                                        <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{formatNumber(meta.valuePLN, 0)} PLN</div>
+                                                        <div className="text-[9px] text-zinc-400">{meta.salesPerson || '-'}</div>
+                                                    </div>
+                                                )}
+                                                
+                                                {deleteConfirm === item.name ? (
+                                                    <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/30 p-1 rounded" onClick={(e) => e.stopPropagation()}>
+                                                        <span className="text-[10px] text-red-600 font-bold">Usunąć?</span>
+                                                        <button onClick={handleDeleteFile} className="p-1 bg-red-600 text-white rounded hover:bg-red-700"><Trash2 size={12}/></button>
+                                                        <button onClick={() => setDeleteConfirm(null)} className="p-1 bg-zinc-200 text-zinc-600 rounded hover:bg-zinc-300"><X size={12}/></button>
+                                                    </div>
+                                                ) : (
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); setDeleteConfirm(item.name); }}
+                                                        className="p-2 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                                                        title="Usuń plik"
+                                                    >
+                                                        <Trash2 size={16}/>
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
-                                    ))}
-                                </div>
+                                    );
+                                })}
                             </div>
-                        ))}
-                    </div>
+                        </>
+                    )}
                 </div>
-            )}
+            </div>
         </div>
-      </div>
     </div>
   );
 };

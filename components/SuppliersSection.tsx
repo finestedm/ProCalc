@@ -1,6 +1,4 @@
 
-
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Supplier, SupplierItem, Currency, Language, SupplierStatus, TransportItem, InstallationData, VariantItemType } from '../types';
 import { Package, Plus, Trash2, Calendar, FileSpreadsheet, Copy, Eye, EyeOff, StickyNote, Tag, Loader2, Sparkles, Euro, Maximize2, ArrowUp, ArrowDown, Search, ArrowUpDown, ChevronDown, ChevronUp, GripVertical, Settings2, ArrowLeft, ArrowRight, Zap, FolderPlus, Edit3, MessageSquarePlus, SplitSquareHorizontal, MousePointer2, AlertTriangle, CheckCircle } from 'lucide-react';
@@ -32,6 +30,33 @@ interface OrmSheetResult {
     sheetName: string;
     items: SupplierItem[];
 }
+
+// --- VALIDATION HELPER ---
+const validateSupplierData = (s: Supplier): { isValid: boolean, missing: string[] } => {
+    // Skip system/excluded suppliers
+    if (s.isOrm || s.isIncluded === false) return { isValid: true, missing: [] };
+
+    const missing: string[] = [];
+
+    // Basic Fields
+    if (!s.name?.trim()) missing.push('Nazwa');
+    if (!s.street?.trim()) missing.push('Ulica');
+    if (!s.city?.trim()) missing.push('Miasto');
+
+    // NIP Validation (10 digits, allow formatting chars)
+    const cleanNip = (s.nip || '').replace(/[^0-9]/g, '');
+    if (cleanNip.length !== 10) missing.push('NIP (10 cyfr)');
+
+    // Zip Validation (XX-XXX or XXXXX)
+    const zipPattern = /^\d{2}-?\d{3}$/;
+    if (!zipPattern.test(s.zip || '')) missing.push('Kod pocztowy');
+
+    // Email Validation (Basic)
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(s.email || '')) missing.push('Email');
+
+    return { isValid: missing.length === 0, missing };
+};
 
 export const SuppliersSection: React.FC<Props> = ({ 
     suppliers, transport, installation, onChange, onBatchChange, onOpenComparison, exchangeRate, offerCurrency, nameplateQty, onNameplateChange, onConfirm,
@@ -231,18 +256,13 @@ export const SuppliersSection: React.FC<Props> = ({
     onChange(updatedSuppliers);
   };
 
-  const moveItemManual = (supplierIndex: number, originalIndex: number, direction: 'up' | 'down') => {
+  const reorderItems = (supplierIndex: number, fromIndex: number, toIndex: number) => {
       const updatedSuppliers = [...suppliers];
       const supplier = { ...updatedSuppliers[supplierIndex] };
       const items = [...supplier.items];
       
-      if (direction === 'up' && originalIndex === 0) return;
-      if (direction === 'down' && originalIndex === items.length - 1) return;
-
-      const targetIndex = direction === 'up' ? originalIndex - 1 : originalIndex + 1;
-      const temp = items[originalIndex];
-      items[originalIndex] = items[targetIndex];
-      items[targetIndex] = temp;
+      const [movedItem] = items.splice(fromIndex, 1);
+      items.splice(toIndex, 0, movedItem);
       
       supplier.items = items;
       updatedSuppliers[supplierIndex] = supplier;
@@ -457,17 +477,21 @@ export const SuppliersSection: React.FC<Props> = ({
     if (pdfInputRef.current) pdfInputRef.current.value = '';
   };
 
+  // Calculation Logic moved to calculationService mostly, but basic total display:
   const totalCost = suppliers.reduce((acc, s) => {
     if (s.isIncluded === false) return acc;
+    // Note: totalCost calc logic inside calculateProjectCosts handles extraMarkupPercent.
     const sTotal = s.items.reduce((sum, i) => {
+        if (i.isExcluded) return sum;
         const price = s.isOrm ? i.unitPrice * 0.5 : i.unitPrice;
         return sum + (i.quantity * price);
     }, 0);
     const discounted = sTotal * (1 - s.discount / 100);
+    const withMarkup = discounted * (1 + (s.extraMarkupPercent || 0) / 100);
     let ormFee = 0;
-    if (s.isOrm) ormFee = discounted * 0.016;
+    if (s.isOrm) ormFee = withMarkup * 0.016; 
 
-    return acc + convert(discounted + ormFee, s.currency, offerCurrency, exchangeRate);
+    return acc + convert(withMarkup + ormFee, s.currency, offerCurrency, exchangeRate);
   }, 0);
   
   const nameplateCost = convert((nameplateQty || 0) * 19, Currency.PLN, offerCurrency, exchangeRate);
@@ -477,17 +501,20 @@ export const SuppliersSection: React.FC<Props> = ({
   const isCurrentIncluded = currentSupplier ? currentSupplier.isIncluded !== false : true;
   const isNameplateTab = activeTab === NAMEPLATE_TAB_INDEX;
   
+  // UPDATED: Calculate subtotal respecting exclusion
   const activeSupplierSubtotal = currentSupplier ? currentSupplier.items.reduce((sum, i) => {
+      if (i.isExcluded) return sum; // Respect exclusion
       const price = currentSupplier.isOrm ? i.unitPrice * 0.5 : i.unitPrice;
       return sum + (i.quantity * price);
   }, 0) : 0;
-  const activeSupplierTotal = activeSupplierSubtotal * (1 - (currentSupplier?.discount || 0) / 100);
   
+  const activeDiscounted = activeSupplierSubtotal * (1 - (currentSupplier?.discount || 0) / 100);
+  const activeSupplierTotal = activeDiscounted * (1 + (currentSupplier?.extraMarkupPercent || 0) / 100);
   const activeOrmFee = currentSupplier?.isOrm ? (activeSupplierTotal * 0.016) : 0;
 
-  // Validation Logic: Is this supplier valid for ordering?
-  // Only check if active and not ORM (ORM is system managed)
-  const isCurrentMissingData = currentSupplier && !currentSupplier.isOrm && isCurrentIncluded && (!currentSupplier.address && !currentSupplier.city && !currentSupplier.nip && (currentSupplier.name === 'Inny Dostawca' || currentSupplier.name === 'Nowy Dostawca'));
+  // Validation Logic
+  const validationState = currentSupplier ? validateSupplierData(currentSupplier) : { isValid: true, missing: [] };
+  const isCurrentMissingData = !validationState.isValid && isCurrentIncluded;
 
   const supplierMenuItems = [
       { label: 'Porównaj Dostawców', icon: <SplitSquareHorizontal size={14} />, onClick: onOpenComparison },
@@ -555,12 +582,15 @@ export const SuppliersSection: React.FC<Props> = ({
                     >
                         {suppliers.map((s, idx) => {
                             const isActive = activeTab === idx;
-                            const isMissingData = !s.isOrm && s.isIncluded !== false && (!s.city && !s.nip && (s.name === 'Inny Dostawca' || s.name === 'Nowy Dostawca'));
+                            // Tab-specific validation
+                            const val = validateSupplierData(s);
+                            const isMissingData = !val.isValid && s.isIncluded !== false;
                             
                             return (
                                 <button
                                     key={s.id}
                                     onClick={() => setActiveTab(idx)}
+                                    title={isMissingData ? `Brakuje: ${val.missing.join(', ')}` : ''}
                                     className={`
                                         relative px-4 h-full text-xs font-medium transition-colors whitespace-nowrap min-w-[120px] max-w-[200px] truncate group border-r border-zinc-200 dark:border-zinc-800 flex items-center justify-center gap-2
                                         ${isActive 
@@ -569,11 +599,11 @@ export const SuppliersSection: React.FC<Props> = ({
                                         }
                                         ${s.isIncluded === false ? 'opacity-50 decoration-slate-400 line-through' : ''}
                                         ${isPickingMode && isActive ? 'ring-2 ring-inset ring-amber-400 z-20 cursor-crosshair' : ''}
-                                        ${isMissingData ? 'text-red-500 dark:text-red-400 bg-red-50/50' : ''}
+                                        ${isMissingData ? 'text-red-600 dark:text-red-400 bg-red-50/50 dark:bg-red-900/20 shadow-[inset_0_-2px_0_0_rgba(239,68,68,1)]' : ''}
                                     `}
                                 >
                                     {isPickingMode && isActive && <MousePointer2 size={10} className="inline animate-pulse text-amber-500" />}
-                                    {isMissingData && <AlertTriangle size={10} className="text-red-500"/>}
+                                    {isMissingData && <AlertTriangle size={12} className="text-red-500 shrink-0"/>}
                                     <span className="truncate">{s.customTabName || s.name}</span>
                                 </button>
                             );
@@ -701,7 +731,7 @@ export const SuppliersSection: React.FC<Props> = ({
                                         </div>
                                     </div>
                                     {currentSupplier.isOrm && <span className="text-[9px] text-green-600 dark:text-green-400 font-bold ml-1">ORM</span>}
-                                    {isCurrentMissingData && <span className="text-[9px] text-red-500 font-bold ml-1 block mt-1">! Wymagane uzupełnienie danych (kliknij lupę)</span>}
+                                    {isCurrentMissingData && <span className="text-[9px] text-red-500 font-bold ml-1 block mt-1">! Uzupełnij: {validationState.missing.join(', ')}</span>}
                                 </div>
                                 
                                 <div className={`contents transition-opacity duration-200 ${isCurrentIncluded ? 'opacity-100' : 'opacity-30 grayscale pointer-events-none select-none'}`}>
@@ -797,7 +827,7 @@ export const SuppliersSection: React.FC<Props> = ({
                                         onUpdateItem={(id, field, value) => updateItem(activeTab, id, field, value)}
                                         onDeleteItem={(id) => removeItem(activeTab, id)}
                                         onAddItem={() => addItem(activeTab)}
-                                        onMoveItem={(idx, dir) => moveItemManual(activeTab, idx, dir)}
+                                        onReorderItems={(from, to) => reorderItems(activeTab, from, to)}
                                         className="max-h-[70vh] border-0 shadow-none"
                                         isPickingMode={isPickingMode}
                                         onPick={(id, coords) => {
@@ -815,7 +845,7 @@ export const SuppliersSection: React.FC<Props> = ({
                                     />
                                 </div>
 
-                                <div className="bg-amber-50 dark:bg-amber-900/10 px-4 py-1.5 flex justify-between items-center border-t border-amber-100 dark:border-amber-900/30">
+                                <div className="bg-amber-50 dark:bg-amber-900/10 px-4 py-1.5 flex flex-wrap justify-between items-center border-t border-amber-100 dark:border-amber-900/30 gap-2">
                                     <div className="text-[10px] text-zinc-500 dark:text-zinc-400 italic flex items-center gap-2">
                                         Suma pozycji dla "{currentSupplier.customTabName || currentSupplier.name}"
                                         {activeOrmFee > 0 && (
@@ -828,7 +858,7 @@ export const SuppliersSection: React.FC<Props> = ({
                                         <div className="text-[10px] text-zinc-500">
                                             Suma: <span className="font-mono">{formatNumber(activeSupplierSubtotal)}</span>
                                         </div>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 border-l border-zinc-200 dark:border-zinc-700 pl-3">
                                             <span className="text-[10px] text-zinc-500 font-bold uppercase">Rabat (%)</span>
                                             <input 
                                                 type="number" 
@@ -839,7 +869,18 @@ export const SuppliersSection: React.FC<Props> = ({
                                                 onChange={(e) => updateSupplier(activeTab, 'discount', parseFloat(e.target.value) || 0)} 
                                             />
                                         </div>
-                                        <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                                        <div className="flex items-center gap-2 border-l border-zinc-200 dark:border-zinc-700 pl-3">
+                                            <span className="text-[10px] text-zinc-500 font-bold uppercase">Korekta (%)</span>
+                                            <input 
+                                                type="number" 
+                                                step="0.5"
+                                                className="w-12 p-0.5 border rounded-none text-center text-xs focus:border-amber-400 outline-none font-bold bg-white dark:bg-zinc-950 text-blue-600" 
+                                                value={currentSupplier.extraMarkupPercent || 0} 
+                                                onChange={(e) => updateSupplier(activeTab, 'extraMarkupPercent', parseFloat(e.target.value) || 0)}
+                                                placeholder="0"
+                                            />
+                                        </div>
+                                        <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 pl-3 border-l border-zinc-200 dark:border-zinc-700">
                                             = {formatCurrency(activeSupplierTotal, currentSupplier.currency)}
                                         </div>
                                     </div>

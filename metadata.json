@@ -1,5 +1,5 @@
 {
-  "name": "ProCalc - Kalkulator Ceny Projektu",
+  "name": "JH WE-Calc",
   "description": "Zaawansowany kalkulator wyceny projektów z obsługą walut, marży, kosztów dostawców i montażu. Zawiera moduł AI do generowania opisów.",
   "requestFramePermissions": []
 }

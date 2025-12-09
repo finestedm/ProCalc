@@ -38,6 +38,8 @@ import { Header } from './components/Header';
 import { FloatingSummary } from './components/FloatingSummary';
 import { ProjectManagerModal } from './components/ProjectManagerModal';
 import { SettingsModal } from './components/SettingsModal';
+import { ShortcutsModal } from './components/ShortcutsModal';
+import { ScrollSpy } from './components/ScrollSpy';
 import { fetchEurRate } from './services/currencyService';
 import { generateDiff } from './services/diffService';
 import { Moon, Sun, History, Download, Upload, FilePlus, HardDrive, MousePointer2, X, Plus, Check, Trash2, Settings } from 'lucide-react';
@@ -87,24 +89,31 @@ const App: React.FC = () => {
     initial: JSON.parse(JSON.stringify(EMPTY_CALCULATION)),
     final: JSON.parse(JSON.stringify(EMPTY_CALCULATION)),
     mode: CalculationMode.INITIAL,
+    stage: 'DRAFT', // Initialize Stage
     viewMode: ViewMode.CALCULATOR,
     exchangeRate: 4.30, 
     offerCurrency: Currency.EUR, 
     clientCurrency: Currency.PLN, 
     targetMargin: 20,
     manualPrice: null,
+    finalManualPrice: null,
     globalSettings: { ...DEFAULT_SETTINGS }
   });
 
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
+  const [showSupplierComparison, setShowSupplierComparison] = useState(false); // New State for Supplier Modal
   const [showHistory, setShowHistory] = useState(false);
   const [showProjectManager, setShowProjectManager] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   
   // Synchronized state for top forms
   const [isHeaderFormsOpen, setIsHeaderFormsOpen] = useState(true);
+  
+  // Mobile Sidebar State
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   
   const [pickingVariantId, setPickingVariantId] = useState<string | null>(null);
   const [pickedItemsBuffer, setPickedItemsBuffer] = useState<VariantItem[]>([]);
@@ -125,6 +134,9 @@ const App: React.FC = () => {
       message: '',
       onConfirm: () => {}
   });
+
+  // Ref for Main Scroll Container
+  const mainScrollRef = useRef<HTMLDivElement>(null);
 
   const triggerConfirm = (title: string, message: string, onConfirm: () => void, isDanger = false) => {
       setDialogConfig({
@@ -154,6 +166,23 @@ const App: React.FC = () => {
     return dataState;
   };
 
+  // Helper to detect structural changes (Add/Remove items) which should trigger instant snapshots
+  const getStructureHash = (state: AppState) => {
+      const getDataHash = (d: CalculationData) => {
+          return [
+              d.suppliers.length,
+              d.suppliers.map(s => s.items.length).join('-'),
+              d.transport.length,
+              d.otherCosts.length,
+              d.installation.stages.length,
+              d.installation.customTimelineItems?.length || 0,
+              d.tasks?.length || 0,
+              d.variants?.length || 0
+          ].join('|');
+      };
+      return `${getDataHash(state.initial)}#${getDataHash(state.final)}`;
+  };
+
   useEffect(() => {
     const savedTheme = localStorage.getItem(THEME_KEY);
     const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -164,9 +193,19 @@ const App: React.FC = () => {
     else document.documentElement.classList.remove('dark');
 
     const savedData = localStorage.getItem(STORAGE_KEY);
+    let shouldUpdateRate = true;
+
     if (savedData) {
       try {
         const parsed = JSON.parse(savedData);
+        // Determine if we should lock the rate (OPENING or FINAL stage/mode)
+        const currentStage = parsed.stage || (parsed.appState ? parsed.appState.stage : 'DRAFT');
+        const currentMode = parsed.mode || (parsed.appState ? parsed.appState.mode : CalculationMode.INITIAL);
+        
+        if (currentStage === 'OPENING' || currentStage === 'FINAL' || currentMode === CalculationMode.FINAL) {
+            shouldUpdateRate = false;
+        }
+
         if(parsed.initial && typeof parsed.initial.nameplateQty === 'undefined') parsed.initial.nameplateQty = 0;
         if(parsed.final && typeof parsed.final.nameplateQty === 'undefined') parsed.final.nameplateQty = 0;
         if(parsed.initial && typeof parsed.initial.installation.finalInstallationCosts === 'undefined') parsed.initial.installation.finalInstallationCosts = [];
@@ -175,6 +214,9 @@ const App: React.FC = () => {
         if(parsed.final && !parsed.final.variants) parsed.final.variants = [];
         if(parsed.initial && !parsed.initial.otherCostsScratchpad) parsed.initial.otherCostsScratchpad = [];
         if(parsed.final && !parsed.final.otherCostsScratchpad) parsed.final.otherCostsScratchpad = [];
+        if(parsed.finalManualPrice === undefined) parsed.finalManualPrice = null;
+        if(parsed.stage === undefined) parsed.stage = 'DRAFT'; // Default stage for legacy
+        
         // Init global settings if missing
         if(!parsed.appState?.globalSettings && !parsed.globalSettings) {
              // Handle migration if needed
@@ -196,10 +238,140 @@ const App: React.FC = () => {
     
     setIsLoaded(true);
 
-    fetchEurRate().then(rate => {
-      if (rate) setAppState(prev => ({ ...prev, exchangeRate: rate }));
-    });
+    // Only auto-update exchange rate if NOT locked (DRAFT stage)
+    if (shouldUpdateRate) {
+        fetchEurRate().then(rate => {
+            if (rate) setAppState(prev => {
+                // Safety check: if user switched to final mode or stage during fetch, abort update
+                if (prev.mode === CalculationMode.FINAL || prev.stage === 'OPENING' || prev.stage === 'FINAL') return prev;
+                return ({ ...prev, exchangeRate: rate });
+            });
+        });
+    }
+    
+    // Request Notification Permission
+    if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission();
+    }
   }, []);
+
+  // --- KEYBOARD SHORTCUTS ---
+  useEffect(() => {
+      const handleGlobalKeys = (e: KeyboardEvent) => {
+          // Check if user is typing in an input field
+          const target = e.target as HTMLElement;
+          const isTyping = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+
+          // 1. Navigation (Alt + Shift + Number) - Works everywhere, avoids browser conflict
+          if (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey) {
+              if (e.code === 'Digit1') setAppState(prev => ({ ...prev, viewMode: ViewMode.CALCULATOR }));
+              if (e.code === 'Digit2') setAppState(prev => ({ ...prev, viewMode: ViewMode.LOGISTICS }));
+              if (e.code === 'Digit3') setAppState(prev => ({ ...prev, viewMode: ViewMode.NOTES }));
+              if (e.code === 'Digit4') setAppState(prev => ({ ...prev, viewMode: ViewMode.DOCUMENTS }));
+          }
+
+          // 2. Actions (Alt + Letter) - Ensure no shift to distinguish
+          if (e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+              if (e.code === 'KeyQ') setAppState(prev => ({ ...prev, mode: CalculationMode.INITIAL }));
+              if (e.code === 'KeyW') setAppState(prev => ({ ...prev, mode: CalculationMode.FINAL }));
+              
+              if (e.code === 'KeyC') setShowComparison(true);
+              if (e.code === 'KeyT') toggleTheme();
+              if (e.key === '/' || e.key === '?') setShowShortcuts(true); // Help
+
+              if (e.code === 'KeyS') setShowMobileSidebar(prev => !prev);
+          }
+
+          // 3. App Control (Ctrl + Letter)
+          // Undo: Ctrl+Z
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+              if (isTyping) return; // Allow native input undo
+              e.preventDefault();
+              handleUndo(); // Always try to undo, handle logic inside
+              return;
+          }
+
+          // Redo: Ctrl+Shift+Z or Ctrl+Y
+          if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && e.shiftKey) ||
+              ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y')) {
+              if (isTyping) return;
+              e.preventDefault();
+              if (future.length > 0) handleRedo();
+              return;
+          }
+
+          // Save: Ctrl+S
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+              e.preventDefault();
+              if (dirHandle) {
+                  handleSmartSave(appState.stage);
+              } else {
+                  setShowProjectManager(true);
+                  showSnackbar("Otwórz Menedżera, aby zapisać projekt.");
+              }
+              return;
+          }
+
+          // Open Manager: Ctrl+O
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
+              e.preventDefault();
+              setShowProjectManager(true);
+              return;
+          }
+
+          // Export: Ctrl+E
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
+              e.preventDefault();
+              handleExport();
+              return;
+          }
+      };
+
+      window.addEventListener('keydown', handleGlobalKeys);
+      return () => window.removeEventListener('keydown', handleGlobalKeys);
+  }, [past, future, appState, dirHandle]); // Ensure deps are fresh for handlers
+
+  // --- NOTIFICATION SYSTEM ---
+  useEffect(() => {
+      const checkTasks = () => {
+          if (!("Notification" in window) || Notification.permission !== "granted") return;
+
+          const mode = appState.mode === CalculationMode.INITIAL ? 'initial' : 'final';
+          const tasks = appState[mode].tasks || [];
+          const today = new Date().toISOString().split('T')[0];
+          let updated = false;
+          
+          const newTasks = tasks.map(task => {
+              if (!task.isCompleted && task.dueDate && !task.reminderShown) {
+                  if (task.dueDate <= today) {
+                      new Notification("Przypomnienie ProCalc", {
+                          body: `Zadanie: ${task.text}`,
+                          icon: '/favicon.ico'
+                      });
+                      updated = true;
+                      return { ...task, reminderShown: true };
+                  }
+              }
+              return task;
+          });
+
+          if (updated) {
+              setAppState(prev => ({
+                  ...prev,
+                  [mode]: {
+                      ...prev[mode],
+                      tasks: newTasks
+                  }
+              }));
+          }
+      };
+
+      const interval = setInterval(checkTasks, 60000); // Check every minute
+      // Initial check after load
+      if (isLoaded) checkTasks();
+
+      return () => clearInterval(interval);
+  }, [appState, isLoaded]);
 
   useEffect(() => {
       if (!isLoaded) return;
@@ -213,6 +385,11 @@ const App: React.FC = () => {
       if (historyTimeoutRef.current) {
           clearTimeout(historyTimeoutRef.current);
       }
+
+      // Smart Debouncing Logic
+      const isStructuralChange = getStructureHash(lastSnapshot.current) !== getStructureHash(appState);
+      // Instant (0ms) for structural changes (delete/add), reduced delay (500ms) for typing
+      const delay = isStructuralChange ? 0 : 500;
 
       historyTimeoutRef.current = setTimeout(() => {
           const currentDataState = getHistoryState(appState);
@@ -240,7 +417,7 @@ const App: React.FC = () => {
           } else {
               lastSnapshot.current = appState;
           }
-      }, 1000);
+      }, delay);
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
 
@@ -256,6 +433,10 @@ const App: React.FC = () => {
       const init = appState.initial;
       
       if (stage === 'OPENING' || stage === 'FINAL') {
+          // Strict Metadata Requirements
+          if (!init.meta.installationType) errors.push("Brak Typu Instalacji (Szczegóły Projektu).");
+          if (!init.meta.invoiceText) errors.push("Brak Tekstu na Fakturze (Szczegóły Projektu).");
+
           // Common requirements for Opening & Final
           if (!init.meta.orderNumber) errors.push("Brak Numeru Zamówienia.");
           if (!init.meta.projectNumber) errors.push("Brak Numeru Projektu (CRM).");
@@ -303,7 +484,22 @@ const App: React.FC = () => {
       return errors;
   };
 
+  const sanitizeName = (name: string): string => {
+      return name.replace(/[^a-zA-Z0-9 \-_ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, '').trim() || 'Nieznany';
+  };
+
   const handleSmartSave = async (stage: ProjectStage): Promise<boolean> => {
+      // VALIDATION: Installation Type is required for ANY save
+      if (!appState.initial.meta.installationType) {
+          triggerConfirm(
+              "Wymagane Dane",
+              "Aby zapisać projekt, musisz wybrać 'Typ Instalacji' w Szczegółach Projektu.",
+              () => {},
+              true
+          );
+          return false;
+      }
+
       if (!dirHandle) {
           triggerConfirm(
               "Wybierz folder projektów",
@@ -313,40 +509,59 @@ const App: React.FC = () => {
           return false;
       }
 
-      // Always use the INITIAL project number for the filename to ensure
-      // versions stay grouped together, even if we are saving the Final stage.
+      // Update State with current stage
+      const newState = { ...appState, stage: stage };
+      setAppState(newState);
+
+      // Prepare Metadata for Folder Structure
+      const clientName = appState.initial.orderingParty.name || 'Nieznany Klient';
       const projectNum = appState.initial.meta.projectNumber || 'BezNumeru';
       
-      // Use local time for filename to avoid UTC confusion and ensure uniqueness
+      const safeClient = sanitizeName(clientName);
+      const safeProject = sanitizeName(projectNum);
+
+      // Construct filename
       const now = new Date();
       const offset = now.getTimezoneOffset() * 60000;
       const timestamp = new Date(now.getTime() - offset).toISOString().slice(0, 19).replace('T', '_').replace(/[:]/g, '-');
-      
-      const filename = `PROCALC_${projectNum}_${stage}_${timestamp}.json`;
+      const filename = `PROCALC_${safeProject}_${stage}_${timestamp}.json`;
 
       const fileData: ProjectFile = {
           version: '1.0',
           timestamp: Date.now(),
           stage: stage,
-          appState,
-          historyLog,
-          past: [],
-          future: []
+          appState: newState,
+          historyLog: [], // Cleared to save space
+          past: [], // Cleared to save space
+          future: [] // Cleared to save space
       };
 
       try {
+          // Drill down logic: Root -> Client -> Project
           // @ts-ignore
-          const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+          let targetHandle = dirHandle;
+          
+          // Get/Create Client Folder
+          // @ts-ignore
+          targetHandle = await targetHandle.getDirectoryHandle(safeClient, { create: true });
+          
+          // Get/Create Project Folder
+          // @ts-ignore
+          targetHandle = await targetHandle.getDirectoryHandle(safeProject, { create: true });
+
+          // Save File
+          // @ts-ignore
+          const fileHandle = await targetHandle.getFileHandle(filename, { create: true });
           // @ts-ignore
           const writable = await fileHandle.createWritable();
           await writable.write(JSON.stringify(fileData, null, 2));
           await writable.close();
           
-          showSnackbar(`Zapisano automatycznie: ${filename}`);
+          showSnackbar(`Zapisano w: ${safeClient}/${safeProject}/${filename}`);
           return true;
       } catch (err) {
           console.error("Auto-save failed", err);
-          showSnackbar("Błąd automatycznego zapisu pliku. Sprawdź uprawnienia.");
+          showSnackbar("Błąd zapisu. Sprawdź uprawnienia do folderu.");
           return false;
       }
   };
@@ -452,6 +667,28 @@ const App: React.FC = () => {
   };
 
   const handleUndo = () => {
+      // 0. Force Blur to ensure inputs commit their values and listen to props
+      if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+      }
+
+      // 1. Clear any pending snapshot timer to stop overwrite
+      if (historyTimeoutRef.current) {
+          clearTimeout(historyTimeoutRef.current);
+      }
+
+      const currentHash = JSON.stringify(getHistoryState(appState));
+      const lastSnapshotHash = JSON.stringify(getHistoryState(lastSnapshot.current));
+
+      // Case A: Uncommitted Changes exist (User typed "10", timer pending)
+      // Action: Revert to lastSnapshot. Do not pop history.
+      if (currentHash !== lastSnapshotHash) {
+          setAppState(lastSnapshot.current);
+          showSnackbar("Cofnięto wprowadzanie");
+          return;
+      }
+
+      // Case B: No uncommitted changes. Standard Undo.
       if (past.length === 0) return;
       const previousState = past[past.length - 1];
       const newPast = past.slice(0, -1);
@@ -471,6 +708,15 @@ const App: React.FC = () => {
   };
 
   const handleRedo = () => {
+      // 0. Force Blur
+      if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+      }
+
+      if (historyTimeoutRef.current) {
+          clearTimeout(historyTimeoutRef.current);
+      }
+
       if (future.length === 0) return;
       const nextState = future[0];
       const newFuture = future.slice(1);
@@ -523,11 +769,11 @@ const App: React.FC = () => {
       const fileData: ProjectFile = {
           version: '1.0',
           timestamp: Date.now(),
-          stage: 'DRAFT', // Default export is Draft
+          stage: appState.stage, // Export with current stage
           appState,
-          historyLog,
-          past,
-          future
+          historyLog: [], // Cleared to save space
+          past: [], // Cleared to save space
+          future: [] // Cleared to save space
       };
 
       const blob = new Blob([JSON.stringify(fileData, null, 2)], { type: 'application/json' });
@@ -544,22 +790,34 @@ const App: React.FC = () => {
 
   const loadProjectFromObject = (parsed: any) => {
       try {
+          // If loading full ProjectFile struct with 'appState' key
           if (parsed.appState) {
                if(parsed.appState.initial && !parsed.appState.initial.variants) parsed.appState.initial.variants = [];
                if(parsed.appState.final && !parsed.appState.final.variants) parsed.appState.final.variants = [];
                if(parsed.appState.initial && !parsed.appState.initial.otherCostsScratchpad) parsed.appState.initial.otherCostsScratchpad = [];
                if(parsed.appState.final && !parsed.appState.final.otherCostsScratchpad) parsed.appState.final.otherCostsScratchpad = [];
+               if(parsed.appState.finalManualPrice === undefined) parsed.appState.finalManualPrice = null;
                if(!parsed.appState.globalSettings) parsed.appState.globalSettings = { ...DEFAULT_SETTINGS };
-
-               setAppState(parsed.appState);
+               
+               // Restore stage from file root if available, otherwise appState
+               const loadedStage = parsed.stage || parsed.appState.stage || 'DRAFT';
+               
+               setAppState({
+                   ...parsed.appState,
+                   stage: loadedStage
+               });
+               
                if (parsed.historyLog) setHistoryLog(parsed.historyLog);
                if (parsed.past) setPast(parsed.past);
                if (parsed.future) setFuture(parsed.future);
           } else {
+               // Legacy flat load or direct appState
                const merged = { ...appState, ...parsed };
                if(merged.initial && !merged.initial.variants) merged.initial.variants = [];
                if(merged.initial && !merged.initial.otherCostsScratchpad) merged.initial.otherCostsScratchpad = [];
+               if(merged.finalManualPrice === undefined) merged.finalManualPrice = null;
                if(!merged.globalSettings) merged.globalSettings = { ...DEFAULT_SETTINGS };
+               if(!merged.stage) merged.stage = 'DRAFT';
                setAppState(merged);
           }
           showSnackbar("Projekt wczytany pomyślnie");
@@ -610,12 +868,14 @@ const App: React.FC = () => {
                 initial: init,
                 final: fin,
                 mode: CalculationMode.INITIAL,
+                stage: 'DRAFT',
                 viewMode: ViewMode.CALCULATOR,
                 exchangeRate: appState.exchangeRate, 
                 offerCurrency: Currency.EUR, 
                 clientCurrency: Currency.PLN, 
                 targetMargin: 20,
                 manualPrice: null,
+                finalManualPrice: null,
                 globalSettings: appState.globalSettings 
               });
               setPast([]);
@@ -647,6 +907,23 @@ const App: React.FC = () => {
 
   if (!isLoaded) return <div className="min-h-screen bg-black flex items-center justify-center text-zinc-500 font-mono text-sm">Wczytywanie systemu...</div>;
 
+  const scrollSpySections = [
+    { id: 'section-customer', label: 'Dane Klienta' },
+    { id: 'section-meta', label: 'Szczegóły' },
+    { id: 'section-suppliers', label: 'Dostawcy' },
+    { id: 'section-transport', label: 'Transport' },
+    { id: 'section-installation', label: 'Montaż' },
+    { id: 'section-other', label: 'Inne Koszty' },
+    { id: 'section-variants', label: 'Warianty' },
+    { id: 'section-summary', label: 'Podsumowanie' },
+  ];
+
+  // CALCULATE TOTAL PALLET SPOTS FOR IBL
+  const totalPalletSpots = data.installation.stages.reduce((sum, stage) => {
+      if (stage.isExcluded) return sum;
+      return sum + (stage.palletSpots || 0);
+  }, 0);
+
   return (
     <div className="h-screen overflow-hidden bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 transition-colors font-sans flex flex-col">
       <style>{`
@@ -666,17 +943,21 @@ const App: React.FC = () => {
          canRedo={future.length > 0}
          onShowComparison={() => setShowComparison(true)}
          onShowProjectManager={() => setShowProjectManager(true)}
+         onShowShortcuts={() => setShowShortcuts(true)}
          menuItems={menuItems}
          projectInputRef={projectInputRef}
          handleImport={handleImport}
+         onToggleSidebar={() => setShowMobileSidebar(!showMobileSidebar)}
       />
 
       {/* Main Layout - Modified to support Bottom Summary */}
-      <main className="flex-1 overflow-y-auto w-full max-w-[1920px] mx-auto grid grid-cols-1 xl:grid-cols-12 items-start relative gap-0">
+      <main ref={mainScrollRef} className="flex-1 overflow-y-auto w-full max-w-[1920px] mx-auto grid grid-cols-1 xl:grid-cols-12 items-start relative gap-0 scroll-smooth">
         
         {/* LEFT COLUMN (Forms) - Expanded */}
         {appState.viewMode === ViewMode.CALCULATOR && (
-            <div className="xl:col-span-10 p-6 pb-32">
+            <div className="xl:col-span-10 p-6 pb-32 relative">
+                {/* ScrollSpy Removed from here, moved to Sidebar */}
+                
                 <div className="max-w-[1350px] mx-auto space-y-6">
                     {isFinal ? (
                         <FinalCalculationView 
@@ -686,6 +967,7 @@ const App: React.FC = () => {
                             exchangeRate={appState.exchangeRate}
                             offerCurrency={appState.offerCurrency}
                             manualPrice={appState.manualPrice}
+                            finalManualPrice={appState.finalManualPrice}
                             targetMargin={appState.targetMargin}
                             onUpdateState={(updates) => setAppState(prev => ({ ...prev, ...updates }))}
                             onApprove={processFinalSettlement}
@@ -693,7 +975,7 @@ const App: React.FC = () => {
                     ) : (
                         <>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            <div className="lg:col-span-2">
+                            <div className="lg:col-span-2" id="section-customer">
                                 <CustomerSection 
                                     data={{ payer: data.payer, recipient: data.recipient, orderingParty: data.orderingParty }} 
                                     onChange={(field, val) => updateCalculationData({ [field]: val })} 
@@ -701,7 +983,7 @@ const App: React.FC = () => {
                                     onToggle={() => setIsHeaderFormsOpen(!isHeaderFormsOpen)}
                                 />
                             </div>
-                            <div className="lg:col-span-1">
+                            <div className="lg:col-span-1" id="section-meta">
                                 <ProjectMetaForm 
                                     data={data.meta} 
                                     mode={appState.mode} 
@@ -712,65 +994,76 @@ const App: React.FC = () => {
                             </div>
                         </div>
 
-                        <SuppliersSection 
-                            suppliers={data.suppliers} 
-                            transport={data.transport}
-                            installation={data.installation}
-                            onChange={(val) => updateCalculationData({ suppliers: val })}
-                            onBatchChange={handleBatchUpdate}
-                            onOpenComparison={() => setAppState(prev => ({...prev, viewMode: ViewMode.COMPARISON }))}
-                            exchangeRate={appState.exchangeRate}
-                            offerCurrency={appState.offerCurrency}
-                            nameplateQty={data.nameplateQty}
-                            onNameplateChange={(qty) => updateCalculationData({ nameplateQty: qty })}
-                            onConfirm={triggerConfirm}
-                            isPickingMode={!!pickingVariantId}
-                            onPick={handleVariantItemPick}
-                        />
-                        
-                        <TransportSection 
-                            transport={data.transport} 
-                            suppliers={data.suppliers}
-                            onChange={(val) => updateCalculationData({ transport: val })} 
-                            exchangeRate={appState.exchangeRate}
-                            offerCurrency={appState.offerCurrency}
-                            isPickingMode={!!pickingVariantId}
-                            onPick={handleVariantItemPick}
-                            truckLoadCapacity={appState.globalSettings.truckLoadCapacity}
-                        />
-
-                        <InstallationSection 
-                            data={data.installation} 
-                            suppliers={data.suppliers}
-                            onChange={(val) => updateCalculationData({ installation: val })}
-                            exchangeRate={appState.exchangeRate}
-                            offerCurrency={appState.offerCurrency}
-                            isPickingMode={!!pickingVariantId}
-                            onPick={handleVariantItemPick}
-                        />
-
-                        <OtherCostsSection 
-                            costs={data.otherCosts} 
-                            scratchpad={data.otherCostsScratchpad || []}
-                            onChange={(costs) => updateCalculationData({ otherCosts: costs })} 
-                            onScratchpadChange={(sp) => updateCalculationData({ otherCostsScratchpad: sp })}
-                            exchangeRate={appState.exchangeRate}
-                            offerCurrency={appState.offerCurrency}
-                            isPickingMode={!!pickingVariantId}
-                            onPick={handleVariantItemPick}
-                        />
-                        
-                        <VariantsSection 
-                                data={data}
-                                onChange={(updated) => updateCalculationData(updated)}
+                        <div id="section-suppliers">
+                            <SuppliersSection 
+                                suppliers={data.suppliers} 
+                                transport={data.transport}
+                                installation={data.installation}
+                                onChange={(val) => updateCalculationData({ suppliers: val })}
+                                onBatchChange={handleBatchUpdate}
+                                onOpenComparison={() => setShowSupplierComparison(true)}
                                 exchangeRate={appState.exchangeRate}
                                 offerCurrency={appState.offerCurrency}
+                                nameplateQty={data.nameplateQty}
+                                onNameplateChange={(qty) => updateCalculationData({ nameplateQty: qty })}
                                 onConfirm={triggerConfirm}
-                                onEnterPickingMode={(id) => setPickingVariantId(id)}
-                        />
+                                isPickingMode={!!pickingVariantId}
+                                onPick={handleVariantItemPick}
+                            />
+                        </div>
+                        
+                        <div id="section-transport">
+                            <TransportSection 
+                                transport={data.transport} 
+                                suppliers={data.suppliers}
+                                onChange={(val) => updateCalculationData({ transport: val })} 
+                                exchangeRate={appState.exchangeRate}
+                                offerCurrency={appState.offerCurrency}
+                                isPickingMode={!!pickingVariantId}
+                                onPick={handleVariantItemPick}
+                                truckLoadCapacity={appState.globalSettings.truckLoadCapacity}
+                            />
+                        </div>
+
+                        <div id="section-installation">
+                            <InstallationSection 
+                                data={data.installation} 
+                                suppliers={data.suppliers}
+                                onChange={(val) => updateCalculationData({ installation: val })}
+                                exchangeRate={appState.exchangeRate}
+                                offerCurrency={appState.offerCurrency}
+                                isPickingMode={!!pickingVariantId}
+                                onPick={handleVariantItemPick}
+                            />
+                        </div>
+
+                        <div id="section-other">
+                            <OtherCostsSection 
+                                costs={data.otherCosts} 
+                                scratchpad={data.otherCostsScratchpad || []}
+                                onChange={(costs) => updateCalculationData({ otherCosts: costs })} 
+                                onScratchpadChange={(sp) => updateCalculationData({ otherCostsScratchpad: sp })}
+                                exchangeRate={appState.exchangeRate}
+                                offerCurrency={appState.offerCurrency}
+                                isPickingMode={!!pickingVariantId}
+                                onPick={handleVariantItemPick}
+                                totalPalletSpots={totalPalletSpots}
+                            />
+                        </div>
+                        
+                        <div id="section-variants">
+                            <VariantsSection 
+                                    data={data}
+                                    onChange={(updated) => updateCalculationData(updated)}
+                                    exchangeRate={appState.exchangeRate}
+                                    offerCurrency={appState.offerCurrency}
+                                    onConfirm={triggerConfirm}
+                                    onEnterPickingMode={(id) => setPickingVariantId(id)}
+                            />
+                        </div>
 
                         {/* MAIN FINANCIAL SUMMARY PLACED HERE AS FOOTER BLOCK */}
-                        <div className="mt-8 border-t-2 border-zinc-200 dark:border-zinc-800 pt-8">
+                        <div id="section-summary" className="mt-8 border-t-2 border-zinc-200 dark:border-zinc-800 pt-8">
                             <SummarySection 
                                 appState={appState} 
                                 onUpdateState={(updates) => setAppState(prev => ({ ...prev, ...updates }))}
@@ -786,51 +1079,101 @@ const App: React.FC = () => {
         {/* FULL SCREEN MODES */}
         {appState.viewMode === ViewMode.LOGISTICS && (
             <div className="xl:col-span-12 animate-fadeIn p-6">
-                 <LogisticsView 
-                    data={data} 
-                    onUpdateSupplier={(id, updates) => {
-                        const updatedSuppliers = data.suppliers.map(s => s.id === id ? { ...s, ...updates } : s);
-                        updateCalculationData({ suppliers: updatedSuppliers });
-                    }}
-                 />
+                 <div className="max-w-[1600px] mx-auto">
+                     <LogisticsView 
+                        data={{
+                            // MERGE INITIAL AND FINAL DATA FOR LOGISTICS VIEW
+                            // Base on initial (plan), override with final (reality) where applicable
+                            ...data,
+                            meta: {
+                                ...data.meta,
+                                // Ensure protocol date from final calc is visible even if we started with initial
+                                protocolDate: appState.final.meta.protocolDate || appState.initial.meta.protocolDate
+                            }
+                        }} 
+                        onChange={(updatedData) => {
+                            // Logic to update the CORRECT data source based on current mode
+                            const key = appState.mode === CalculationMode.INITIAL ? 'initial' : 'final';
+                            setAppState(prev => ({
+                                ...prev,
+                                [key]: {
+                                    ...prev[key],
+                                    ...updatedData
+                                }
+                            }));
+                        }}
+                     />
+                 </div>
             </div>
         )}
 
+        {/* NOTE: ViewMode.COMPARISON is deprecated in UI flow, replaced by Modal below, but kept for legacy check */}
         {appState.viewMode === ViewMode.COMPARISON && (
             <div className="xl:col-span-12 animate-fadeIn p-6">
-                <ComparisonView 
-                    suppliers={data.suppliers} 
-                    onBack={() => setAppState(prev => ({...prev, viewMode: ViewMode.CALCULATOR}))} 
-                />
+               <div className="p-10 text-center text-zinc-500">Deprecated View. Please restart app.</div>
             </div>
         )}
         
         {appState.viewMode === ViewMode.NOTES && (
              <div className="xl:col-span-12 animate-fadeIn p-6">
-                <ProjectNotesView 
-                    data={data} 
-                    onChange={(updates) => updateCalculationData(updates)}
-                    onBack={() => setAppState(prev => ({...prev, viewMode: ViewMode.CALCULATOR}))} 
-                />
+                <div className="max-w-[1600px] mx-auto">
+                    <ProjectNotesView 
+                        data={data} 
+                        onChange={(updates) => updateCalculationData(updates)}
+                        onBack={() => setAppState(prev => ({...prev, viewMode: ViewMode.CALCULATOR}))} 
+                    />
+                </div>
             </div>
         )}
 
         {appState.viewMode === ViewMode.DOCUMENTS && (
              <div className="xl:col-span-12 animate-fadeIn p-6">
-                <DocumentsView 
-                    data={data} 
-                    onBack={() => setAppState(prev => ({...prev, viewMode: ViewMode.CALCULATOR}))} 
-                    onApproveOpening={processLogisticsHandover}
-                    onApproveClosing={processFinalSettlement}
-                    appState={appState}
-                />
+                <div className="max-w-[1600px] mx-auto">
+                    <DocumentsView 
+                        data={data} 
+                        onBack={() => setAppState(prev => ({...prev, viewMode: ViewMode.CALCULATOR}))} 
+                        onApproveOpening={processLogisticsHandover}
+                        onApproveClosing={processFinalSettlement}
+                        appState={appState}
+                    />
+                </div>
             </div>
         )}
 
-        {/* RIGHT COLUMN (Stats Only) - Narrower */}
+        {/* RIGHT COLUMN (Stats Only + ScrollSpy) - Narrower - Desktop View */}
         {appState.viewMode === ViewMode.CALCULATOR && (
-            <div className="hidden xl:block xl:col-span-2 sticky top-0 h-screen overflow-y-auto border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4">
-                <div className="space-y-8">
+            <div className="hidden xl:flex xl:col-span-2 sticky top-0 h-screen border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+                
+                {/* SCROLL SPY STRIP - HIDDEN IN FINAL MODE */}
+                {!isFinal && <ScrollSpy sections={scrollSpySections} containerRef={mainScrollRef} />}
+
+                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                    <div className="space-y-8">
+                        <SidePanel 
+                            appState={appState} 
+                            onUndo={handleUndo} 
+                            onRedo={handleRedo}
+                            canUndo={past.length > 0}
+                            canRedo={future.length > 0}
+                        />
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Mobile Sidebar Overlay */}
+        {showMobileSidebar && appState.viewMode === ViewMode.CALCULATOR && (
+            <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm xl:hidden" onClick={() => setShowMobileSidebar(false)}>
+                <div 
+                    className="absolute right-0 top-0 bottom-0 w-80 bg-white dark:bg-zinc-950 shadow-2xl border-l border-zinc-200 dark:border-zinc-800 p-4 overflow-y-auto animate-slideInRight"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex justify-between items-center mb-6 pb-4 border-b border-zinc-100 dark:border-zinc-800">
+                        <h2 className="text-lg font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Podsumowanie</h2>
+                        <button onClick={() => setShowMobileSidebar(false)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+                            <X size={20}/>
+                        </button>
+                    </div>
                     <SidePanel 
                         appState={appState} 
                         onUndo={handleUndo} 
@@ -908,6 +1251,15 @@ const App: React.FC = () => {
       )}
 
       {/* Modals & Overlays */}
+      
+      {/* SUPPLIER COMPARISON MODAL */}
+      {showSupplierComparison && (
+          <ComparisonView 
+              suppliers={data.suppliers}
+              onClose={() => setShowSupplierComparison(false)}
+          />
+      )}
+
       {showComparison && (
           <CalculationComparisonView 
              initial={appState.initial}
@@ -946,6 +1298,13 @@ const App: React.FC = () => {
               onClose={() => setShowSettings(false)}
               settings={appState.globalSettings}
               onSave={(newSettings) => setAppState(prev => ({ ...prev, globalSettings: newSettings }))}
+          />
+      )}
+
+      {showShortcuts && (
+          <ShortcutsModal 
+              isOpen={showShortcuts}
+              onClose={() => setShowShortcuts(false)}
           />
       )}
 

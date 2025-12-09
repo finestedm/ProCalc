@@ -24,3 +24,16 @@ export const SUPPORT_PEOPLE = [
     "Łukasz Nowicki",
     "Natalia Adamczyk"
 ];
+
+export const ACTUAL_SALES_PEOPLE = [
+    "Robert Zielonka",
+    "Patrycja Sokołowska",
+    "Dariusz Maj",
+    "Kinga Wróbel",
+    "Artur Jasiński",
+    "Beata Król",
+    "Mariusz Stępień",
+    "Sylwia Dudek",
+    "Rafał Sikora",
+    "Joanna Lis"
+];

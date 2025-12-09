@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { CalculationData, Currency, Supplier, TransportItem, OtherCostItem, InstallationData, FinalInstallationItem, SupplierStatus, Language, CalculationMode } from '../types';
-import { FileText, Truck, Wrench, Receipt, Plus, Trash2, AlertCircle, ArrowRight, DollarSign, TrendingUp, TrendingDown, AlertTriangle, AlertOctagon, Printer, CheckCircle, Mail } from 'lucide-react';
+import { FileText, Truck, Wrench, Receipt, Plus, Trash2, AlertCircle, ArrowRight, DollarSign, TrendingUp, TrendingDown, AlertTriangle, AlertOctagon, Printer, CheckCircle, Mail, RotateCcw, Calendar, Check } from 'lucide-react';
 import { convert, formatCurrency, formatNumber, calculateProjectCosts } from '../services/calculationService';
+import { SmartInput } from './SmartInput';
 
 interface Props {
     data: CalculationData; // This is the 'Final' state
@@ -10,9 +11,10 @@ interface Props {
     onChange: (data: CalculationData) => void;
     exchangeRate: number;
     offerCurrency: Currency;
-    manualPrice: number | null;
+    manualPrice: number | null; // Initial Manual Price Override
+    finalManualPrice: number | null; // Final Manual Price Override (Specific for this view)
     targetMargin: number;
-    onUpdateState: (updates: { manualPrice?: number | null, targetMargin?: number }) => void;
+    onUpdateState: (updates: { manualPrice?: number | null, finalManualPrice?: number | null, targetMargin?: number }) => void;
     onApprove?: () => Promise<boolean>;
 }
 
@@ -23,13 +25,11 @@ export const FinalCalculationView: React.FC<Props> = ({
     exchangeRate, 
     offerCurrency,
     manualPrice,
+    finalManualPrice,
     targetMargin,
     onUpdateState,
     onApprove
 }) => {
-    const [isEditingPrice, setIsEditingPrice] = useState(false);
-    const [localPriceInput, setLocalPriceInput] = useState('');
-
     // --- Print Theme Logic ---
     useEffect(() => {
         const handleBeforePrint = () => {
@@ -54,10 +54,6 @@ export const FinalCalculationView: React.FC<Props> = ({
             window.removeEventListener('afterprint', handleAfterPrint);
         };
     }, []);
-
-    // ... (Actions omitted for brevity, keeping all existing logic same) ...
-    // NOTE: In real implementation, all update/add/remove functions from original file must be here.
-    // I am including them all below to ensure file integrity.
 
     const updateSupplierOverride = (id: string, updates: Partial<Supplier>) => {
         const existingInFinal = data.suppliers.find(s => s.id === id);
@@ -172,14 +168,15 @@ export const FinalCalculationView: React.FC<Props> = ({
         onChange({ ...data, otherCosts: data.otherCosts.filter(c => c.id !== id) });
     };
 
-    const addFinalInstallationItem = (category: 'LABOR' | 'RENTAL') => {
+    const addFinalInstallationItem = (category: 'LABOR' | 'RENTAL', initialValues: Partial<FinalInstallationItem> = {}) => {
         const newItem: FinalInstallationItem = {
             id: Math.random().toString(36).substr(2, 9),
             description: category === 'LABOR' ? 'Usługa montażu' : 'Wynajem podnośnika',
             price: 0,
             currency: Currency.PLN,
             vendorName: '',
-            category
+            category,
+            ...initialValues
         };
         const currentList = data.installation.finalInstallationCosts || [];
         onChange({ 
@@ -208,6 +205,16 @@ export const FinalCalculationView: React.FC<Props> = ({
         });
     };
 
+    const handleProtocolDateChange = (date: string) => {
+        onChange({
+            ...data,
+            meta: {
+                ...data.meta,
+                protocolDate: date
+            }
+        });
+    };
+
     const getEstimatedSupplierCost = (s: Supplier) => {
         const subtotal = s.items.reduce((sum, i) => sum + (i.quantity * (s.isOrm ? i.unitPrice * 0.5 : i.unitPrice)), 0);
         return subtotal * (1 - s.discount / 100);
@@ -217,12 +224,52 @@ export const FinalCalculationView: React.FC<Props> = ({
 
     const getEstimatedInstallationSplit = () => {
         const i = initialData.installation;
-        const custom = i.customItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-        
-        const labor = (i.palletSpots * i.palletSpotPrice) + i.otherInstallationCosts + custom;
-        const rental = 
-            ((i.forkliftDailyRate * i.forkliftDays) + i.forkliftTransportPrice) +
-            ((i.scissorLiftDailyRate * i.scissorLiftDays) + i.scissorLiftTransportPrice);
+        let labor = i.otherInstallationCosts || 0;
+        let rental = 0;
+
+        // Sum from Stages
+        if (i.stages && i.stages.length > 0) {
+            i.stages.forEach(stage => {
+                if (stage.isExcluded) return;
+
+                // --- LABOR ---
+                // Pallet Method
+                if (stage.calcMethod === 'PALLETS' || stage.calcMethod === 'BOTH') {
+                    labor += stage.palletSpots * stage.palletSpotPrice;
+                }
+                
+                // Time Method
+                if (stage.calcMethod === 'TIME' || stage.calcMethod === 'BOTH') {
+                    let totalMinutes = 0;
+                    if (stage.linkedSupplierIds) {
+                        stage.linkedSupplierIds.forEach(sid => {
+                            const sup = initialData.suppliers.find(s => s.id === sid);
+                            if (sup) sup.items.forEach(it => !it.isExcluded && (totalMinutes += (it.quantity * (it.timeMinutes || 0))));
+                        });
+                    }
+                    const totalHours = (totalMinutes / 60) + (stage.manualLaborHours || 0);
+                    const cap = (stage.workDayHours || 10) * (stage.installersCount || 1);
+                    const days = cap > 0 ? Math.ceil(totalHours / cap) : 0;
+                    labor += days * (stage.installersCount || 1) * (stage.manDayRate || 0);
+                }
+
+                // Custom Items (Assume Labor)
+                stage.customItems.forEach(ci => {
+                    if (!ci.isExcluded) labor += ci.quantity * ci.unitPrice;
+                });
+
+                // --- RENTAL ---
+                rental += (stage.forkliftDailyRate * stage.forkliftDays) + stage.forkliftTransportPrice;
+                rental += (stage.scissorLiftDailyRate * stage.scissorLiftDays) + stage.scissorLiftTransportPrice;
+            });
+        } else {
+            // Legacy Fallback
+            const custom = i.customItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+            labor += (i.palletSpots * i.palletSpotPrice) + custom;
+            
+            rental += ((i.forkliftDailyRate * i.forkliftDays) + i.forkliftTransportPrice) +
+                      ((i.scissorLiftDailyRate * i.scissorLiftDays) + i.scissorLiftTransportPrice);
+        }
 
         return { labor, rental };
     };
@@ -235,19 +282,29 @@ export const FinalCalculationView: React.FC<Props> = ({
     const finalLaborItems = finalInstItems.filter(i => i.category === 'LABOR');
     const finalRentalItems = finalInstItems.filter(i => i.category === 'RENTAL');
 
-    const finalCosts = calculateProjectCosts(data, exchangeRate, offerCurrency, CalculationMode.FINAL);
+    const finalCosts = calculateProjectCosts(data, exchangeRate, offerCurrency, CalculationMode.FINAL, 1.6, targetMargin, manualPrice);
     const totalFinalCost = finalCosts.total;
 
-    const initialCosts = calculateProjectCosts(initialData, exchangeRate, offerCurrency, CalculationMode.INITIAL);
+    // --- Price Calculation Logic ---
+    const initialCosts = calculateProjectCosts(initialData, exchangeRate, offerCurrency, CalculationMode.INITIAL, 1.6, targetMargin, manualPrice);
     const initialMarginDecimal = targetMargin / 100;
-    const initialPrice = initialMarginDecimal >= 1 ? 0 : initialCosts.total / (1 - initialMarginDecimal);
-
-    const sellingPrice = manualPrice !== null 
+    
+    // Determine the Baseline Price (from Initial Plan)
+    const initialPrice = manualPrice !== null 
         ? manualPrice 
+        : (initialMarginDecimal >= 1 ? 0 : initialCosts.total / (1 - initialMarginDecimal));
+
+    // Determine the Actual Selling Price (Current View)
+    // If user has set a specific final override, use it. Otherwise, sync with Initial.
+    const activeSellingPrice = finalManualPrice !== null 
+        ? finalManualPrice 
         : initialPrice;
 
-    const actualMargin = sellingPrice > 0 ? (1 - (totalFinalCost / sellingPrice)) * 100 : 0;
-    const profit = sellingPrice - totalFinalCost;
+    const actualMargin = activeSellingPrice > 0 ? (1 - (totalFinalCost / activeSellingPrice)) * 100 : 0;
+    const profit = activeSellingPrice - totalFinalCost;
+
+    const priceDifference = activeSellingPrice - initialPrice;
+    const isPriceModified = finalManualPrice !== null;
 
     const isCritical = actualMargin < 6;
     const isWarning = actualMargin < 7 && !isCritical;
@@ -257,29 +314,17 @@ export const FinalCalculationView: React.FC<Props> = ({
             ? 'text-orange-500' 
             : (actualMargin < targetMargin ? 'text-yellow-500' : 'text-green-600');
 
-    const handlePriceFocus = () => {
-        setIsEditingPrice(true);
-        setLocalPriceInput(sellingPrice ? sellingPrice.toFixed(2) : '');
-    };
-
-    const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = e.target.value;
-        setLocalPriceInput(val);
-        const num = parseFloat(val);
-        if (!isNaN(num)) {
-            onUpdateState({ manualPrice: num });
-        }
-    };
-
-    const handlePriceBlur = () => {
-        setIsEditingPrice(false);
-    };
-
     const handlePrint = () => {
         window.print();
     };
 
     const handleApprove = async () => {
+        // Validation: Protocol Date is mandatory for Closing
+        if (!data.meta.protocolDate) {
+            alert("Błąd: Wymagana jest Data Podpisania Protokołu, aby zamknąć projekt.");
+            return;
+        }
+
         if (onApprove) {
             const success = await onApprove();
             if (success) {
@@ -293,8 +338,9 @@ Zatwierdzam koszty dla projektu i proszę o zamknięcie.
 Numer SAP: ${data.meta.sapProjectNumber || 'BRAK'}
 Projekt CRM: ${data.meta.projectNumber}
 Klient: ${data.orderingParty.name}
+Data Protokołu: ${data.meta.protocolDate}
 
-Wartość Faktur Sprzedaży: ${formatCurrency(sellingPrice, offerCurrency)}
+Wartość Faktur Sprzedaży: ${formatCurrency(activeSellingPrice, offerCurrency)}
 Koszt Rzeczywisty: ${formatCurrency(totalFinalCost, offerCurrency)}
 Wynik: ${formatCurrency(profit, offerCurrency)} (${actualMargin.toFixed(2)}%)
 
@@ -320,10 +366,12 @@ ${data.meta.salesPerson}
     const textInputClass = "w-full p-1.5 bg-transparent border-b border-transparent focus:border-cyan-400 outline-none text-sm text-zinc-800 dark:text-zinc-200 placeholder-zinc-400";
     const selectClass = "w-full p-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 rounded-sm text-xs outline-none focus:border-cyan-400 dark:border-zinc-700";
 
+    const confirmBtnClass = "p-1.5 bg-green-100 hover:bg-green-200 text-green-700 dark:bg-green-900/40 dark:hover:bg-green-900/60 dark:text-green-400 rounded-sm transition-colors border border-green-200 dark:border-green-800";
+
     return (
         <div className="space-y-6 animate-fadeIn">
-            <div className="bg-white dark:bg-zinc-950 p-0 rounded-sm shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-                <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border-b dark:border-zinc-700 flex items-center justify-between">
+            <div className="bg-white dark:bg-zinc-900 p-0 rounded-sm shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border-b dark:border-zinc-700 flex flex-col md:flex-row items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                         <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded-sm text-green-700 dark:text-green-400">
                             <FileText size={20} />
@@ -333,21 +381,38 @@ ${data.meta.salesPerson}
                             <p className="text-xs text-zinc-500 dark:text-zinc-400">Wprowadź faktyczne koszty z faktur</p>
                         </div>
                     </div>
-                    <div className="flex gap-2">
-                        <button 
-                            onClick={handlePrint}
-                            className="bg-white hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-600 px-3 py-2 rounded-sm flex items-center gap-2 text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
-                        >
-                            <Printer size={16}/> Drukuj
-                        </button>
-                        {onApprove && (
+                    
+                    <div className="flex items-center gap-4">
+                        <div className={`flex items-center gap-2 bg-white dark:bg-zinc-800 px-3 py-1.5 rounded-sm border ${!data.meta.protocolDate ? 'border-red-400 dark:border-red-500 ring-1 ring-red-400' : 'border-zinc-200 dark:border-zinc-700'}`}>
+                            <label className={`text-[10px] font-bold uppercase flex items-center gap-1 ${!data.meta.protocolDate ? 'text-red-600 dark:text-red-400' : 'text-zinc-500'}`}>
+                                <Calendar size={12}/> Data Protokołu:
+                            </label>
+                            <input 
+                                type="date" 
+                                className="text-xs font-bold text-zinc-800 dark:text-zinc-200 bg-transparent outline-none border-0 p-0 cursor-pointer"
+                                value={data.meta.protocolDate || ''}
+                                onChange={(e) => handleProtocolDateChange(e.target.value)}
+                                title="Wymagane do zamknięcia projektu"
+                            />
+                            {!data.meta.protocolDate && <AlertCircle size={12} className="text-red-500 animate-pulse"/>}
+                        </div>
+
+                        <div className="flex gap-2">
                             <button 
-                                onClick={handleApprove}
-                                className="bg-purple-600 hover:bg-purple-700 text-white border border-purple-700 px-4 py-2 rounded-sm flex items-center gap-2 text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
+                                onClick={handlePrint}
+                                className="bg-white hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-600 px-3 py-2 rounded-sm flex items-center gap-2 text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
                             >
-                                <Mail size={16}/> Zatwierdź i Zamknij
+                                <Printer size={16}/> Drukuj
                             </button>
-                        )}
+                            {onApprove && (
+                                <button 
+                                    onClick={handleApprove}
+                                    className="bg-purple-600 hover:bg-purple-700 text-white border border-purple-700 px-4 py-2 rounded-sm flex items-center gap-2 text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
+                                >
+                                    <Mail size={16}/> Zatwierdź i Zamknij
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -389,7 +454,7 @@ ${data.meta.salesPerson}
 
                                 const estimated = initialS ? getEstimatedSupplierCost(initialS) : 0;
                                 const finalOverride = finalS?.finalCostOverride;
-                                const valToShow = finalOverride !== undefined ? finalOverride : '';
+                                const valToShow = finalOverride !== undefined ? finalOverride : null;
                                 const diff = finalOverride !== undefined ? estimated - finalOverride : 0;
                                 const vendorName = finalS?.finalVendorName || displayS.name;
                                 const isManual = !!displayS.isManualFinal;
@@ -434,13 +499,23 @@ ${data.meta.salesPerson}
                                             />
                                         </td>
                                         <td className={cellCyanClass}>
-                                            <input 
-                                                type="number" 
-                                                className={inputClass}
-                                                placeholder={!isManual && estimated > 0 ? estimated.toFixed(2) : "0.00"}
-                                                value={valToShow}
-                                                onChange={(e) => updateSupplierOverride(id, { finalCostOverride: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
-                                            />
+                                            <div className="flex gap-1 items-center">
+                                                <SmartInput 
+                                                    className={inputClass}
+                                                    placeholder={!isManual && estimated > 0 ? estimated.toFixed(2) : "0.00"}
+                                                    value={valToShow}
+                                                    onChange={(val) => updateSupplierOverride(id, { finalCostOverride: val })}
+                                                />
+                                                {!isManual && (
+                                                    <button 
+                                                        onClick={() => updateSupplierOverride(id, { finalCostOverride: estimated })}
+                                                        className={confirmBtnClass}
+                                                        title="Zatwierdź kwotę z planu"
+                                                    >
+                                                        <Check size={14}/>
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className={cellCyanClass}>
                                             {isManual ? (
@@ -494,7 +569,7 @@ ${data.meta.salesPerson}
 
                                 const estimated = initialT ? getEstimatedTransportCost(initialT) : 0;
                                 const finalOverride = finalT?.finalCostOverride;
-                                const valToShow = finalOverride !== undefined ? finalOverride : '';
+                                const valToShow = finalOverride !== undefined ? finalOverride : null;
                                 const diff = finalOverride !== undefined ? estimated - finalOverride : 0;
 
                                 const isManualFinal = !initialT && finalT; 
@@ -535,13 +610,23 @@ ${data.meta.salesPerson}
                                             />
                                         </td>
                                         <td className={cellCyanClass}>
-                                            <input 
-                                                type="number" 
-                                                className={inputClass}
-                                                placeholder={estimated > 0 ? estimated.toFixed(2) : "0.00"}
-                                                value={valToShow}
-                                                onChange={(e) => updateTransportOverride(id, { finalCostOverride: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
-                                            />
+                                            <div className="flex gap-1 items-center">
+                                                <SmartInput 
+                                                    className={inputClass}
+                                                    placeholder={estimated > 0 ? estimated.toFixed(2) : "0.00"}
+                                                    value={valToShow}
+                                                    onChange={(val) => updateTransportOverride(id, { finalCostOverride: val })}
+                                                />
+                                                {!isManualFinal && (
+                                                    <button 
+                                                        onClick={() => updateTransportOverride(id, { finalCostOverride: estimated })}
+                                                        className={confirmBtnClass}
+                                                        title="Zatwierdź kwotę z planu"
+                                                    >
+                                                        <Check size={14}/>
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className={cellCyanClass}>
                                             {/* Allow currency selection only if manual or overriding */}
@@ -586,6 +671,46 @@ ${data.meta.salesPerson}
                                 <td className={`${cellClass} text-right text-zinc-500 font-mono`}>{formatNumber(getEstimatedInstallationSplit().labor)} <span className="text-[10px]">PLN</span></td>
                                 <td colSpan={5} className={cellClass}></td>
                             </tr>
+                            {/* Auto-Show Ghost Row if planned but empty final list */}
+                            {finalLaborItems.length === 0 && getEstimatedInstallationSplit().labor > 0 && (
+                                <tr className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors opacity-80">
+                                    <td className={cellClass}>
+                                        <div className="text-zinc-400 italic">Planowany montaż...</div>
+                                    </td>
+                                    <td className={`${cellClass} text-right text-zinc-300`}>-</td>
+                                    <td className={cellCyanClass}>
+                                        <input 
+                                            type="text" 
+                                            className={textInputClass} 
+                                            placeholder="Wykonawca..." 
+                                            onChange={(e) => addFinalInstallationItem('LABOR', { vendorName: e.target.value, price: getEstimatedInstallationSplit().labor, description: 'Montaż (z planu)' })}
+                                        />
+                                    </td>
+                                    <td className={cellCyanClass}>
+                                        <div className="flex gap-1 items-center">
+                                            <SmartInput 
+                                                className={inputClass} 
+                                                value={null}
+                                                placeholder={formatNumber(getEstimatedInstallationSplit().labor)}
+                                                onChange={(val) => addFinalInstallationItem('LABOR', { price: val, description: 'Montaż (z planu)' })}
+                                            />
+                                            <button 
+                                                onClick={() => addFinalInstallationItem('LABOR', { price: getEstimatedInstallationSplit().labor, description: 'Montaż (z planu)' })}
+                                                className={confirmBtnClass}
+                                                title="Zatwierdź kwotę z planu"
+                                            >
+                                                <Check size={14}/>
+                                            </button>
+                                        </div>
+                                    </td>
+                                    <td className={cellCyanClass}>
+                                        <div className="text-center text-xs text-zinc-400">PLN</div>
+                                    </td>
+                                    <td className={`${cellClass} border-l border-zinc-200 dark:border-zinc-800`}></td>
+                                    <td className={cellClass}></td>
+                                </tr>
+                            )}
+
                             {finalLaborItems.map(item => (
                                 <tr key={item.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
                                     <td className={cellClass}>
@@ -597,7 +722,7 @@ ${data.meta.salesPerson}
                                         <input type="text" className={textInputClass} value={item.vendorName} onChange={(e) => updateFinalInstallationItem(item.id, 'vendorName', e.target.value)} placeholder="Wykonawca..." />
                                     </td>
                                     <td className={cellCyanClass}>
-                                        <input type="number" className={inputClass} value={item.price} onChange={(e) => updateFinalInstallationItem(item.id, 'price', parseFloat(e.target.value) || 0)} />
+                                        <SmartInput className={inputClass} value={item.price} onChange={(val) => updateFinalInstallationItem(item.id, 'price', val)} />
                                     </td>
                                     <td className={cellCyanClass}>
                                         <select className={selectClass} value={item.currency} onChange={(e) => updateFinalInstallationItem(item.id, 'currency', e.target.value)}>
@@ -629,6 +754,46 @@ ${data.meta.salesPerson}
                                 <td className={`${cellClass} text-right text-zinc-500 font-mono`}>{formatNumber(getEstimatedInstallationSplit().rental)} <span className="text-[10px]">PLN</span></td>
                                 <td colSpan={5} className={cellClass}></td>
                             </tr>
+                            {/* Auto-Show Ghost Row if planned but empty final list */}
+                            {finalRentalItems.length === 0 && getEstimatedInstallationSplit().rental > 0 && (
+                                <tr className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors opacity-80">
+                                    <td className={cellClass}>
+                                        <div className="text-zinc-400 italic">Planowany wynajem...</div>
+                                    </td>
+                                    <td className={`${cellClass} text-right text-zinc-300`}>-</td>
+                                    <td className={cellCyanClass}>
+                                        <input 
+                                            type="text" 
+                                            className={textInputClass} 
+                                            placeholder="Dostawca sprzętu..." 
+                                            onChange={(e) => addFinalInstallationItem('RENTAL', { vendorName: e.target.value, price: getEstimatedInstallationSplit().rental, description: 'Wynajem (z planu)' })}
+                                        />
+                                    </td>
+                                    <td className={cellCyanClass}>
+                                        <div className="flex gap-1 items-center">
+                                            <SmartInput 
+                                                className={inputClass} 
+                                                value={null}
+                                                placeholder={formatNumber(getEstimatedInstallationSplit().rental)}
+                                                onChange={(val) => addFinalInstallationItem('RENTAL', { price: val, description: 'Wynajem (z planu)' })}
+                                            />
+                                            <button 
+                                                onClick={() => addFinalInstallationItem('RENTAL', { price: getEstimatedInstallationSplit().rental, description: 'Wynajem (z planu)' })}
+                                                className={confirmBtnClass}
+                                                title="Zatwierdź kwotę z planu"
+                                            >
+                                                <Check size={14}/>
+                                            </button>
+                                        </div>
+                                    </td>
+                                    <td className={cellCyanClass}>
+                                        <div className="text-center text-xs text-zinc-400">PLN</div>
+                                    </td>
+                                    <td className={`${cellClass} border-l border-zinc-200 dark:border-zinc-800`}></td>
+                                    <td className={cellClass}></td>
+                                </tr>
+                            )}
+
                             {finalRentalItems.map(item => (
                                 <tr key={item.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
                                     <td className={cellClass}>
@@ -640,7 +805,7 @@ ${data.meta.salesPerson}
                                         <input type="text" className={textInputClass} value={item.vendorName} onChange={(e) => updateFinalInstallationItem(item.id, 'vendorName', e.target.value)} placeholder="Dostawca sprzętu..." />
                                     </td>
                                     <td className={cellCyanClass}>
-                                        <input type="number" className={inputClass} value={item.price} onChange={(e) => updateFinalInstallationItem(item.id, 'price', parseFloat(e.target.value) || 0)} />
+                                        <SmartInput className={inputClass} value={item.price} onChange={(val) => updateFinalInstallationItem(item.id, 'price', val)} />
                                     </td>
                                     <td className={cellCyanClass}>
                                         <select className={selectClass} value={item.currency} onChange={(e) => updateFinalInstallationItem(item.id, 'currency', e.target.value)}>
@@ -676,7 +841,7 @@ ${data.meta.salesPerson}
 
                                 const estimated = initialC ? initialC.price : 0;
                                 const finalOverride = finalC?.finalCostOverride;
-                                const valToShow = finalOverride !== undefined ? finalOverride : '';
+                                const valToShow = finalOverride !== undefined ? finalOverride : null;
                                 const diff = finalOverride !== undefined ? estimated - finalOverride : 0;
                                 const isManualFinal = !initialC && finalC;
                                 const vendor = finalC?.finalVendorName || '';
@@ -709,13 +874,23 @@ ${data.meta.salesPerson}
                                             />
                                         </td>
                                         <td className={cellCyanClass}>
-                                            <input 
-                                                type="number" 
-                                                className={inputClass}
-                                                placeholder={estimated > 0 ? estimated.toFixed(2) : "0.00"}
-                                                value={valToShow}
-                                                onChange={(e) => updateOtherCostOverride(id, { finalCostOverride: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
-                                            />
+                                            <div className="flex gap-1 items-center">
+                                                <SmartInput 
+                                                    className={inputClass}
+                                                    placeholder={estimated > 0 ? estimated.toFixed(2) : "0.00"}
+                                                    value={valToShow}
+                                                    onChange={(val) => updateOtherCostOverride(id, { finalCostOverride: val })}
+                                                />
+                                                {!isManualFinal && (
+                                                    <button 
+                                                        onClick={() => updateOtherCostOverride(id, { finalCostOverride: estimated })}
+                                                        className={confirmBtnClass}
+                                                        title="Zatwierdź kwotę z planu"
+                                                    >
+                                                        <Check size={14}/>
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className={cellCyanClass}>
                                             <select 
@@ -747,7 +922,7 @@ ${data.meta.salesPerson}
             </div>
 
             {/* FINAL SUMMARY FOOTER - Updated to Light Theme (Zinc-50/White) */}
-            <div className="bg-white dark:bg-zinc-950 p-6 rounded-sm shadow-lg border border-zinc-200 dark:border-zinc-800 flex flex-col lg:flex-row items-center justify-between gap-8">
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-sm shadow-lg border border-zinc-200 dark:border-zinc-800 flex flex-col lg:flex-row items-center justify-between gap-8">
                 
                 {/* 1. Final Cost */}
                 <div className="flex-1 w-full lg:w-auto text-center lg:text-left border-b lg:border-b-0 lg:border-r border-zinc-200 dark:border-zinc-800 pb-4 lg:pb-0 pr-0 lg:pr-8">
@@ -762,18 +937,39 @@ ${data.meta.salesPerson}
                     <div className="text-[10px] text-amber-500 uppercase font-bold tracking-widest mb-1 flex items-center gap-1">
                         <DollarSign size={12}/> Potwierdzona Cena Sprzedaży
                     </div>
-                    <div className="relative group">
-                        <input 
-                            type="number" 
+                    <div className="relative group flex items-center gap-2">
+                        <SmartInput 
                             className="bg-transparent text-4xl font-mono font-bold text-zinc-900 dark:text-white text-center outline-none border-b-2 border-zinc-200 dark:border-zinc-700 focus:border-amber-500 transition-all w-64 placeholder-zinc-300 dark:placeholder-zinc-700"
-                            placeholder="0.00"
-                            value={isEditingPrice ? localPriceInput : (sellingPrice > 0 ? sellingPrice.toFixed(2) : '')}
-                            onChange={handlePriceChange}
-                            onFocus={handlePriceFocus}
-                            onBlur={handlePriceBlur}
+                            placeholder={formatNumber(initialPrice)}
+                            value={activeSellingPrice > 0 ? activeSellingPrice : null}
+                            onChange={(val) => onUpdateState({ finalManualPrice: val })}
+                            decimalScale={2}
                         />
                         <span className="absolute right-0 bottom-2 text-lg text-zinc-400 font-mono pointer-events-none">{offerCurrency}</span>
+                        
+                        {/* Reset Button if modified */}
+                        {isPriceModified && (
+                            <button 
+                                onClick={() => onUpdateState({ finalManualPrice: null })}
+                                className="absolute -right-8 bottom-3 text-zinc-400 hover:text-amber-600 transition-colors p-1"
+                                title="Przywróć cenę z wyceny wstępnej"
+                            >
+                                <RotateCcw size={16} />
+                            </button>
+                        )}
                     </div>
+                    {/* Price Difference Indicator */}
+                    {isPriceModified && priceDifference !== 0 && (
+                        <div className={`text-xs font-mono font-bold mt-1 flex items-center gap-1 ${priceDifference > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                            {priceDifference > 0 ? '+' : ''}{formatNumber(priceDifference)} {offerCurrency}
+                            {priceDifference > 0 ? <TrendingUp size={12}/> : <TrendingDown size={12}/>}
+                        </div>
+                    )}
+                    {!isPriceModified && (
+                        <div className="text-[9px] text-zinc-400 mt-1 uppercase font-bold tracking-wide">
+                            (Synchronizowana z Wstępną)
+                        </div>
+                    )}
                 </div>
 
                 {/* 3. Result (Profit & Margin) */}

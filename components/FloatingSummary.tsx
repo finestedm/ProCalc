@@ -1,4 +1,6 @@
 
+
+
 import React from 'react';
 import { CalculationData, AppState, Currency } from '../types';
 import { Calculator, ArrowRight } from 'lucide-react';
@@ -13,7 +15,7 @@ export const FloatingSummary: React.FC<Props> = ({ data, appState }) => {
   const rate = appState.exchangeRate;
   const ormFee = appState.globalSettings.ormFeePercent;
   
-  const costs = calculateProjectCosts(data, rate, appState.offerCurrency, appState.mode, ormFee);
+  const costs = calculateProjectCosts(data, rate, appState.offerCurrency, appState.mode, ormFee, appState.targetMargin, appState.manualPrice);
   const totalCost = costs.total;
   
   let sellingPricePLN = 0;

@@ -1,6 +1,7 @@
 
 
-import { CalculationData, Currency, CalculationMode, InstallationStage, Supplier } from '../types';
+
+import { CalculationData, Currency, CalculationMode, InstallationStage, Supplier, CostBreakdown, EMPTY_PAYMENT_TERMS } from '../types';
 
 export const formatNumber = (value: number, decimals: number = 2): string => {
     if (value === undefined || value === null || isNaN(value)) return '0,00';
@@ -22,16 +23,6 @@ export const convert = (amount: number, from: Currency, to: Currency, rate: numb
     if (from === Currency.PLN && to === Currency.EUR) return amount / rate;
     return amount;
 };
-
-export interface CostBreakdown {
-    suppliers: number;
-    transport: number;
-    other: number;
-    installation: number;
-    ormFee: number; // Internal fee for ORM orders
-    total: number;
-    excluded: number; // Value of excluded items (What-If)
-}
 
 // Helper to calculate cost of a single stage (without converting currency yet)
 // Now returns Total Stage Cost including Equipment and Custom Items
@@ -95,7 +86,9 @@ export const calculateProjectCosts = (
     rate: number, 
     targetCurrency: Currency,
     mode: CalculationMode = CalculationMode.INITIAL,
-    ormFeePercent: number = 1.6 // Default if not passed
+    ormFeePercent: number = 1.6,
+    targetMargin?: number, // Optional, required for financing calc
+    manualPrice?: number | null // Optional, overrides margin-based price
 ): CostBreakdown => {
     const isFinal = mode === CalculationMode.FINAL;
     let excludedTotal = 0;
@@ -124,16 +117,31 @@ export const calculateProjectCosts = (
                 // Check exclusion (Explicit flag only)
                 if (i.isExcluded) {
                     const discountedValue = value * (1 - s.discount / 100);
-                    excludedTotal += convert(discountedValue, s.currency, targetCurrency, rate);
-                    return sum; // Skip
+                    
+                    // If excluded, we save the Material Cost + The Fee that would have been applied
+                    let itemExcludedValue = discountedValue;
+                    if (s.isOrm) {
+                        itemExcludedValue += discountedValue * ormFeeRate;
+                    }
+                    
+                    // Apply extra markup to excluded value for consistency
+                    const markupFactor = 1 + (s.extraMarkupPercent || 0) / 100;
+                    itemExcludedValue *= markupFactor;
+                    
+                    excludedTotal += convert(itemExcludedValue, s.currency, targetCurrency, rate);
+                    return sum; // Skip adding to current total
                 }
 
                 return sum + value;
             }, 0);
             
-            cost = sTotal * (1 - s.discount / 100);
+            // 1. Apply Discount
+            const discountedCost = sTotal * (1 - s.discount / 100);
+            
+            // 2. Apply Extra Adjustment (Markup/Markdown)
+            const markupFactor = 1 + (s.extraMarkupPercent || 0) / 100;
+            cost = discountedCost * markupFactor;
 
-            // Calculate ORM Fee
             if (s.isOrm) {
                 supplierOrmFee = cost * ormFeeRate;
             }
@@ -233,9 +241,6 @@ export const calculateProjectCosts = (
                  const sCost = calculateStageCost(stage, data, { ignoreExclusions: false });
                  
                  if (stage.isExcluded) {
-                     // Excluded Cost: Uses FULL POTENTIAL cost (ignoring input exclusions)
-                     // This ensures that when a stage is excluded, the "What-If" delta captures the full value
-                     // of the work that was removed, not just the currently active portion (which might be 0).
                      const excludedCost = calculateStageCost(stage, data, { ignoreExclusions: true });
                      excludedTotal += convert(excludedCost, Currency.PLN, targetCurrency, rate);
                      return sum;
@@ -261,13 +266,54 @@ export const calculateProjectCosts = (
         installationTotal = convert(installationPLN, Currency.PLN, targetCurrency, rate);
     }
 
+    // --- FINANCING COSTS (NEW) ---
+    // Only calculate if targetMargin is provided (avoids breaking simple usage)
+    let financingCost = 0;
+    const paymentTerms = data.paymentTerms || EMPTY_PAYMENT_TERMS;
+    
+    // Threshold: 14 days
+    // Rate: 7.5% per annum
+    const extraDays = Math.max(0, paymentTerms.finalPaymentDays - 14);
+    
+    if (extraDays > 0 && targetMargin !== undefined) {
+        const baseCost = suppliersTotal + nameplateCost + transportTotal + otherTotal + installationTotal + ormFeeTotal;
+        const interestAnnualRate = 0.075;
+        const interestFactor = (interestAnnualRate * extraDays) / 365;
+        const unpaidRatio = 1 - ((paymentTerms.advance1Percent + paymentTerms.advance2Percent) / 100);
+
+        if (manualPrice !== null && manualPrice !== undefined) {
+            // Case 1: Manual Price (Fixed Price)
+            // Financing is calculated based on the fixed price's unpaid portion
+            // F = P * R * I
+            financingCost = manualPrice * unpaidRatio * interestFactor;
+        } else {
+            // Case 2: Target Margin (Price is dynamic)
+            // P = C / (1 - M - R*I)
+            // Where C = BaseCost, M = TargetMargin, R = UnpaidRatio, I = InterestFactor
+            // Financing Cost F = P * R * I
+            // Or simpler: F = P - C - (P * M) ... but we need P first.
+            
+            const marginDecimal = targetMargin / 100;
+            const divisor = 1 - marginDecimal - (unpaidRatio * interestFactor);
+            
+            if (divisor > 0) {
+                const projectedPrice = baseCost / divisor;
+                financingCost = projectedPrice * unpaidRatio * interestFactor;
+            } else {
+                // Edge case: Divisor too small/negative (unrealistic inputs), fallback to 0 or base calculation to prevent crash
+                financingCost = 0;
+            }
+        }
+    }
+
     return {
         suppliers: suppliersTotal + nameplateCost,
         transport: transportTotal,
         other: otherTotal,
         installation: installationTotal,
         ormFee: ormFeeTotal,
-        total: suppliersTotal + nameplateCost + transportTotal + otherTotal + installationTotal + ormFeeTotal,
+        financing: financingCost,
+        total: suppliersTotal + nameplateCost + transportTotal + otherTotal + installationTotal + ormFeeTotal + financingCost,
         excluded: excludedTotal
     };
 };

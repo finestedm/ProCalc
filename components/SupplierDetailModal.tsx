@@ -1,9 +1,7 @@
 
-
-
 import React, { useState, useEffect } from 'react';
 import { Supplier, SupplierItem, Currency, SupplierStatus } from '../types';
-import { X, Save, Maximize2, Calendar, Hash, Tag, Globe, MapPin, Building2, AtSign, User, Phone } from 'lucide-react';
+import { X, Save, Maximize2, Calendar, Hash, Tag, Globe, MapPin, Building2, AtSign, User, Phone, AlertCircle } from 'lucide-react';
 import { DataGrid } from './DataGrid';
 
 interface Props {
@@ -66,6 +64,45 @@ export const SupplierDetailModal: React.FC<Props> = ({ supplier, onSave, onClose
       setLocalSupplier({ ...localSupplier, items: [...localSupplier.items, newItem] });
   };
 
+  // Validation Logic
+  const validateField = (field: keyof Supplier, value: any): boolean => {
+      // ORM or Excluded suppliers are implicitly valid in context, but for editing we show validation
+      if (localSupplier.isOrm) return true; 
+
+      const strVal = String(value || '').trim();
+
+      switch (field) {
+          case 'name':
+          case 'street':
+          case 'city':
+              return strVal.length > 0;
+          case 'nip':
+              return strVal.replace(/[^0-9]/g, '').length === 10;
+          case 'zip':
+              return /^\d{2}-?\d{3}$/.test(strVal);
+          case 'email':
+              return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(strVal);
+          default:
+              return true; // Other fields are optional or don't need strict validation here
+      }
+  };
+
+  const getValidationClass = (field: keyof Supplier) => {
+      const isValid = validateField(field, localSupplier[field]);
+      return isValid 
+        ? 'border-zinc-200 dark:border-zinc-600 focus:border-yellow-400' 
+        : 'border-red-500 bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 focus:border-red-600';
+  };
+
+  const errors = [
+      !validateField('name', localSupplier.name) && 'Nazwa',
+      !validateField('street', localSupplier.street) && 'Ulica',
+      !validateField('zip', localSupplier.zip) && 'Kod pocztowy',
+      !validateField('city', localSupplier.city) && 'Miasto',
+      !validateField('nip', localSupplier.nip) && 'NIP',
+      !validateField('email', localSupplier.email) && 'Email',
+  ].filter(Boolean) as string[];
+
   return (
     <div 
         className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn"
@@ -88,6 +125,12 @@ export const SupplierDetailModal: React.FC<Props> = ({ supplier, onSave, onClose
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        {errors.length > 0 && !localSupplier.isOrm && (
+                            <div className="flex items-center gap-2 text-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded border border-red-200 dark:border-red-800 text-xs font-bold animate-pulse">
+                                <AlertCircle size={14} />
+                                <span>Błędy: {errors.length}</span>
+                            </div>
+                        )}
                         <button 
                             onClick={() => onSave(localSupplier)}
                             className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded font-bold shadow-sm transition-colors text-sm"
@@ -106,10 +149,12 @@ export const SupplierDetailModal: React.FC<Props> = ({ supplier, onSave, onClose
                 {/* Editable Fields Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 px-4 pb-4">
                     <div className="col-span-1 md:col-span-2">
-                        <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">Nazwa Dostawcy</label>
+                        <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
+                            Nazwa Dostawcy <span className="text-red-500">*</span>
+                        </label>
                         <input 
                             type="text" 
-                            className="w-full p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-sm font-semibold focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20 outline-none transition-all"
+                            className={`w-full p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white text-sm font-semibold outline-none transition-all ${getValidationClass('name')}`}
                             value={localSupplier.name}
                             onChange={(e) => updateSupplierField('name', e.target.value)}
                         />
@@ -118,7 +163,7 @@ export const SupplierDetailModal: React.FC<Props> = ({ supplier, onSave, onClose
                         <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide flex items-center gap-1"><Hash size={10}/> Nr Oferty</label>
                         <input 
                             type="text" 
-                            className="w-full p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-sm focus:border-yellow-400 outline-none"
+                            className="w-full p-2 border rounded border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 dark:text-white text-sm focus:border-yellow-400 outline-none"
                             value={localSupplier.offerNumber}
                             onChange={(e) => updateSupplierField('offerNumber', e.target.value)}
                         />
@@ -128,7 +173,7 @@ export const SupplierDetailModal: React.FC<Props> = ({ supplier, onSave, onClose
                          <div className="flex gap-1 items-center flex-nowrap">
                              <input
                                 type="date"
-                                className="w-full p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-sm focus:border-yellow-400 outline-none disabled:bg-zinc-100 dark:disabled:bg-zinc-700 disabled:text-zinc-400 min-w-0"
+                                className="w-full p-2 border rounded border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 dark:text-white text-sm focus:border-yellow-400 outline-none disabled:bg-zinc-100 dark:disabled:bg-zinc-700 disabled:text-zinc-400 min-w-0"
                                 value={localSupplier.deliveryDate === 'ASAP' ? '' : localSupplier.deliveryDate}
                                 onChange={(e) => updateSupplierField('deliveryDate', e.target.value)}
                                 disabled={localSupplier.deliveryDate === 'ASAP'}
@@ -145,7 +190,7 @@ export const SupplierDetailModal: React.FC<Props> = ({ supplier, onSave, onClose
                          <div className="flex-1">
                             <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide flex items-center gap-1"><Globe size={10}/> Waluta</label>
                             <select
-                                className="w-full p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-sm focus:border-yellow-400 outline-none disabled:bg-zinc-100 disabled:text-zinc-400"
+                                className="w-full p-2 border rounded border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 dark:text-white text-sm focus:border-yellow-400 outline-none disabled:bg-zinc-100 disabled:text-zinc-400"
                                 value={localSupplier.currency}
                                 onChange={(e) => updateSupplierField('currency', e.target.value)}
                                 disabled={localSupplier.isOrm}
@@ -160,7 +205,7 @@ export const SupplierDetailModal: React.FC<Props> = ({ supplier, onSave, onClose
                                 type="number"
                                 min="0"
                                 max="100"
-                                className="w-full p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-sm focus:border-yellow-400 outline-none disabled:bg-zinc-100 disabled:text-zinc-400"
+                                className="w-full p-2 border rounded border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 dark:text-white text-sm focus:border-yellow-400 outline-none disabled:bg-zinc-100 disabled:text-zinc-400"
                                 value={localSupplier.discount}
                                 onChange={(e) => updateSupplierField('discount', parseFloat(e.target.value) || 0)}
                             />
@@ -173,11 +218,11 @@ export const SupplierDetailModal: React.FC<Props> = ({ supplier, onSave, onClose
                     <div className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Dane do zamówienia (Adres / Kontakt)</div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div className="relative group">
-                            <MapPin className="absolute left-2 top-2.5 text-zinc-400" size={14} />
+                            <MapPin className={`absolute left-2 top-2.5 ${validateField('street', localSupplier.street) ? 'text-zinc-400' : 'text-red-500'}`} size={14} />
                             <input 
                                 type="text" 
-                                placeholder="Ulica i nr"
-                                className="w-full pl-8 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-xs focus:border-yellow-400 outline-none"
+                                placeholder="Ulica i nr *"
+                                className={`w-full pl-8 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white text-xs outline-none ${getValidationClass('street')}`}
                                 value={localSupplier.street || ''}
                                 onChange={(e) => updateSupplierField('street', e.target.value)}
                             />
@@ -185,28 +230,30 @@ export const SupplierDetailModal: React.FC<Props> = ({ supplier, onSave, onClose
                         <div className="flex gap-2">
                             <input 
                                 type="text" 
-                                placeholder="Kod"
-                                className="w-20 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-xs focus:border-yellow-400 outline-none"
+                                placeholder="Kod *"
+                                className={`w-20 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white text-xs outline-none ${getValidationClass('zip')}`}
                                 value={localSupplier.zip || ''}
                                 onChange={(e) => updateSupplierField('zip', e.target.value)}
+                                title="Format: XX-XXX lub XXXXX"
                             />
                             <input 
                                 type="text" 
-                                placeholder="Miasto"
-                                className="flex-1 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-xs focus:border-yellow-400 outline-none"
+                                placeholder="Miasto *"
+                                className={`flex-1 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white text-xs outline-none ${getValidationClass('city')}`}
                                 value={localSupplier.city || ''}
                                 onChange={(e) => updateSupplierField('city', e.target.value)}
                             />
                         </div>
                         <div className="flex gap-2">
                             <div className="relative group flex-1">
-                                <Building2 className="absolute left-2 top-2.5 text-zinc-400" size={14} />
+                                <Building2 className={`absolute left-2 top-2.5 ${validateField('nip', localSupplier.nip) ? 'text-zinc-400' : 'text-red-500'}`} size={14} />
                                 <input 
                                     type="text" 
-                                    placeholder="NIP"
-                                    className="w-full pl-8 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-xs focus:border-yellow-400 outline-none font-mono"
+                                    placeholder="NIP *"
+                                    className={`w-full pl-8 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white text-xs outline-none font-mono ${getValidationClass('nip')}`}
                                     value={localSupplier.nip || ''}
                                     onChange={(e) => updateSupplierField('nip', e.target.value)}
+                                    title="Wymagane 10 cyfr"
                                 />
                             </div>
                             <div className="relative group flex-1">
@@ -214,7 +261,7 @@ export const SupplierDetailModal: React.FC<Props> = ({ supplier, onSave, onClose
                                 <input 
                                     type="text" 
                                     placeholder="Telefon"
-                                    className="w-full pl-8 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-xs focus:border-yellow-400 outline-none"
+                                    className="w-full pl-8 p-2 border rounded border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 dark:text-white text-xs focus:border-yellow-400 outline-none"
                                     value={localSupplier.phone || ''}
                                     onChange={(e) => updateSupplierField('phone', e.target.value)}
                                 />
@@ -222,11 +269,11 @@ export const SupplierDetailModal: React.FC<Props> = ({ supplier, onSave, onClose
                         </div>
                         <div className="flex gap-2">
                              <div className="relative flex-1">
-                                <AtSign className="absolute left-2 top-2.5 text-zinc-400" size={14} />
+                                <AtSign className={`absolute left-2 top-2.5 ${validateField('email', localSupplier.email) ? 'text-zinc-400' : 'text-red-500'}`} size={14} />
                                 <input 
                                     type="text" 
-                                    placeholder="Email"
-                                    className="w-full pl-8 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-xs focus:border-yellow-400 outline-none"
+                                    placeholder="Email *"
+                                    className={`w-full pl-8 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white text-xs outline-none ${getValidationClass('email')}`}
                                     value={localSupplier.email || ''}
                                     onChange={(e) => updateSupplierField('email', e.target.value)}
                                 />
@@ -236,7 +283,7 @@ export const SupplierDetailModal: React.FC<Props> = ({ supplier, onSave, onClose
                                 <input 
                                     type="text" 
                                     placeholder="Osoba kont."
-                                    className="w-full pl-8 p-2 border rounded bg-white dark:bg-zinc-700 dark:text-white dark:border-zinc-600 text-xs focus:border-yellow-400 outline-none"
+                                    className="w-full pl-8 p-2 border rounded border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 dark:text-white text-xs focus:border-yellow-400 outline-none"
                                     value={localSupplier.contactPerson || ''}
                                     onChange={(e) => updateSupplierField('contactPerson', e.target.value)}
                                 />
