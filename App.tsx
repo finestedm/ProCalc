@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   AppState, 
@@ -15,7 +14,10 @@ import {
   VariantItem,
   DEFAULT_SETTINGS,
   ProjectStage,
-  AddressData
+  AddressData,
+  CustomInstallationItem,
+  CalculationScenario,
+  EMPTY_PAYMENT_TERMS
 } from './types';
 import { CustomerSection } from './components/CustomerSection';
 import { ProjectMetaForm } from './components/ProjectMetaForm';
@@ -35,10 +37,13 @@ import { VariantsSection } from './components/VariantsSection';
 import { DocumentsView } from './components/DocumentsView';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { Header } from './components/Header';
-import { FloatingSummary } from './components/FloatingSummary';
 import { ProjectManagerModal } from './components/ProjectManagerModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
+import { QuickStartModal } from './components/QuickStartModal';
+import { PackageCreationModal } from './components/PackageCreationModal';
+import { ScenarioTabs } from './components/ScenarioTabs';
+import { ScenarioManagerModal } from './components/ScenarioManagerModal';
 import { ScrollSpy } from './components/ScrollSpy';
 import { fetchEurRate } from './services/currencyService';
 import { generateDiff } from './services/diffService';
@@ -84,10 +89,82 @@ const FlyingParticle: React.FC<FlyingParticleProps> = ({ id, startX, startY, lab
     );
 };
 
+// --- FUZZY MATCHING HELPERS ---
+
+const levenshteinDistance = (a: string, b: string): number => {
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1,
+                    Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1)
+                );
+            }
+        }
+    }
+    return matrix[b.length][a.length];
+};
+
+const normalizeForComparison = (name: string): string => {
+    return name.toLowerCase()
+        // Remove legal suffixes
+        .replace(/sp\.? z o\.?o\.?/g, '')
+        .replace(/spółka z o\.?o\.?/g, '')
+        .replace(/s\.?a\.?/g, '')
+        .replace(/spółka akcyjna/g, '')
+        .replace(/sp\.?k\.?/g, '')
+        .replace(/sp\.?j\.?/g, '')
+        .replace(/gmbh/g, '')
+        // Remove special chars and spaces to compare core name
+        .replace(/[^a-z0-9]/g, '');
+};
+
+// --- SCENARIO DATA HELPERS ---
+const extractScenarioData = (data: CalculationData, id: string, name: string): CalculationScenario => {
+    return {
+        id,
+        name,
+        suppliers: data.suppliers,
+        transport: data.transport,
+        otherCosts: data.otherCosts,
+        otherCostsScratchpad: data.otherCostsScratchpad || [],
+        installation: data.installation,
+        nameplateQty: data.nameplateQty,
+        tasks: data.tasks,
+        projectNotes: data.projectNotes,
+        variants: data.variants,
+        paymentTerms: data.paymentTerms || EMPTY_PAYMENT_TERMS
+    };
+};
+
+const mergeScenarioData = (globalSource: CalculationData, scenario: CalculationScenario): CalculationData => {
+    return {
+        ...globalSource, // Keep global fields (payer, meta, etc.)
+        suppliers: scenario.suppliers,
+        transport: scenario.transport,
+        otherCosts: scenario.otherCosts,
+        otherCostsScratchpad: scenario.otherCostsScratchpad,
+        installation: scenario.installation,
+        nameplateQty: scenario.nameplateQty,
+        tasks: scenario.tasks,
+        projectNotes: scenario.projectNotes,
+        variants: scenario.variants,
+        paymentTerms: scenario.paymentTerms
+    };
+};
+
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>({
     initial: JSON.parse(JSON.stringify(EMPTY_CALCULATION)),
     final: JSON.parse(JSON.stringify(EMPTY_CALCULATION)),
+    scenarios: [],
+    activeScenarioId: 'default',
     mode: CalculationMode.INITIAL,
     stage: 'DRAFT', // Initialize Stage
     viewMode: ViewMode.CALCULATOR,
@@ -108,6 +185,12 @@ const App: React.FC = () => {
   const [showProjectManager, setShowProjectManager] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showQuickStart, setShowQuickStart] = useState(false);
+  const [showPackageModal, setShowPackageModal] = useState(false);
+  const [showScenarioManager, setShowScenarioManager] = useState(false);
+  
+  // Package Editing State
+  const [editingPackageItem, setEditingPackageItem] = useState<CustomInstallationItem | null>(null);
   
   // Synchronized state for top forms
   const [isHeaderFormsOpen, setIsHeaderFormsOpen] = useState(true);
@@ -127,7 +210,11 @@ const App: React.FC = () => {
       title: string;
       message: string;
       isDanger?: boolean;
+      confirmLabel?: string;
+      cancelLabel?: string;
+      neutralLabel?: string;
       onConfirm: () => void;
+      onNeutral?: () => void;
   }>({
       isOpen: false,
       title: '',
@@ -138,12 +225,25 @@ const App: React.FC = () => {
   // Ref for Main Scroll Container
   const mainScrollRef = useRef<HTMLDivElement>(null);
 
-  const triggerConfirm = (title: string, message: string, onConfirm: () => void, isDanger = false) => {
+  const triggerConfirm = (
+      title: string, 
+      message: string, 
+      onConfirm: () => void, 
+      isDanger = false,
+      options?: { confirmLabel?: string, cancelLabel?: string, neutralLabel?: string, onNeutral?: () => void }
+  ) => {
       setDialogConfig({
           isOpen: true,
           title,
           message,
           isDanger,
+          confirmLabel: options?.confirmLabel,
+          cancelLabel: options?.cancelLabel,
+          neutralLabel: options?.neutralLabel,
+          onNeutral: options?.onNeutral ? () => {
+              options.onNeutral!();
+              setDialogConfig(prev => ({ ...prev, isOpen: false }));
+          } : undefined,
           onConfirm: () => {
               onConfirm();
               setDialogConfig(prev => ({ ...prev, isOpen: false }));
@@ -177,7 +277,12 @@ const App: React.FC = () => {
               d.installation.stages.length,
               d.installation.customTimelineItems?.length || 0,
               d.tasks?.length || 0,
-              d.variants?.length || 0
+              d.variants?.length || 0,
+              // Track items within variants and hierarchy to ensure instant undo for variant edits
+              d.variants?.map(v => v.items.length).join('-'),
+              d.variants?.map(v => v.parentId || 'root').join('-'),
+              // Track global installation items
+              d.installation.customItems.length
           ].join('|');
       };
       return `${getDataHash(state.initial)}#${getDataHash(state.final)}`;
@@ -217,6 +322,13 @@ const App: React.FC = () => {
         if(parsed.finalManualPrice === undefined) parsed.finalManualPrice = null;
         if(parsed.stage === undefined) parsed.stage = 'DRAFT'; // Default stage for legacy
         
+        // Scenario backward compatibility
+        if(!parsed.scenarios || parsed.scenarios.length === 0) {
+            const defaultScenario = extractScenarioData(parsed.initial || EMPTY_CALCULATION, 'default', 'Wariant Główny');
+            parsed.scenarios = [defaultScenario];
+            parsed.activeScenarioId = 'default';
+        }
+
         // Init global settings if missing
         if(!parsed.appState?.globalSettings && !parsed.globalSettings) {
              // Handle migration if needed
@@ -233,7 +345,26 @@ const App: React.FC = () => {
         const defaultSettings = { ...DEFAULT_SETTINGS };
         const init = JSON.parse(JSON.stringify(EMPTY_CALCULATION));
         const fin = JSON.parse(JSON.stringify(EMPTY_CALCULATION));
-        setAppState(prev => ({ ...prev, initial: init, final: fin, globalSettings: defaultSettings }));
+        
+        // Init default scenario
+        const defaultScenario = extractScenarioData(init, 'default', 'Wariant Główny');
+
+        setAppState(prev => ({ 
+            ...prev, 
+            initial: init, 
+            final: fin, 
+            globalSettings: defaultSettings,
+            scenarios: [defaultScenario],
+            activeScenarioId: 'default'
+        }));
+        
+        // No saved data -> Suggest Quick Start via Snackbar (10 seconds timeout)
+        setSnackbar({
+            message: "Witaj! Czy chcesz skonfigurować nowy projekt?",
+            action: () => setShowQuickStart(true),
+            actionLabel: "SZYBKI START"
+        });
+        setTimeout(() => setSnackbar(null), 10000);
     }
     
     setIsLoaded(true);
@@ -254,6 +385,246 @@ const App: React.FC = () => {
         Notification.requestPermission();
     }
   }, []);
+
+  // --- SCENARIO MANAGEMENT LOGIC ---
+  const handleAddScenario = () => {
+      setAppState(prev => {
+          const newId = Math.random().toString(36).substr(2, 9);
+          // Clone current ACTIVE data for new scenario to start with
+          const newScenario = extractScenarioData(prev.initial, newId, `Wariant ${prev.scenarios.length + 1}`);
+          
+          const updatedScenarios = prev.scenarios.map(s => 
+              s.id === prev.activeScenarioId 
+                  ? extractScenarioData(prev.initial, s.id, s.name) 
+                  : s
+          );
+
+          return {
+              ...prev,
+              scenarios: [...updatedScenarios, newScenario],
+              activeScenarioId: newId,
+          };
+      });
+      showSnackbar("Dodano nowy wariant (skopiowano z obecnego)");
+  };
+
+  const handleAddEmptyScenario = () => {
+      setAppState(prev => {
+          const newId = Math.random().toString(36).substr(2, 9);
+          const newScenario = extractScenarioData(
+              JSON.parse(JSON.stringify(EMPTY_CALCULATION)), 
+              newId, 
+              `Wariant Pusty ${prev.scenarios.length + 1}`
+          );
+          
+          const updatedScenarios = prev.scenarios.map(s => 
+              s.id === prev.activeScenarioId 
+                  ? extractScenarioData(prev.initial, s.id, s.name) 
+                  : s
+          );
+
+          return {
+              ...prev,
+              scenarios: [...updatedScenarios, newScenario],
+              activeScenarioId: newId,
+              initial: mergeScenarioData(prev.initial, newScenario)
+          };
+      });
+      showSnackbar("Dodano nowy pusty wariant");
+  };
+
+  const handleClearScenarioData = (id: string) => {
+      setAppState(prev => {
+          const empty = JSON.parse(JSON.stringify(EMPTY_CALCULATION));
+          const updatedScenarios = prev.scenarios.map(s => {
+              if (s.id === id) {
+                  return {
+                      ...s,
+                      suppliers: [],
+                      transport: [],
+                      otherCosts: [],
+                      otherCostsScratchpad: [],
+                      installation: empty.installation,
+                      tasks: [],
+                      variants: []
+                  };
+              }
+              // If it's not the active one, we assume its stored data is current or handled by App sync
+              // NOTE: If we clear a non-active scenario, we just update the list array.
+              // If we clear the ACTIVE scenario, we must also update `prev.initial`.
+              return s;
+          });
+
+          let newInitial = prev.initial;
+          if (id === prev.activeScenarioId) {
+              const target = updatedScenarios.find(s => s.id === id)!;
+              newInitial = mergeScenarioData(prev.initial, target);
+          }
+
+          return {
+              ...prev,
+              scenarios: updatedScenarios,
+              initial: newInitial
+          };
+      });
+      showSnackbar("Wyczyszczono dane wariantu");
+  };
+
+  const handleCopyModules = (targetId: string, sourceId: string, modules: string[]) => {
+      setAppState(prev => {
+          const source = prev.scenarios.find(s => s.id === sourceId);
+          // If source is active, use current appState.initial as source of truth
+          const sourceData = (sourceId === prev.activeScenarioId) 
+              ? extractScenarioData(prev.initial, sourceId, source!.name)
+              : source;
+
+          if (!sourceData) return prev;
+
+          // Deep copy source data using JSON
+          const dataToCopy = JSON.parse(JSON.stringify(sourceData));
+
+          const updatedScenarios = prev.scenarios.map(s => {
+              if (s.id === targetId) {
+                  const updated = { ...s };
+                  if (modules.includes('suppliers')) updated.suppliers = dataToCopy.suppliers;
+                  if (modules.includes('transport')) updated.transport = dataToCopy.transport;
+                  if (modules.includes('installation')) updated.installation = dataToCopy.installation;
+                  if (modules.includes('otherCosts')) {
+                      updated.otherCosts = dataToCopy.otherCosts;
+                      updated.otherCostsScratchpad = dataToCopy.otherCostsScratchpad;
+                  }
+                  if (modules.includes('variants')) updated.variants = dataToCopy.variants;
+                  return updated;
+              }
+              return s;
+          });
+
+          let newInitial = prev.initial;
+          if (targetId === prev.activeScenarioId) {
+              const target = updatedScenarios.find(s => s.id === targetId)!;
+              newInitial = mergeScenarioData(prev.initial, target);
+          }
+
+          return {
+              ...prev,
+              scenarios: updatedScenarios,
+              initial: newInitial
+          };
+      });
+      showSnackbar("Skopiowano wybrane moduły");
+  };
+
+  const handleSwitchScenario = (id: string) => {
+      setAppState(prev => {
+          if (prev.activeScenarioId === id) return prev;
+
+          // 1. Save current state to old scenario in list
+          const updatedScenarios = prev.scenarios.map(s => 
+              s.id === prev.activeScenarioId 
+                  ? extractScenarioData(prev.initial, s.id, s.name) 
+                  : s
+          );
+
+          // 2. Load new scenario data
+          const targetScenario = updatedScenarios.find(s => s.id === id);
+          if (!targetScenario) return prev; // Error safety
+
+          const newInitial = mergeScenarioData(prev.initial, targetScenario);
+
+          return {
+              ...prev,
+              scenarios: updatedScenarios,
+              activeScenarioId: id,
+              initial: newInitial
+          };
+      });
+  };
+
+  const updateScenariosList = (newScenarios: CalculationScenario[]) => {
+      setAppState(prev => ({ ...prev, scenarios: newScenarios }));
+  };
+
+  const handleDeleteScenario = (id: string) => {
+      setAppState(prev => {
+          // Prevent deleting the last one
+          if (prev.scenarios.length <= 1) {
+              showSnackbar("Musi pozostać przynajmniej jeden wariant.");
+              return prev;
+          }
+
+          const newScenarios = prev.scenarios.filter(s => s.id !== id);
+          
+          // If we deleted the active one, switch to the first available
+          if (prev.activeScenarioId === id) {
+              const nextScenario = newScenarios[0];
+              const newInitial = mergeScenarioData(prev.initial, nextScenario);
+              return {
+                  ...prev,
+                  scenarios: newScenarios,
+                  activeScenarioId: nextScenario.id,
+                  initial: newInitial
+              };
+          }
+
+          return { ...prev, scenarios: newScenarios };
+      });
+  };
+
+  const handleRenameScenario = (id: string, name: string) => {
+      setAppState(prev => ({
+          ...prev,
+          scenarios: prev.scenarios.map(s => s.id === id ? { ...s, name } : s)
+      }));
+  };
+
+  const handleDuplicateScenario = (id: string) => {
+      setAppState(prev => {
+          const source = prev.scenarios.find(s => s.id === id);
+          if (!source) return prev;
+
+          // If source is active, take data from `initial` state to be most up to date
+          const sourceData = source.id === prev.activeScenarioId 
+              ? extractScenarioData(prev.initial, source.id, source.name)
+              : source;
+
+          const newId = Math.random().toString(36).substr(2, 9);
+          const newScenario = { ...sourceData, id: newId, name: `${source.name} (Kopia)` };
+          
+          // If we are duplicating active, ensure we save active first
+          const updatedScenarios = prev.scenarios.map(s => 
+              s.id === prev.activeScenarioId 
+                  ? extractScenarioData(prev.initial, s.id, s.name) 
+                  : s
+          );
+
+          return {
+              ...prev,
+              scenarios: [...updatedScenarios, newScenario],
+              activeScenarioId: newId,
+              initial: mergeScenarioData(prev.initial, newScenario) // Switch to copy
+          };
+      });
+      showSnackbar("Zduplikowano wariant");
+  };
+
+  // --- END SCENARIO LOGIC ---
+
+  // --- BROWSER TAB TITLE UPDATE ---
+  useEffect(() => {
+      if (!isLoaded) return;
+      const activeData = appState.mode === CalculationMode.INITIAL ? appState.initial : appState.final;
+      const projectNum = activeData.meta.projectNumber;
+      const clientName = activeData.orderingParty.name;
+
+      if (projectNum || clientName) {
+          const parts = [];
+          if (projectNum) parts.push(projectNum);
+          if (clientName) parts.push(clientName);
+          document.title = `${parts.join(' ')} | JH WE-Calc`;
+      } else {
+          document.title = 'JH WE-Calc - Kalkulator Ceny Projektu';
+      }
+  }, [appState.initial.meta.projectNumber, appState.initial.orderingParty.name, appState.final.meta.projectNumber, appState.final.orderingParty.name, appState.mode, isLoaded]);
 
   // --- KEYBOARD SHORTCUTS ---
   useEffect(() => {
@@ -419,6 +790,36 @@ const App: React.FC = () => {
           }
       }, delay);
 
+      // ALSO: Sync current state to scenarios list on every update if it's active
+      // This ensures if we switch tabs, we have latest data
+      setAppState(prev => {
+          if (prev.mode !== CalculationMode.INITIAL) return prev;
+          
+          // Check if active scenario in list is outdated compared to current initial
+          const activeInList = prev.scenarios.find(s => s.id === prev.activeScenarioId);
+          if(!activeInList) return prev;
+
+          // Simple check if sync needed (deep compare might be expensive, but necessary for consistency)
+          // We can rely on `lastSnapshot` diff logic or just update blindly here since it's a setter
+          // Optimized: Update only if `scenarios` state doesn't match `initial` state for active ID
+          
+          // Actually, updating `scenarios` array on every keystroke in `initial` might cause re-renders.
+          // Strategy: `scenarios` array is the storage. `initial` is the view.
+          // We sync strictly when switching tabs or saving. 
+          // BUT: If user saves project, we need scenarios up to date.
+          // So let's keep them synced.
+          
+          const updatedScenarios = prev.scenarios.map(s => 
+              s.id === prev.activeScenarioId 
+                  ? extractScenarioData(prev.initial, s.id, s.name)
+                  : s
+          );
+          
+          if (JSON.stringify(updatedScenarios) === JSON.stringify(prev.scenarios)) return prev;
+
+          return { ...prev, scenarios: updatedScenarios };
+      });
+
       localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
 
       return () => {
@@ -434,12 +835,14 @@ const App: React.FC = () => {
       
       if (stage === 'OPENING' || stage === 'FINAL') {
           // Strict Metadata Requirements
-          if (!init.meta.installationType) errors.push("Brak Typu Instalacji (Szczegóły Projektu).");
+          if (!init.meta.installationType) errors.push("Brak Typu Projektu (Szczegóły Projektu).");
           if (!init.meta.invoiceText) errors.push("Brak Tekstu na Fakturze (Szczegóły Projektu).");
 
           // Common requirements for Opening & Final
           if (!init.meta.orderNumber) errors.push("Brak Numeru Zamówienia.");
           if (!init.meta.projectNumber) errors.push("Brak Numeru Projektu (CRM).");
+          if (!/^\d{8}$/.test(init.meta.projectNumber)) errors.push("Numer Projektu (CRM) musi składać się z dokładnie 8 cyfr.");
+          
           if (!init.meta.orderDate) errors.push("Brak Daty Zamówienia.");
           
           if (!init.meta.salesPerson) errors.push("Brak Handlowca (Wymagane z listy).");
@@ -458,6 +861,8 @@ const App: React.FC = () => {
           checkAddress(init.recipient, "Odbiorca");
           checkAddress(init.orderingParty, "Zamawiający");
           
+          if (!init.payer.clientId) errors.push("Brak ID Klienta (Wymagane do realizacji).");
+
           // Check suppliers
           init.suppliers.forEach(s => {
               if (s.isIncluded !== false && !s.isOrm) {
@@ -469,7 +874,10 @@ const App: React.FC = () => {
       }
 
       if (stage === 'FINAL') {
-          if (!init.meta.sapProjectNumber || init.meta.sapProjectNumber.length < 5) errors.push("Brak poprawnego numeru projektu SAP.");
+          // Strict SAP format: 46120 + 5 digits = 10 digits total
+          if (!/^46120\d{5}$/.test(init.meta.sapProjectNumber)) {
+              errors.push("Niepoprawny numer SAP (Musi zaczynać się od 46120 i mieć 10 cyfr).");
+          }
           
           // Check if any final costs are entered (Basic check)
           const hasFinalData = 
@@ -493,7 +901,7 @@ const App: React.FC = () => {
       if (!appState.initial.meta.installationType) {
           triggerConfirm(
               "Wymagane Dane",
-              "Aby zapisać projekt, musisz wybrać 'Typ Instalacji' w Szczegółach Projektu.",
+              "Aby zapisać projekt, musisz wybrać 'Typ Projektu' w Szczegółach Projektu.",
               () => {},
               true
           );
@@ -509,15 +917,70 @@ const App: React.FC = () => {
           return false;
       }
 
+      // Check for fuzzy match on client folder
+      const clientName = appState.initial.orderingParty.name || 'Nieznany Klient';
+      const safeClient = sanitizeName(clientName);
+      
+      try {
+          // @ts-ignore
+          const rootHandle = dirHandle;
+          const normalizedTarget = normalizeForComparison(clientName);
+          let fuzzyMatch: { name: string, distance: number } | null = null;
+
+          // @ts-ignore
+          for await (const entry of rootHandle.values()) {
+              if (entry.kind === 'directory') {
+                  const normalizedEntry = normalizeForComparison(entry.name);
+                  
+                  // Exact match - Just save without prompt (assuming user meant to save to existing)
+                  if (normalizedEntry === normalizedTarget) {
+                      return await performSave(stage, entry.name);
+                  }
+                  
+                  // Fuzzy check
+                  const dist = levenshteinDistance(normalizedEntry, normalizedTarget);
+                  const threshold = normalizedTarget.length > 8 ? 2 : 1;
+                  
+                  if (dist <= threshold) {
+                      fuzzyMatch = { name: entry.name, distance: dist };
+                      break; // Found a close match
+                  }
+              }
+          }
+
+          if (fuzzyMatch) {
+              // Trigger confirmation dialog with options
+              triggerConfirm(
+                  "Weryfikacja Klienta",
+                  `Znaleziono istniejący folder o podobnej nazwie: "${fuzzyMatch.name}"\n\nTwój wpis: "${clientName}" (${safeClient})\n\nCzy chcesz zapisać w ISTNIEJĄCYM folderze, czy utworzyć nowy dla innego klienta?`,
+                  () => performSave(stage, fuzzyMatch!.name), // Confirm -> Use Existing
+                  false,
+                  {
+                      confirmLabel: `Tak, użyj "${fuzzyMatch.name}"`,
+                      neutralLabel: `Nie, utwórz "${safeClient}"`,
+                      onNeutral: () => performSave(stage, safeClient), // Neutral -> Create New
+                      cancelLabel: "Anuluj"
+                  }
+              );
+              return false; // Wait for user interaction
+          }
+
+          // No match found -> New Client
+          return await performSave(stage, safeClient);
+
+      } catch (err) {
+          console.error("Auto-save pre-check failed", err);
+          showSnackbar("Błąd sprawdzania folderów. Sprawdź uprawnienia.");
+          return false;
+      }
+  };
+
+  const performSave = async (stage: ProjectStage, targetClientFolderName: string): Promise<boolean> => {
       // Update State with current stage
       const newState = { ...appState, stage: stage };
       setAppState(newState);
 
-      // Prepare Metadata for Folder Structure
-      const clientName = appState.initial.orderingParty.name || 'Nieznany Klient';
       const projectNum = appState.initial.meta.projectNumber || 'BezNumeru';
-      
-      const safeClient = sanitizeName(clientName);
       const safeProject = sanitizeName(projectNum);
 
       // Construct filename
@@ -531,19 +994,18 @@ const App: React.FC = () => {
           timestamp: Date.now(),
           stage: stage,
           appState: newState,
-          historyLog: [], // Cleared to save space
-          past: [], // Cleared to save space
-          future: [] // Cleared to save space
+          historyLog: [], 
+          past: [],
+          future: [] 
       };
 
       try {
-          // Drill down logic: Root -> Client -> Project
           // @ts-ignore
-          let targetHandle = dirHandle;
+          const rootHandle = dirHandle;
           
           // Get/Create Client Folder
           // @ts-ignore
-          targetHandle = await targetHandle.getDirectoryHandle(safeClient, { create: true });
+          let targetHandle = await rootHandle.getDirectoryHandle(targetClientFolderName, { create: true });
           
           // Get/Create Project Folder
           // @ts-ignore
@@ -557,11 +1019,11 @@ const App: React.FC = () => {
           await writable.write(JSON.stringify(fileData, null, 2));
           await writable.close();
           
-          showSnackbar(`Zapisano w: ${safeClient}/${safeProject}/${filename}`);
+          showSnackbar(`Zapisano w: ${targetClientFolderName}/${safeProject}`);
           return true;
       } catch (err) {
-          console.error("Auto-save failed", err);
-          showSnackbar("Błąd zapisu. Sprawdź uprawnienia do folderu.");
+          console.error("Save failed", err);
+          showSnackbar("Błąd zapisu pliku.");
           return false;
       }
   };
@@ -597,12 +1059,14 @@ const App: React.FC = () => {
           return;
       }
 
-      const dataKey = appState.mode === CalculationMode.INITIAL ? 'initial' : 'final';
-      const variants = appState[dataKey].variants;
-      const targetVariant = variants.find(v => v.id === pickingVariantId);
-      if (targetVariant && targetVariant.items.some(i => i.id === item.id && i.type === item.type)) {
-          showSnackbar("Ten element jest już w wariancie.");
-          return;
+      if (pickingVariantId !== 'GLOBAL_INSTALLATION') {
+          const dataKey = appState.mode === CalculationMode.INITIAL ? 'initial' : 'final';
+          const variants = appState[dataKey].variants;
+          const targetVariant = variants.find(v => v.id === pickingVariantId);
+          if (targetVariant && targetVariant.items.some(i => i.id === item.id && i.type === item.type)) {
+              showSnackbar("Ten element jest już w wariancie.");
+              return;
+          }
       }
 
       setPickedItemsBuffer(prev => [...prev, {
@@ -633,7 +1097,12 @@ const App: React.FC = () => {
 
   const handleCancelPicking = () => {
       setPickingVariantId(null);
-      setPickedItemsBuffer([]);
+      // If we were editing a package, we should return to the modal instead of dropping everything
+      if (editingPackageItem) {
+          setShowPackageModal(true);
+      } else {
+          setPickedItemsBuffer([]);
+      }
   };
 
   const handleConfirmPicking = () => {
@@ -642,28 +1111,219 @@ const App: React.FC = () => {
           return;
       }
 
+      // Check if we are in "Add more to package" mode
+      if (editingPackageItem) {
+          setShowPackageModal(true);
+          setPickingVariantId(null);
+          return;
+      }
+
+      // Check if we should open the Package Creation Modal
+      // Only for Global Installation and if multiple items are selected
+      if (pickingVariantId === 'GLOBAL_INSTALLATION' && pickedItemsBuffer.length > 1) {
+          setShowPackageModal(true);
+          return;
+      }
+
+      // Default behavior (Add separately)
+      addItemsSeparately();
+  };
+
+  const addItemsSeparately = () => {
       setAppState(prev => {
           const newState = { ...prev };
           const dataKey = prev.mode === CalculationMode.INITIAL ? 'initial' : 'final';
-          const variants = [...newState[dataKey].variants]; 
           
-          const variantIndex = variants.findIndex(v => v.id === pickingVariantId);
-          if (variantIndex !== -1) {
-              const updatedVariant = { ...variants[variantIndex] };
-              updatedVariant.items = [...updatedVariant.items, ...pickedItemsBuffer];
-              variants[variantIndex] = updatedVariant;
+          if (pickingVariantId === 'GLOBAL_INSTALLATION') {
+              const activeData = newState[dataKey];
+              const suppliers = activeData.suppliers;
               
-              newState[dataKey] = {
-                  ...newState[dataKey],
-                  variants: variants
-              };
+              const newCustomItems: CustomInstallationItem[] = pickedItemsBuffer.map(picked => {
+                  let qty = 1;
+                  // Try to determine quantity from source if possible
+                  if (picked.type === 'SUPPLIER_ITEM') {
+                      if (picked.id.startsWith('group_supp_')) {
+                          const sId = picked.id.replace('group_supp_', '');
+                          const s = suppliers.find(sup => sup.id === sId);
+                          if (s) qty = s.items.reduce((sum, i) => sum + i.quantity, 0);
+                      } else {
+                          for(const s of suppliers) {
+                              const found = s.items.find(i => i.id === picked.id);
+                              if (found) { qty = found.quantity; break; }
+                          }
+                      }
+                  }
+
+                  return {
+                      id: Math.random().toString(36).substr(2, 9),
+                      description: picked.originalDescription || 'Nowa Pozycja',
+                      quantity: qty,
+                      unitPrice: 0,
+                      isAutoQuantity: true,
+                      linkedSources: [{ 
+                          id: picked.id.replace('group_supp_', ''), 
+                          type: (picked.id.startsWith('group_supp_') ? 'GROUP' : 'ITEM') as 'GROUP' | 'ITEM'
+                      }]
+                  };
+              });
+
+              activeData.installation.customItems = [
+                  ...activeData.installation.customItems,
+                  ...newCustomItems
+              ];
+              
+              showSnackbar(`Dodano ${pickedItemsBuffer.length} pozycji do montażu globalnego.`);
+
+          } else {
+              // Handle Variant Items
+              const variants = [...newState[dataKey].variants]; 
+              const variantIndex = variants.findIndex(v => v.id === pickingVariantId);
+              if (variantIndex !== -1) {
+                  const updatedVariant = { ...variants[variantIndex] };
+                  updatedVariant.items = [...updatedVariant.items, ...pickedItemsBuffer];
+                  variants[variantIndex] = updatedVariant;
+                  
+                  newState[dataKey] = {
+                      ...newState[dataKey],
+                      variants: variants
+                  };
+                  showSnackbar(`Dodano ${pickedItemsBuffer.length} elementów do wariantu.`);
+              }
           }
           return newState;
       });
 
-      showSnackbar(`Dodano ${pickedItemsBuffer.length} elementów do wariantu.`);
       setPickingVariantId(null);
       setPickedItemsBuffer([]);
+      setShowPackageModal(false);
+  };
+
+  const handleCreatePackage = (packageName: string, totalPrice: number, individualPrices: Record<string, number>) => {
+      setAppState(prev => {
+          const newState = { ...prev };
+          const dataKey = prev.mode === CalculationMode.INITIAL ? 'initial' : 'final';
+          const activeData = newState[dataKey];
+
+          // Create one consolidated item
+          const packageItem: CustomInstallationItem = {
+              id: Math.random().toString(36).substr(2, 9),
+              description: packageName,
+              quantity: 1,
+              unitPrice: totalPrice,
+              isAutoQuantity: false, // Explicit package
+              linkedSources: pickedItemsBuffer.map(picked => ({
+                  id: picked.id.replace('group_supp_', ''), 
+                  type: (picked.id.startsWith('group_supp_') ? 'GROUP' : 'ITEM') as 'GROUP' | 'ITEM'
+              })),
+              itemUnitPrices: individualPrices
+          };
+
+          activeData.installation.customItems = [
+              ...activeData.installation.customItems,
+              packageItem
+          ];
+
+          return newState;
+      });
+
+      showSnackbar("Utworzono pakiet montażowy.");
+      setPickingVariantId(null);
+      setPickedItemsBuffer([]);
+      setShowPackageModal(false);
+  };
+
+  const handleEditPackage = (item: CustomInstallationItem) => {
+      // Reconstruct buffer items for modal from linkedSources
+      if (!item.linkedSources || item.linkedSources.length === 0) return;
+      
+      setEditingPackageItem(item);
+      
+      const activeData = appState.mode === CalculationMode.INITIAL ? appState.initial : appState.final;
+      const suppliers = activeData.suppliers;
+
+      const itemsForModal: VariantItem[] = item.linkedSources.map(src => {
+          let label = `Element ${src.id}`;
+          
+          if (src.type === 'GROUP') {
+              const s = suppliers.find(sup => sup.id === src.id);
+              if (s) label = `DOSTAWCA: ${s.customTabName || s.name}`;
+          } else {
+              // Item
+              for (const s of suppliers) {
+                  const i = s.items.find(it => it.id === src.id);
+                  if (i) {
+                      label = `[Mat] ${i.itemDescription}`;
+                      break;
+                  }
+              }
+          }
+
+          return {
+              id: src.type === 'GROUP' ? `group_supp_${src.id}` : src.id,
+              type: src.type === 'GROUP' ? 'SUPPLIER_ITEM' : 'SUPPLIER_ITEM', // Modal expects VariantType
+              originalDescription: label
+          };
+      });
+
+      setPickedItemsBuffer(itemsForModal);
+      setShowPackageModal(true);
+  };
+
+  const handleUpdatePackage = (packageName: string, totalPrice: number, individualPrices: Record<string, number>) => {
+      if (!editingPackageItem) return;
+
+      setAppState(prev => {
+          const newState = { ...prev };
+          const dataKey = prev.mode === CalculationMode.INITIAL ? 'initial' : 'final';
+          const activeData = newState[dataKey];
+          
+          const newItems = activeData.installation.customItems.map(i => {
+              if (i.id === editingPackageItem.id) {
+                  return {
+                      ...i,
+                      description: packageName,
+                      unitPrice: totalPrice,
+                      // We must update linkedSources as well because we might have added items!
+                      linkedSources: pickedItemsBuffer.map(picked => ({
+                          id: picked.id.replace('group_supp_', ''),
+                          type: (picked.id.startsWith('group_supp_') ? 'GROUP' : 'ITEM') as 'GROUP' | 'ITEM'
+                      })),
+                      itemUnitPrices: individualPrices
+                  };
+              }
+              return i;
+          });
+
+          activeData.installation.customItems = newItems;
+          return newState;
+      });
+
+      showSnackbar("Zaktualizowano pakiet montażowy.");
+      setEditingPackageItem(null);
+      setPickedItemsBuffer([]);
+      setShowPackageModal(false);
+  };
+
+  const handleModalClose = () => {
+      setShowPackageModal(false);
+      setEditingPackageItem(null);
+      // Only clear buffer if we are not in picking mode to avoid losing selection if canceled
+      if (!pickingVariantId && !editingPackageItem) {
+          setPickedItemsBuffer([]);
+      }
+  };
+
+  const handleAddMoreToPackage = (currentName: string, currentPrices: Record<string, number>) => {
+      // Temporarily update the editing item with current form values so they persist
+      if (editingPackageItem) {
+          setEditingPackageItem({
+              ...editingPackageItem,
+              description: currentName,
+              itemUnitPrices: currentPrices
+          });
+      }
+      setShowPackageModal(false);
+      setPickingVariantId('GLOBAL_INSTALLATION');
   };
 
   const handleUndo = () => {
@@ -802,6 +1462,13 @@ const App: React.FC = () => {
                // Restore stage from file root if available, otherwise appState
                const loadedStage = parsed.stage || parsed.appState.stage || 'DRAFT';
                
+               // Restore Scenarios
+               if(!parsed.appState.scenarios || parsed.appState.scenarios.length === 0) {
+                   const def = extractScenarioData(parsed.appState.initial || EMPTY_CALCULATION, 'default', 'Wariant Główny');
+                   parsed.appState.scenarios = [def];
+                   parsed.appState.activeScenarioId = 'default';
+               }
+
                setAppState({
                    ...parsed.appState,
                    stage: loadedStage
@@ -818,6 +1485,14 @@ const App: React.FC = () => {
                if(merged.finalManualPrice === undefined) merged.finalManualPrice = null;
                if(!merged.globalSettings) merged.globalSettings = { ...DEFAULT_SETTINGS };
                if(!merged.stage) merged.stage = 'DRAFT';
+               
+               // Setup default scenario if missing
+               if(!merged.scenarios || merged.scenarios.length === 0) {
+                   const def = extractScenarioData(merged.initial || EMPTY_CALCULATION, 'default', 'Wariant Główny');
+                   merged.scenarios = [def];
+                   merged.activeScenarioId = 'default';
+               }
+
                setAppState(merged);
           }
           showSnackbar("Projekt wczytany pomyślnie");
@@ -846,6 +1521,39 @@ const App: React.FC = () => {
       if (projectInputRef.current) projectInputRef.current.value = '';
   };
 
+  // --- QUICK START HANDLER ---
+  const handleQuickStartApply = (qsData: { projectNumber: string, clientName: string, salesPerson: string, assistantPerson: string, installationType: string, currency: Currency }) => {
+      setAppState(prev => {
+          const newInit = { ...prev.initial };
+          const newFinal = { ...prev.final };
+          
+          // Apply to both initial and final
+          newInit.meta.projectNumber = qsData.projectNumber;
+          newFinal.meta.projectNumber = qsData.projectNumber;
+          
+          newInit.meta.salesPerson = qsData.salesPerson;
+          newFinal.meta.salesPerson = qsData.salesPerson;
+          
+          newInit.meta.assistantPerson = qsData.assistantPerson;
+          newFinal.meta.assistantPerson = qsData.assistantPerson;
+          
+          newInit.meta.installationType = qsData.installationType;
+          newFinal.meta.installationType = qsData.installationType;
+          
+          newInit.orderingParty.name = qsData.clientName;
+          newFinal.orderingParty.name = qsData.clientName;
+          
+          return {
+              ...prev,
+              offerCurrency: qsData.currency,
+              initial: newInit,
+              final: newFinal
+          };
+      });
+      setShowQuickStart(false);
+      showSnackbar("Dane projektu zaktualizowane!");
+  };
+
   const handleNewProject = () => {
       triggerConfirm(
           "Nowy Projekt", 
@@ -864,9 +1572,14 @@ const App: React.FC = () => {
                   fin.meta.assistantPerson = appState.globalSettings.defaultSupportPerson;
               }
 
+              // Reset Scenarios
+              const defaultScenario = extractScenarioData(init, 'default', 'Wariant Główny');
+
               setAppState({
                 initial: init,
                 final: fin,
+                scenarios: [defaultScenario],
+                activeScenarioId: 'default',
                 mode: CalculationMode.INITIAL,
                 stage: 'DRAFT',
                 viewMode: ViewMode.CALCULATOR,
@@ -882,6 +1595,9 @@ const App: React.FC = () => {
               setFuture([]);
               setHistoryLog([]);
               showSnackbar("Utworzono nowy projekt");
+              
+              // Trigger Quick Start
+              setShowQuickStart(true);
           },
           true
       );
@@ -955,7 +1671,7 @@ const App: React.FC = () => {
         
         {/* LEFT COLUMN (Forms) - Expanded */}
         {appState.viewMode === ViewMode.CALCULATOR && (
-            <div className="xl:col-span-10 p-6 pb-32 relative">
+            <div className="xl:col-span-10 p-1 md:p-6 pb-20 md:pb-32 relative">
                 {/* ScrollSpy Removed from here, moved to Sidebar */}
                 
                 <div className="max-w-[1350px] mx-auto space-y-6">
@@ -993,6 +1709,15 @@ const App: React.FC = () => {
                                 />
                             </div>
                         </div>
+
+                        {/* SCENARIO TABS */}
+                        <ScenarioTabs 
+                            scenarios={appState.scenarios}
+                            activeId={appState.activeScenarioId}
+                            onSwitch={handleSwitchScenario}
+                            onAdd={handleAddScenario}
+                            onManage={() => setShowScenarioManager(true)}
+                        />
 
                         <div id="section-suppliers">
                             <SuppliersSection 
@@ -1034,6 +1759,8 @@ const App: React.FC = () => {
                                 offerCurrency={appState.offerCurrency}
                                 isPickingMode={!!pickingVariantId}
                                 onPick={handleVariantItemPick}
+                                onEnterPickingMode={(id) => setPickingVariantId(id)}
+                                onEditPackage={handleEditPackage}
                             />
                         </div>
 
@@ -1059,6 +1786,7 @@ const App: React.FC = () => {
                                     offerCurrency={appState.offerCurrency}
                                     onConfirm={triggerConfirm}
                                     onEnterPickingMode={(id) => setPickingVariantId(id)}
+                                    ormFeePercent={appState.globalSettings.ormFeePercent}
                             />
                         </div>
 
@@ -1078,7 +1806,7 @@ const App: React.FC = () => {
 
         {/* FULL SCREEN MODES */}
         {appState.viewMode === ViewMode.LOGISTICS && (
-            <div className="xl:col-span-12 animate-fadeIn p-6">
+            <div className="xl:col-span-12 animate-fadeIn p-1 md:p-6">
                  <div className="max-w-[1600px] mx-auto">
                      <LogisticsView 
                         data={{
@@ -1115,7 +1843,7 @@ const App: React.FC = () => {
         )}
         
         {appState.viewMode === ViewMode.NOTES && (
-             <div className="xl:col-span-12 animate-fadeIn p-6">
+             <div className="xl:col-span-12 animate-fadeIn p-1 md:p-6">
                 <div className="max-w-[1600px] mx-auto">
                     <ProjectNotesView 
                         data={data} 
@@ -1127,7 +1855,7 @@ const App: React.FC = () => {
         )}
 
         {appState.viewMode === ViewMode.DOCUMENTS && (
-             <div className="xl:col-span-12 animate-fadeIn p-6">
+             <div className="xl:col-span-12 animate-fadeIn p-1 md:p-6">
                 <div className="max-w-[1600px] mx-auto">
                     <DocumentsView 
                         data={data} 
@@ -1192,11 +1920,6 @@ const App: React.FC = () => {
           <FlyingParticle key={p.id} {...p} />
       ))}
 
-      {/* Floating Summary - Only on small screens where main summary is scrolled out */}
-      {!pickingVariantId && (
-        <FloatingSummary data={data} appState={appState} />
-      )}
-
       {/* PICKING MODE OVERLAY BAR */}
       {pickingVariantId && (
           <div className="fixed bottom-0 left-0 right-0 bg-zinc-900 text-white p-4 z-[999] animate-slideUp flex flex-col md:flex-row items-center justify-between shadow-2xl border-t-2 border-amber-500 gap-4">
@@ -1207,9 +1930,15 @@ const App: React.FC = () => {
                   <div className="overflow-hidden flex-1">
                       <div className="flex items-center gap-2 mb-1">
                            <h3 className="font-bold text-lg leading-none whitespace-nowrap font-mono">TRYB WYBIERANIA</h3>
-                           <span className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700 font-mono">
-                               {data.variants.find(v => v.id === pickingVariantId)?.name}
-                           </span>
+                           {pickingVariantId === 'GLOBAL_INSTALLATION' ? (
+                               <span className="text-xs bg-purple-600 text-white px-2 py-0.5 rounded border border-purple-500 font-mono">
+                                   Montaż Globalny
+                               </span>
+                           ) : (
+                               <span className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700 font-mono">
+                                   {data.variants.find(v => v.id === pickingVariantId)?.name}
+                               </span>
+                           )}
                       </div>
                       
                       {pickedItemsBuffer.length === 0 ? (
@@ -1252,6 +1981,52 @@ const App: React.FC = () => {
 
       {/* Modals & Overlays */}
       
+      {/* QUICK START MODAL */}
+      <QuickStartModal 
+          isOpen={showQuickStart}
+          onClose={() => setShowQuickStart(false)}
+          onApply={handleQuickStartApply}
+          defaultSalesPerson={appState.globalSettings.defaultSalesPerson}
+          defaultSupportPerson={appState.globalSettings.defaultSupportPerson}
+      />
+
+      {/* SCENARIO MANAGER MODAL */}
+      <ScenarioManagerModal 
+          isOpen={showScenarioManager}
+          onClose={() => setShowScenarioManager(false)}
+          scenarios={appState.scenarios}
+          activeId={appState.activeScenarioId}
+          onReorder={updateScenariosList}
+          onRename={handleRenameScenario}
+          onDelete={handleDeleteScenario}
+          onDuplicate={handleDuplicateScenario}
+          onAddEmpty={handleAddEmptyScenario}
+          onClearData={handleClearScenarioData}
+          onCopyModules={handleCopyModules}
+      />
+
+      {/* PACKAGE CREATION MODAL */}
+      <PackageCreationModal 
+          isOpen={showPackageModal}
+          onClose={handleModalClose}
+          items={pickedItemsBuffer}
+          suppliers={appState.mode === CalculationMode.INITIAL ? appState.initial.suppliers : appState.final.suppliers}
+          onCreatePackage={handleCreatePackage}
+          onUpdatePackage={handleUpdatePackage}
+          onAddSeparately={!editingPackageItem ? addItemsSeparately : undefined}
+          isEditing={!!editingPackageItem}
+          initialName={editingPackageItem?.description}
+          initialPrices={editingPackageItem?.itemUnitPrices}
+          onAddMore={(name, prices) => {
+              // Update state so we don't lose edits, hide modal, enter picking mode
+              if (editingPackageItem) {
+                  setEditingPackageItem({ ...editingPackageItem, description: name, itemUnitPrices: prices });
+              }
+              setShowPackageModal(false);
+              setPickingVariantId('GLOBAL_INSTALLATION');
+          }}
+      />
+
       {/* SUPPLIER COMPARISON MODAL */}
       {showSupplierComparison && (
           <ComparisonView 
@@ -1314,6 +2089,10 @@ const App: React.FC = () => {
           message={dialogConfig.message}
           onConfirm={dialogConfig.onConfirm}
           onCancel={() => setDialogConfig(prev => ({ ...prev, isOpen: false }))}
+          onNeutral={dialogConfig.onNeutral}
+          confirmLabel={dialogConfig.confirmLabel}
+          cancelLabel={dialogConfig.cancelLabel}
+          neutralLabel={dialogConfig.neutralLabel}
           isDanger={dialogConfig.isDanger}
       />
 

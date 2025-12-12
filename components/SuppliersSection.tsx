@@ -544,7 +544,7 @@ export const SuppliersSection: React.FC<Props> = ({
       
       {/* Standardized Header */}
       <div 
-          className="p-4 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+          className="p-4 bg-white dark:bg-zinc-900 flex justify-between items-center cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shrink-0"
           onClick={() => setIsOpen(!isOpen)}
       >
         <div className="flex items-center gap-3">
@@ -638,6 +638,7 @@ export const SuppliersSection: React.FC<Props> = ({
                                     <ChevronDown size={16} />
                                 </div>
                             }
+                            buttonClassName="block h-full w-full focus:outline-none"
                             align="right"
                         />
                     </div>
@@ -727,6 +728,7 @@ export const SuppliersSection: React.FC<Props> = ({
                                                     </div>
                                                 }
                                                 items={supplierMenuItems} 
+                                                buttonClassName="block focus:outline-none"
                                             />
                                         </div>
                                     </div>

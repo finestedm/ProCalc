@@ -1,4 +1,6 @@
 
+
+
 import React, { useState, useEffect } from 'react';
 import { CalculationData, Currency, Supplier, TransportItem, OtherCostItem, InstallationData, FinalInstallationItem, SupplierStatus, Language, CalculationMode } from '../types';
 import { FileText, Truck, Wrench, Receipt, Plus, Trash2, AlertCircle, ArrowRight, DollarSign, TrendingUp, TrendingDown, AlertTriangle, AlertOctagon, Printer, CheckCircle, Mail, RotateCcw, Calendar, Check } from 'lucide-react';
@@ -263,13 +265,19 @@ export const FinalCalculationView: React.FC<Props> = ({
                 rental += (stage.scissorLiftDailyRate * stage.scissorLiftDays) + stage.scissorLiftTransportPrice;
             });
         } else {
-            // Legacy Fallback
+            // Legacy Fallback (Rare case if structure updated)
             const custom = i.customItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-            labor += (i.palletSpots * i.palletSpotPrice) + custom;
+            labor += (i.palletSpots * i.palletSpotPrice) + custom; // Note: In Legacy customItems were mingled
             
             rental += ((i.forkliftDailyRate * i.forkliftDays) + i.forkliftTransportPrice) +
                       ((i.scissorLiftDailyRate * i.scissorLiftDays) + i.scissorLiftTransportPrice);
         }
+
+        // --- GLOBAL CUSTOM ITEMS (Add to Labor) ---
+        // These are items added outside of stages in the main installation view
+        i.customItems.forEach(ci => {
+            if (!ci.isExcluded) labor += ci.quantity * ci.unitPrice;
+        });
 
         return { labor, rental };
     };

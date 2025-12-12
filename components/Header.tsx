@@ -59,6 +59,10 @@ export const Header: React.FC<Props> = ({
 
     const stageConfig = getStageConfig(appState.stage);
 
+    const activeData = appState.mode === CalculationMode.INITIAL ? appState.initial : appState.final;
+    const projectNumber = activeData.meta.projectNumber;
+    const clientName = activeData.orderingParty.name;
+
     return (
         <header className="w-full bg-white dark:bg-black h-14 shrink-0 z-50 transition-colors border-b border-zinc-200 dark:border-zinc-800">
             <div className="max-w-[1920px] mx-auto px-4 md:px-6 h-full flex items-center justify-between">
@@ -77,6 +81,12 @@ export const Header: React.FC<Props> = ({
                         <h1 className="text-sm font-bold tracking-tight text-zinc-900 dark:text-white uppercase leading-none font-mono">
                             JH WE-Calc<span className="text-zinc-400">.v1</span>
                         </h1>
+                        {(projectNumber || clientName) && (
+                            <div className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate max-w-[200px] leading-tight mt-0.5" title={`${projectNumber || ''} ${clientName || ''}`}>
+                                {projectNumber && <span className="font-mono font-bold mr-1">{projectNumber}</span>}
+                                {clientName}
+                            </div>
+                        )}
                     </div>
                 </div>
 

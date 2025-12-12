@@ -8,9 +8,11 @@ interface Props {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  neutralLabel?: string;
   isDanger?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  onNeutral?: () => void;
 }
 
 export const ConfirmDialog: React.FC<Props> = ({ 
@@ -19,9 +21,11 @@ export const ConfirmDialog: React.FC<Props> = ({
   message, 
   confirmLabel = "Potwierdź", 
   cancelLabel = "Anuluj", 
+  neutralLabel,
   isDanger = false, 
   onConfirm, 
-  onCancel 
+  onCancel,
+  onNeutral
 }) => {
   
   // Handle Escape key
@@ -29,11 +33,12 @@ export const ConfirmDialog: React.FC<Props> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isOpen) return;
       if (e.key === 'Escape') onCancel();
-      if (e.key === 'Enter') onConfirm();
+      // Enter only confirms if it's not a complex dialog to avoid accidents
+      if (e.key === 'Enter' && !neutralLabel) onConfirm();
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onCancel, onConfirm]);
+  }, [isOpen, onCancel, onConfirm, neutralLabel]);
 
   if (!isOpen) return null;
 
@@ -62,13 +67,26 @@ export const ConfirmDialog: React.FC<Props> = ({
                 </div>
             </div>
             
-            <div className="bg-zinc-50 dark:bg-zinc-800/50 p-4 flex justify-end gap-3 border-t border-zinc-100 dark:border-zinc-700">
+            <div className="bg-zinc-50 dark:bg-zinc-800/50 p-4 flex flex-wrap justify-end gap-3 border-t border-zinc-100 dark:border-zinc-700">
                 <button 
                     onClick={onCancel}
-                    className="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                    className="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
                 >
                     {cancelLabel}
                 </button>
+                
+                {onNeutral && neutralLabel && (
+                    <button 
+                        onClick={() => {
+                            onNeutral();
+                            // Usually handled by parent closing, but safety first
+                        }}
+                        className="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors shadow-sm"
+                    >
+                        {neutralLabel}
+                    </button>
+                )}
+
                 <button 
                     onClick={onConfirm}
                     className={`px-4 py-2 rounded-lg text-sm font-semibold text-white shadow-sm transition-colors ${

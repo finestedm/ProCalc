@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { HistoryEntry } from '../types';
 import { Clock, RotateCcw, X, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
@@ -75,7 +74,7 @@ export const HistoryModal: React.FC<Props> = ({ historyLog, onRestore, onClose }
       onClick={onClose}
     >
       <div 
-        className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-slideUp flex flex-col max-h-[85vh] border border-zinc-200 dark:border-zinc-700"
+        className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-scaleIn flex flex-col max-h-[85vh] border border-zinc-200 dark:border-zinc-700"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center p-5 border-b border-zinc-100 dark:border-zinc-700 bg-white dark:bg-zinc-900">

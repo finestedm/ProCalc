@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { GlobalSettings } from '../types';
 import { Settings, X, Save, AlertCircle, UserCheck } from 'lucide-react';
@@ -39,7 +38,7 @@ export const SettingsModal: React.FC<Props> = ({ isOpen, onClose, settings, onSa
         onClick={onClose}
     >
         <div 
-            className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-slideUp border border-zinc-200 dark:border-zinc-700"
+            className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-scaleIn border border-zinc-200 dark:border-zinc-700"
             onClick={(e) => e.stopPropagation()}
         >
             <div className="p-4 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center bg-zinc-50 dark:bg-zinc-800">

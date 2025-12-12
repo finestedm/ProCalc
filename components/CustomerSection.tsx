@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { AddressData } from '../types';
 import { Copy, Users, Lock, CreditCard, Phone, Mail, User, AlertCircle, ChevronUp, ChevronDown } from 'lucide-react';
+import { DropdownMenu } from './DropdownMenu';
 
 interface Props {
   data: {
@@ -19,11 +20,10 @@ const AddressForm: React.FC<{
   title: string;
   value: AddressData;
   onChange: (val: AddressData) => void;
-  onCopyFrom?: () => void;
-  copyLabel?: string;
+  copyOptions?: { label: string; onClick: () => void }[];
   readOnly?: boolean;
   showContactFields?: boolean;
-}> = ({ title, value, onChange, onCopyFrom, copyLabel, readOnly, showContactFields }) => {
+}> = ({ title, value, onChange, copyOptions, readOnly, showContactFields }) => {
   const [nipError, setNipError] = useState(false);
 
   const handleNipBlur = () => {
@@ -43,6 +43,9 @@ const AddressForm: React.FC<{
       }
   };
 
+  // Standard input style class to ensure uniformity
+  const standardInputClass = "w-full px-3 py-2 bg-transparent border border-zinc-300 dark:border-zinc-700 rounded-none text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:border-amber-500 focus:ring-0 outline-none transition-all disabled:opacity-50";
+
   return (
     <div className={`p-4 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 ${readOnly ? 'opacity-70 pointer-events-none' : ''} h-full flex flex-col`}>
         <div className="flex justify-between items-center mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
@@ -50,13 +53,16 @@ const AddressForm: React.FC<{
                 {title} 
                 {readOnly && <Lock size={10} className="text-zinc-400"/>}
             </h3>
-            {onCopyFrom && !readOnly && (
-                <button
-                onClick={onCopyFrom}
-                className="text-[10px] uppercase font-bold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors flex items-center gap-1"
-                >
-                <Copy size={10} /> {copyLabel}
-                </button>
+            {copyOptions && copyOptions.length > 0 && !readOnly && (
+                <DropdownMenu 
+                    items={copyOptions}
+                    trigger={
+                        <div className="text-[10px] uppercase font-bold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors flex items-center gap-1 cursor-pointer">
+                            <Copy size={10} /> Kopiuj
+                        </div>
+                    }
+                    align="right"
+                />
             )}
         </div>
         
@@ -64,7 +70,7 @@ const AddressForm: React.FC<{
             <input
                 type="text"
                 placeholder={readOnly ? "Zablokowane" : "Nazwa Firmy / Imię i Nazwisko"}
-                className="w-full px-3 py-2 bg-transparent border border-zinc-300 dark:border-zinc-700 rounded-none text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:border-amber-500 focus:ring-0 outline-none transition-all disabled:opacity-50"
+                className={standardInputClass}
                 value={value.name}
                 onChange={(e) => onChange({ ...value, name: e.target.value })}
                 disabled={readOnly}
@@ -73,7 +79,7 @@ const AddressForm: React.FC<{
                 <input
                 type="text"
                 placeholder="Ulica i nr"
-                className="col-span-3 w-full px-3 py-2 bg-transparent border border-zinc-300 dark:border-zinc-700 rounded-none text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:border-amber-500 focus:ring-0 outline-none transition-all disabled:opacity-50"
+                className={`col-span-3 ${standardInputClass}`}
                 value={value.street}
                 onChange={(e) => onChange({ ...value, street: e.target.value })}
                 disabled={readOnly}
@@ -81,7 +87,7 @@ const AddressForm: React.FC<{
                 <input
                 type="text"
                 placeholder="Kod"
-                className="w-full px-3 py-2 bg-transparent border border-zinc-300 dark:border-zinc-700 rounded-none text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:border-amber-500 focus:ring-0 outline-none transition-all disabled:opacity-50"
+                className={standardInputClass}
                 value={value.zip}
                 onChange={(e) => onChange({ ...value, zip: e.target.value })}
                 onBlur={handleZipBlur}
@@ -90,7 +96,7 @@ const AddressForm: React.FC<{
                 <input
                 type="text"
                 placeholder="Miasto"
-                className="col-span-2 w-full px-3 py-2 bg-transparent border border-zinc-300 dark:border-zinc-700 rounded-none text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:border-amber-500 focus:ring-0 outline-none transition-all disabled:opacity-50"
+                className={`col-span-2 ${standardInputClass}`}
                 value={value.city}
                 onChange={(e) => onChange({ ...value, city: e.target.value })}
                 disabled={readOnly}
@@ -127,7 +133,7 @@ const AddressForm: React.FC<{
                         <input
                             type="text"
                             placeholder="Osoba Kontaktowa"
-                            className="w-full pl-9 px-3 py-2 bg-transparent border border-zinc-300 dark:border-zinc-700 rounded-none text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:border-amber-500 focus:ring-0 outline-none transition-all disabled:opacity-50"
+                            className={`pl-9 ${standardInputClass}`}
                             value={value.contactPerson || ''}
                             onChange={(e) => onChange({ ...value, contactPerson: e.target.value })}
                             disabled={readOnly}
@@ -139,7 +145,7 @@ const AddressForm: React.FC<{
                             <input
                                 type="text"
                                 placeholder="Email"
-                                className="w-full pl-9 px-3 py-2 bg-transparent border border-zinc-300 dark:border-zinc-700 rounded-none text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:border-amber-500 focus:ring-0 outline-none transition-all disabled:opacity-50"
+                                className={`pl-9 ${standardInputClass}`}
                                 value={value.email || ''}
                                 onChange={(e) => onChange({ ...value, email: e.target.value })}
                                 disabled={readOnly}
@@ -150,7 +156,7 @@ const AddressForm: React.FC<{
                             <input
                                 type="text"
                                 placeholder="Telefon"
-                                className="w-full pl-9 px-3 py-2 bg-transparent border border-zinc-300 dark:border-zinc-700 rounded-none text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:border-amber-500 focus:ring-0 outline-none transition-all disabled:opacity-50"
+                                className={`pl-9 ${standardInputClass}`}
                                 value={value.phone || ''}
                                 onChange={(e) => onChange({ ...value, phone: e.target.value })}
                                 disabled={readOnly}
@@ -163,11 +169,11 @@ const AddressForm: React.FC<{
             <div className="pt-1 mt-auto">
                 <input
                 type="text"
-                className="w-full px-3 py-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-none text-[10px] text-zinc-500 dark:text-zinc-400 focus:border-amber-500 focus:ring-0 outline-none transition-all disabled:opacity-50 font-mono"
+                className={`${standardInputClass} font-mono`} // Applied same styling + font-mono for ID
                 value={value.clientId}
                 onChange={(e) => onChange({ ...value, clientId: e.target.value })}
                 disabled={readOnly}
-                placeholder="ID Klienta (Opcjonalne)"
+                placeholder="ID Klienta"
                 />
             </div>
         </div>
@@ -182,14 +188,14 @@ export const CustomerSection: React.FC<Props> = ({ data, onChange, readOnly, isO
   const showContent = onToggle ? isOpen : internalOpen;
   const toggleHandler = onToggle || (() => setInternalOpen(!internalOpen));
 
-  const handleCopy = (source: AddressData, targetKey: 'recipient' | 'orderingParty') => {
+  const handleCopy = (source: AddressData, targetKey: 'payer' | 'recipient' | 'orderingParty') => {
     onChange(targetKey, { ...source });
   };
 
   return (
     <div className="bg-white dark:bg-zinc-950 rounded-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden mb-6 h-full flex flex-col">
         <div 
-            className="p-4 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+            className="p-4 bg-white dark:bg-zinc-900 flex justify-between items-center cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shrink-0"
             onClick={toggleHandler}
         >
             <div className="flex items-center gap-3">
@@ -220,14 +226,20 @@ export const CustomerSection: React.FC<Props> = ({ data, onChange, readOnly, isO
                         title="Płatnik"
                         value={data.payer}
                         onChange={(val) => onChange('payer', val)}
+                        copyOptions={[
+                            { label: "Kopiuj z Odbiorcy", onClick: () => handleCopy(data.recipient, 'payer') },
+                            { label: "Kopiuj z Zamawiającego", onClick: () => handleCopy(data.orderingParty, 'payer') }
+                        ]}
                         readOnly={readOnly}
                     />
                     <AddressForm
                         title="Odbiorca"
                         value={data.recipient}
                         onChange={(val) => onChange('recipient', val)}
-                        onCopyFrom={() => handleCopy(data.payer, 'recipient')}
-                        copyLabel="Kopiuj Płatnika"
+                        copyOptions={[
+                            { label: "Kopiuj z Płatnika", onClick: () => handleCopy(data.payer, 'recipient') },
+                            { label: "Kopiuj z Zamawiającego", onClick: () => handleCopy(data.orderingParty, 'recipient') }
+                        ]}
                         readOnly={readOnly}
                         showContactFields={true}
                     />
@@ -235,8 +247,10 @@ export const CustomerSection: React.FC<Props> = ({ data, onChange, readOnly, isO
                         title="Zamawiający"
                         value={data.orderingParty}
                         onChange={(val) => onChange('orderingParty', val)}
-                        onCopyFrom={() => handleCopy(data.payer, 'orderingParty')}
-                        copyLabel="Kopiuj Płatnika"
+                        copyOptions={[
+                            { label: "Kopiuj z Płatnika", onClick: () => handleCopy(data.payer, 'orderingParty') },
+                            { label: "Kopiuj z Odbiorcy", onClick: () => handleCopy(data.recipient, 'orderingParty') }
+                        ]}
                         readOnly={readOnly}
                     />
                 </div>

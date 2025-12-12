@@ -1,10 +1,13 @@
 
 
 
-import React from 'react';
+
+
+import React, { useState } from 'react';
 import { CalculationData, SupplierStatus, AppState, CalculationMode } from '../types';
-import { FileText, Mail, Printer, Copy, CheckCircle, ArrowLeft, Send, CheckCircle2, Lock } from 'lucide-react';
+import { FileText, Mail, Printer, Copy, CheckCircle, ArrowLeft, Send, CheckCircle2, Lock, LayoutTemplate } from 'lucide-react';
 import { calculateProjectCosts, formatCurrency, formatNumber } from '../services/calculationService';
+import { OfferGeneratorModal } from './OfferGeneratorModal';
 
 interface Props {
   data: CalculationData;
@@ -15,7 +18,8 @@ interface Props {
 }
 
 export const DocumentsView: React.FC<Props> = ({ data, onBack, onApproveOpening, onApproveClosing, appState }) => {
-  const [copied, setCopied] = React.useState(false);
+  const [copied, setCopied] = useState(false);
+  const [showOfferModal, setShowOfferModal] = useState(false);
 
   // --- PROTOCOL GENERATION ---
   const handlePrintProtocol = () => {
@@ -212,6 +216,14 @@ ${data.meta.salesPerson}
 
   return (
     <div className="space-y-6 animate-fadeIn">
+        {showOfferModal && (
+            <OfferGeneratorModal 
+                data={data} 
+                appState={appState} 
+                onClose={() => setShowOfferModal(false)} 
+            />
+        )}
+
         <div className="flex items-center gap-4 mb-4">
              <button onClick={onBack} className="text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white flex items-center gap-1 transition-colors">
                  <ArrowLeft size={18} /> Wróć
@@ -223,6 +235,28 @@ ${data.meta.salesPerson}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             
+            {/* NEW: CARD OFFER GENERATOR */}
+            <div className="bg-white dark:bg-zinc-950 p-0 rounded-sm shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden h-fit md:col-span-2">
+                <div className="p-6 border-b border-zinc-100 dark:border-zinc-800 flex flex-col md:flex-row items-center gap-6">
+                    <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2 text-zinc-800 dark:text-zinc-100 font-bold text-lg">
+                            <div className="bg-amber-100 dark:bg-amber-900/30 p-3 rounded-full text-amber-600 dark:text-amber-500"><LayoutTemplate size={24}/></div>
+                            Generator Oferty Handlowej
+                        </div>
+                        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                            Stwórz profesjonalną ofertę PDF dla klienta na podstawie bieżącej kalkulacji. 
+                            Skonfiguruj widoczność cen (szczegółowa / zbiorcza) i ukryj koszty transportu w cenie materiału.
+                        </p>
+                    </div>
+                    <button 
+                        onClick={() => setShowOfferModal(true)}
+                        className="py-3 px-8 bg-zinc-800 hover:bg-zinc-700 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-black text-white rounded-sm font-bold flex items-center gap-2 transition-colors uppercase text-xs tracking-wider shadow-lg shadow-zinc-500/20"
+                    >
+                        <Printer size={16}/> Generuj Ofertę
+                    </button>
+                </div>
+            </div>
+
             {/* CARD 1: PROTOCOL */}
             <div className="bg-white dark:bg-zinc-950 p-0 rounded-sm shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden h-fit">
                 <div className="p-6 border-b border-zinc-100 dark:border-zinc-800">
@@ -235,13 +269,10 @@ ${data.meta.salesPerson}
                     </p>
                     <button 
                         onClick={handlePrintProtocol}
-                        className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-black text-white rounded-sm font-bold flex items-center justify-center gap-2 transition-colors uppercase text-xs tracking-wider"
+                        className="w-full py-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-sm font-bold flex items-center justify-center gap-2 transition-colors uppercase text-xs tracking-wider"
                     >
                         <Printer size={16}/> Drukuj Protokół
                     </button>
-                </div>
-                <div className="bg-zinc-50 dark:bg-zinc-900 p-4 text-[10px] text-zinc-400 text-center uppercase font-bold tracking-wider">
-                    Format: A4 PDF (Druk Przeglądarkowy)
                 </div>
             </div>
 

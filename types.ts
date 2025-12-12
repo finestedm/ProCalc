@@ -173,6 +173,9 @@ export interface CustomInstallationItem {
   // Linking logic for auto-quantity
   linkedSources?: LinkedSource[]; // Array of linked sources
   isAutoQuantity?: boolean; // If true, quantity is strictly bound to source. If false, it was manually overridden.
+  parentId?: string; // For hierarchical grouping
+  isCollapsed?: boolean; // UI state for grouping
+  itemUnitPrices?: Record<string, number>; // Map of Source ID -> Assembly Price Per Unit (for packages)
 }
 
 export interface FinalInstallationItem {
@@ -204,6 +207,10 @@ export interface InstallationStage {
   manualLaborHours: number; // Extra hours added manually
 
   // Equipment & Custom Items (Per Stage)
+  // Flags for UI visibility
+  hasForklift?: boolean;
+  hasScissorLift?: boolean;
+
   forkliftDailyRate: number; 
   forkliftDays: number;
   forkliftStartOffset?: number; // Days after stage start
@@ -261,7 +268,7 @@ export interface InstallationData {
   plannedStart?: string;
   plannedEnd?: string;
 
-  // Legacy fields (kept to avoid immediate breaking, though logic moves to stages)
+  // Legacy fields (kept for type safety during migration)
   palletSpots: number; 
   palletSpotPrice: number;
   palletSpotsPerDay: number;
@@ -292,7 +299,7 @@ export interface ProjectTask {
 
 // --- VARIANTS SYSTEM ---
 
-export type VariantItemType = 'SUPPLIER_ITEM' | 'TRANSPORT' | 'OTHER' | 'INSTALLATION' | 'STAGE';
+export type VariantItemType = 'SUPPLIER_ITEM' | 'TRANSPORT' | 'OTHER' | 'INSTALLATION' | 'STAGE' | 'CUSTOM_INSTALLATION_ITEM';
 export type VariantStatus = 'NEUTRAL' | 'INCLUDED' | 'EXCLUDED';
 
 export interface VariantItem {
@@ -306,6 +313,9 @@ export interface ProjectVariant {
     name: string;
     status: VariantStatus; // Logic State (Tri-state)
     items: VariantItem[];
+    // Hierarchy Support
+    parentId?: string;
+    isCollapsed?: boolean;
 }
 
 export interface PaymentTerms {
@@ -340,9 +350,28 @@ export interface CalculationData {
   paymentTerms?: PaymentTerms;
 }
 
+// A subset of CalculationData that changes between scenarios/tabs
+export interface CalculationScenario {
+    id: string;
+    name: string;
+    // Specific Fields
+    suppliers: Supplier[];
+    transport: TransportItem[];
+    otherCosts: OtherCostItem[];
+    otherCostsScratchpad: ScratchpadRow[];
+    installation: InstallationData;
+    nameplateQty: number;
+    tasks: ProjectTask[];
+    projectNotes: string;
+    variants: ProjectVariant[];
+    paymentTerms: PaymentTerms;
+}
+
 export interface AppState {
   initial: CalculationData;
   final: CalculationData;
+  scenarios: CalculationScenario[]; // List of available initial scenarios
+  activeScenarioId: string; // ID of the currently active initial scenario
   mode: CalculationMode;
   stage: ProjectStage; // Added Stage Tracking
   viewMode: ViewMode;
@@ -395,7 +424,7 @@ export const EMPTY_META: ProjectMeta = {
 
 export const EMPTY_INSTALLATION: InstallationData = {
   calcMethod: 'PALLETS',
-  stages: [],
+  stages: [], // Default empty stages
   customTimelineItems: [],
   dependencies: [],
   palletSpots: 0, 

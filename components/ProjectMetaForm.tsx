@@ -30,8 +30,15 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
     : data.sapProjectNumber;
 
   const handleSapChange = (val: string) => {
-      const cleanVal = val.replace(/\D/g, '');
+      // Only allow digits, max 5 digits (to form 10 total with prefix)
+      const cleanVal = val.replace(/\D/g, '').slice(0, 5);
       handleChange('sapProjectNumber', sapPrefix + cleanVal);
+  };
+
+  const handleProjectNumberChange = (val: string) => {
+      // Only allow digits, max 8 digits
+      const cleanVal = val.replace(/\D/g, '').slice(0, 8);
+      handleChange('projectNumber', cleanVal);
   };
 
   // UPDATED: Removed py-2, added h-[34px] to enforce exact height match across all inputs/selects
@@ -69,7 +76,7 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
     <div className="bg-white dark:bg-zinc-950 rounded-sm border border-zinc-200 dark:border-zinc-800 mb-6 overflow-hidden transition-all duration-300 h-full flex flex-col">
       {/* Standardized Header */}
       <div 
-          className="p-4 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+          className="p-4 bg-white dark:bg-zinc-900 flex justify-between items-center cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shrink-0"
           onClick={toggleHandler}
       >
         <div className="flex items-center gap-3">
@@ -146,8 +153,8 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
                             type="text"
                             value={displaySap}
                             onChange={(e) => handleSapChange(e.target.value)}
-                            maxLength={10} 
-                            className={`${inputClass} pl-14 font-mono`}
+                            maxLength={5} 
+                            className={`${inputClass} pl-14 font-mono tracking-widest`}
                             placeholder="XXXXX"
                         />
                     </div>
@@ -162,16 +169,17 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
                         <input
                             type="text"
                             value={data.projectNumber}
-                            onChange={(e) => handleChange('projectNumber', e.target.value)}
-                            className={`${inputClass} pl-9`}
-                            placeholder="np. P-2024-..."
+                            onChange={(e) => handleProjectNumberChange(e.target.value)}
+                            className={`${inputClass} pl-9 font-mono tracking-wide`}
+                            placeholder="8 cyfr (np. 12345678)"
+                            maxLength={8}
                         />
                     </div>
                 </div>
 
                 {/* NEW FIELDS START */}
                 <div>
-                    <label className={labelClass}>Typ Instalacji</label>
+                    <label className={labelClass}>Typ Projektu</label>
                     <div className="relative group">
                         <Layers className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600 pointer-events-none" size={14}/>
                         <select

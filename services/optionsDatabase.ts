@@ -5,7 +5,11 @@ export const INSTALLATION_TYPES = [
     "Regały grawitacyjne",
     "UPC (Under Pallet Carrier)",
     "Regały mobilne",
-    "DriveIn (Wjezdne)"
+    "DriveIn (Wjezdne)",
+    "Sam montaż",
+    "Zarządzanie projektem",
+    "Modyfikacja istniejącego projektu",
+    "Akcesoria"
 ];
 
 export const INVOICE_TEXTS = [

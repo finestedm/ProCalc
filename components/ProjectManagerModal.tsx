@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { FolderOpen, FileJson, Save, X, RefreshCw, AlertTriangle, HardDrive, Search, User, Hash, PenLine, Filter, Trash2, ListFilter, BarChart3, TrendingUp, Users, PieChart, Layers, Calendar, Clock, Trophy, Target, Folder, ChevronRight, Home, ArrowUpLeft, Globe, ScanLine } from 'lucide-react';
 import { AppState, ProjectFile, Currency, CalculationMode } from '../types';
@@ -949,7 +947,7 @@ export const ProjectManagerModal: React.FC<Props> = ({
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
         <div 
-            className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden animate-slideUp border border-zinc-200 dark:border-zinc-700"
+            className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden animate-scaleIn border border-zinc-200 dark:border-zinc-700"
             onClick={(e) => e.stopPropagation()}
         >
             {/* Header */}
@@ -1165,7 +1163,8 @@ export const ProjectManagerModal: React.FC<Props> = ({
                                     return (
                                         <div 
                                             key={`${item.name}-${idx}`} 
-                                            className="group flex items-center justify-between p-3 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                                            className="group flex items-center justify-between p-3 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer animate-fadeIn"
+                                            style={{ animationDelay: `${idx * 30}ms` }}
                                             onClick={() => {
                                                 if (isDirectory) {
                                                     // Standard nav or Jump nav

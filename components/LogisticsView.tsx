@@ -1,8 +1,9 @@
 
 import React, { useState } from 'react';
 import { CalculationData, Supplier, SupplierStatus, TransportItem, Language } from '../types';
-import { Truck, Calendar, Package, Printer, UserCircle, Combine, LayoutDashboard, Flag } from 'lucide-react';
+import { Truck, Calendar, Package, Printer, UserCircle, Combine, LayoutDashboard, Flag, Link, Layers } from 'lucide-react';
 import { GanttChart } from './GanttChart';
+import { OrderPreviewModal } from './OrderPreviewModal';
 
 interface Props {
   data: CalculationData;
@@ -20,6 +21,8 @@ const isOrganizedBySupplier = (s: Supplier, transport: TransportItem[]) => {
 };
 
 export const LogisticsView: React.FC<Props> = ({ data, onChange }) => {
+  const [previewSuppliers, setPreviewSuppliers] = useState<Supplier[] | null>(null);
+
   const onUpdateSupplier = (supplierId: string, updates: Partial<Supplier>) => {
       const updatedSuppliers = data.suppliers.map(s => s.id === supplierId ? { ...s, ...updates } : s);
       onChange({ ...data, suppliers: updatedSuppliers });
@@ -55,133 +58,9 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange }) => {
       }
   };
 
-  const handlePrintOrder = (supplier: Supplier) => {
-      // (Print logic preserved as is)
-      const printWindow = window.open('', '', 'width=900,height=1000');
-      if (!printWindow) return;
-
-      const isEn = supplier.language === Language.EN;
-      const L = {
-          title: isEn ? "ORDER" : "ZAMÓWIENIE",
-          date: isEn ? "Date" : "Data",
-          supplier: isEn ? "Supplier" : "Dostawca",
-          buyer: isEn ? "Buyer" : "Zamawiający",
-          deliveryAddr: isEn ? "Delivery Address" : "Adres Dostawy",
-          contact: isEn ? "Contact" : "Kontakt",
-          project: isEn ? "Project" : "Projekt",
-          ref: isEn ? "Ref" : "Nr Zam.",
-          items: isEn ? "Items" : "Pozycje",
-          desc: isEn ? "Description" : "Opis",
-          qty: isEn ? "Qty" : "Ilość",
-          unit: isEn ? "pcs" : "szt",
-          partNo: isEn ? "Part No." : "Nr Kat.",
-          weight: isEn ? "Weight" : "Waga",
-          total: isEn ? "Total" : "Razem",
-          notes: isEn ? "Notes" : "Uwagi",
-          footer: isEn ? "Please confirm receipt of this order." : "Prosimy o potwierdzenie otrzymania zamówienia.",
-          offerRef: isEn ? "Based on Offer" : "Dotyczy oferty",
-      };
-
-      const itemsHtml = supplier.items.map((item, idx) => `
-        <tr>
-            <td style="text-align: center;">${idx + 1}</td>
-            <td>${item.itemDescription}</td>
-            <td>${item.componentNumber}</td>
-            <td style="text-align: center;">${item.quantity} ${L.unit}</td>
-            <td style="text-align: right;">${item.weight} kg</td>
-        </tr>
-      `).join('');
-
-      const html = `
-        <html>
-          <head>
-            <title>${L.title} - ${supplier.name}</title>
-            <style>
-              body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; line-height: 1.4; color: #333; }
-              .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #F0C80E; padding-bottom: 20px; }
-              .title-block h1 { margin: 0; font-size: 32px; letter-spacing: 1px; color: #000; }
-              .meta { text-align: right; font-size: 14px; }
-              .grid { display: flex; gap: 40px; margin-bottom: 30px; }
-              .box { flex: 1; }
-              .box h3 { margin-top: 0; font-size: 12px; text-transform: uppercase; color: #666; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-              .box p { margin: 5px 0; font-size: 14px; }
-              table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13px; }
-              th { background: #f4f4f5; text-align: left; padding: 10px; font-weight: bold; border-bottom: 2px solid #ddd; }
-              td { padding: 10px; border-bottom: 1px solid #eee; }
-              .notes { margin-top: 30px; padding: 15px; background: #fffbeb; border: 1px solid #fde68a; font-size: 13px; }
-              .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #888; border-top: 1px solid #eee; padding-top: 20px; }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-                <div class="title-block">
-                    <h1>${L.title}</h1>
-                    <p style="margin: 5px 0 0 0; font-weight: bold;">${data.meta.projectNumber || ''}</p>
-                </div>
-                <div class="meta">
-                    <p><strong>${L.date}:</strong> ${new Date().toLocaleDateString()}</p>
-                    <p><strong>${L.ref}:</strong> ${supplier.offerNumber || '-'}</p>
-                </div>
-            </div>
-            <div class="grid">
-                <div class="box">
-                    <h3>${L.buyer}</h3>
-                    <p><strong>${data.orderingParty.name}</strong></p>
-                    <p>${data.orderingParty.street}</p>
-                    <p>${data.orderingParty.zip} ${data.orderingParty.city}</p>
-                    <p>NIP: ${data.orderingParty.nip}</p>
-                    ${data.meta.salesPerson ? `<p>${L.contact}: ${data.meta.salesPerson}</p>` : ''}
-                </div>
-                <div class="box">
-                    <h3>${L.supplier}</h3>
-                    <p><strong>${supplier.name}</strong></p>
-                    <p>${supplier.street || '---'}</p>
-                    <p>${supplier.zip || ''} ${supplier.city || ''}</p>
-                    <p>${supplier.nip ? `NIP: ${supplier.nip}` : ''}</p>
-                    ${supplier.phone ? `<p>Tel: ${supplier.phone}</p>` : ''}
-                    ${supplier.contactPerson ? `<p>${L.contact}: ${supplier.contactPerson}</p>` : ''}
-                    ${supplier.email ? `<p>Email: ${supplier.email}</p>` : ''}
-                </div>
-            </div>
-            <div class="grid" style="margin-bottom: 10px;">
-                 <div class="box">
-                    <h3>${L.deliveryAddr}</h3>
-                    <p><strong>${data.recipient.name}</strong></p>
-                    <p>${data.recipient.street}</p>
-                    <p>${data.recipient.zip} ${data.recipient.city}</p>
-                    ${supplier.deliveryDate ? `<p><strong>Delivery: ${supplier.deliveryDate}</strong></p>` : ''}
-                 </div>
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width: 30px;">#</th>
-                        <th>${L.desc}</th>
-                        <th style="width: 120px;">${L.partNo}</th>
-                        <th style="text-align: center; width: 80px;">${L.qty}</th>
-                        <th style="text-align: right; width: 80px;">${L.weight}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${itemsHtml}
-                </tbody>
-            </table>
-            ${supplier.notes ? `
-                <div class="notes">
-                    <strong>${L.notes}:</strong><br/>
-                    ${supplier.notes}
-                </div>
-            ` : ''}
-            <div class="footer">
-                ${L.footer}<br/>
-                ${L.offerRef}: ${supplier.offerNumber}
-            </div>
-            <script>window.print();</script>
-          </body>
-        </html>
-      `;
-      printWindow.document.write(html);
-      printWindow.document.close();
+  const handlePrintOrder = (suppliersToPrint: Supplier[]) => {
+      if (suppliersToPrint.length === 0) return;
+      setPreviewSuppliers(suppliersToPrint);
   };
 
   const combinedTransports = data.transport.filter(t => t.linkedSupplierIds && t.linkedSupplierIds.length > 0);
@@ -204,6 +83,21 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange }) => {
       const totalSupplierWeight = supplier.items.reduce((s, i) => s + (i.weight * i.quantity), 0);
       const showTransportInfo = !isCombinedChild && (tItem || isSupplierTransport);
 
+      // Check Grouping Logic for "One Button Order"
+      let isGroupLeader = true;
+      let groupSiblings: Supplier[] = [supplier];
+      
+      if (supplier.groupId) {
+          const siblings = activeSuppliers.filter(s => s.groupId === supplier.groupId);
+          if (siblings.length > 1) {
+              groupSiblings = siblings;
+              // Leader is the first one in the filtered active list
+              isGroupLeader = siblings[0].id === supplier.id;
+          }
+      }
+      
+      const isMultiTabGroup = groupSiblings.length > 1;
+
       return (
         <div key={supplier.id} className={`p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors ${isCombinedChild ? 'pl-8 bg-zinc-50/50 dark:bg-zinc-900/30' : ''}`}>
             
@@ -213,6 +107,11 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange }) => {
                     <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{supplier.name}</h4>
                     {supplier.isOrm && <span className="text-[9px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded border border-green-200">ORM</span>}
                     {isCombinedChild && <span className="text-[9px] text-zinc-400 flex items-center gap-1"><Combine size={10}/> w/ zbiorczym</span>}
+                    {isMultiTabGroup && (
+                        <span className="text-[9px] text-purple-600 bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800 px-1.5 py-0.5 rounded flex items-center gap-1" title="Część połączonej grupy ORM">
+                            <Layers size={10}/> {supplier.customTabName || 'Zakładka'}
+                        </span>
+                    )}
                 </div>
                 
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400 items-center">
@@ -260,13 +159,31 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange }) => {
                     >
                         {supplier.language}
                     </button>
-                    <button 
-                        className="h-full px-3 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors bg-white dark:bg-zinc-900 flex items-center justify-center"
-                        title="Drukuj Zamówienie (PDF)"
-                        onClick={() => handlePrintOrder(supplier)} 
-                    >
-                        <Printer size={14} />
-                    </button>
+                    
+                    {/* Print Button Logic for Groups */}
+                    {isMultiTabGroup ? (
+                        isGroupLeader ? (
+                            <button 
+                                className="h-full px-3 text-cyan-600 hover:text-cyan-800 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 transition-colors bg-white dark:bg-zinc-900 flex items-center justify-center gap-2 min-w-[80px]"
+                                title={`Drukuj zbiorcze zamówienie dla ${groupSiblings.length} zakładek`}
+                                onClick={() => handlePrintOrder(groupSiblings)} 
+                            >
+                                <Combine size={14} /> <span className="text-[10px] font-bold">Zbiorcze ({groupSiblings.length})</span>
+                            </button>
+                        ) : (
+                            <div className="h-full px-3 flex items-center justify-center bg-zinc-50 dark:bg-zinc-800 text-zinc-400 text-[10px] cursor-default border-l border-zinc-100 dark:border-zinc-700" title="Zamówienie podłączone do głównej zakładki">
+                                <Link size={12} className="mr-1"/> Dołączone
+                            </div>
+                        )
+                    ) : (
+                        <button 
+                            className="h-full px-3 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors bg-white dark:bg-zinc-900 flex items-center justify-center"
+                            title="Drukuj Zamówienie (PDF)"
+                            onClick={() => handlePrintOrder([supplier])} 
+                        >
+                            <Printer size={14} />
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
@@ -313,6 +230,13 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange }) => {
 
   return (
     <div className="space-y-6 animate-fadeIn pb-32">
+        {previewSuppliers && (
+            <OrderPreviewModal 
+                suppliers={previewSuppliers} 
+                data={data} 
+                onClose={() => setPreviewSuppliers(null)} 
+            />
+        )}
         
         {/* KPI CARDS - Styled like SummarySection */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

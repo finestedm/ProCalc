@@ -232,7 +232,7 @@ export const calculateProjectCosts = (
     else {
         const inst = data.installation;
         
-        // Sum Stages (which now include Equipment and Custom Items)
+        // Sum Stages (which now include Equipment and Custom Items per stage)
         let stagesCost = 0;
 
         if (inst.stages && inst.stages.length > 0) {
@@ -248,7 +248,7 @@ export const calculateProjectCosts = (
                  return sum + sCost;
             }, 0);
         } else {
-            // FALLBACK FOR LEGACY DATA
+            // FALLBACK FOR LEGACY DATA (If somehow stages is empty but legacy fields exist)
             const labor = inst.calcMethod === 'PALLETS' 
                 ? inst.palletSpots * inst.palletSpotPrice 
                 : 0; 
@@ -257,12 +257,20 @@ export const calculateProjectCosts = (
                 (inst.forkliftDailyRate * inst.forkliftDays) + inst.forkliftTransportPrice +
                 (inst.scissorLiftDailyRate * inst.scissorLiftDays) + inst.scissorLiftTransportPrice;
             
-            const custom = inst.customItems.reduce((s, i) => s + (i.quantity*i.unitPrice), 0);
-            
-            stagesCost = labor + equipment + custom;
+            // Note: in Legacy mode, customItems were typically here
+            stagesCost = labor + equipment;
         }
 
-        const installationPLN = stagesCost + inst.otherInstallationCosts;
+        // Sum Global Custom Items (Outside stages)
+        const globalCustomCost = inst.customItems.reduce((sum, i) => {
+             if (i.isExcluded) {
+                 excludedTotal += convert(i.quantity * i.unitPrice, Currency.PLN, targetCurrency, rate);
+                 return sum;
+             }
+             return sum + (i.quantity * i.unitPrice);
+        }, 0);
+
+        const installationPLN = stagesCost + globalCustomCost + inst.otherInstallationCosts;
         installationTotal = convert(installationPLN, Currency.PLN, targetCurrency, rate);
     }
 

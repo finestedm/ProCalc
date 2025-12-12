@@ -14,9 +14,10 @@ interface Props {
   items: MenuItem[];
   trigger?: React.ReactNode;
   align?: 'left' | 'right';
+  buttonClassName?: string;
 }
 
-export const DropdownMenu: React.FC<Props> = ({ items, trigger, align = 'right' }) => {
+export const DropdownMenu: React.FC<Props> = ({ items, trigger, align = 'right', buttonClassName }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -41,10 +42,10 @@ export const DropdownMenu: React.FC<Props> = ({ items, trigger, align = 'right' 
   };
 
   return (
-    <div className="relative inline-block text-left" ref={menuRef}>
+    <div className="relative inline-block text-left h-full" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-center p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-500 dark:text-zinc-400 focus:outline-none"
+        className={buttonClassName || "flex items-center justify-center p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-500 dark:text-zinc-400 focus:outline-none"}
       >
         {trigger || <MoreVertical size={20} />}
       </button>

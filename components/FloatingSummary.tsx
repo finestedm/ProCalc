@@ -1,10 +1,8 @@
-
-
-
 import React from 'react';
 import { CalculationData, AppState, Currency } from '../types';
 import { Calculator, ArrowRight } from 'lucide-react';
 import { calculateProjectCosts, formatNumber } from '../services/calculationService';
+import { CountUp } from './CountUp';
 
 interface Props {
   data: CalculationData;
@@ -59,12 +57,12 @@ export const FloatingSummary: React.FC<Props> = ({ data, appState }) => {
          <div className="flex flex-col sm:flex-row gap-x-6 gap-y-1">
              <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400 text-sm">
                  <span>Koszt:</span>
-                 <span className="font-mono font-bold text-zinc-900 dark:text-white">{formatNumber(totalCost)} {appState.offerCurrency}</span>
+                 <span className="font-mono font-bold text-zinc-900 dark:text-white"><CountUp value={totalCost} /> {appState.offerCurrency}</span>
              </div>
              <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400 text-sm">
                  <span>Marża:</span>
                  <span className={`font-bold ${marginClass}`}>
-                     {marginPercent.toFixed(2)}%
+                     <CountUp value={marginPercent} suffix="%" />
                  </span>
              </div>
          </div>
@@ -73,7 +71,7 @@ export const FloatingSummary: React.FC<Props> = ({ data, appState }) => {
              <div className="text-right">
                  <div className="text-[10px] text-zinc-500 uppercase font-bold">Cena ({appState.offerCurrency})</div>
                  <div className="text-xl font-bold text-zinc-900 dark:text-white font-mono leading-none">
-                     {formatNumber(sellingPriceOffer)}
+                     <CountUp value={sellingPriceOffer} />
                  </div>
              </div>
          </div>

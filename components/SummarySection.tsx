@@ -1,12 +1,10 @@
-
-
-
 import React, { useState } from 'react';
 import { CalculationData, Currency, AppState, CalculationMode, EMPTY_PAYMENT_TERMS, PaymentTerms } from '../types';
 import { RefreshCw, Unlock, DollarSign, ToggleLeft, ToggleRight, AlertTriangle, AlertOctagon } from 'lucide-react';
 import { fetchEurRate } from '../services/currencyService';
 import { calculateProjectCosts, formatCurrency, formatNumber } from '../services/calculationService';
 import { SmartInput } from './SmartInput';
+import { CountUp } from './CountUp';
 
 interface Props {
   appState: AppState;
@@ -121,7 +119,7 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                   <div className="p-6 flex flex-col justify-between relative group">
                       <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Baza Kosztowa</span>
                       <div className="text-2xl font-mono font-bold text-zinc-700 dark:text-zinc-300">
-                          {formatNumber(totalCost)} <span className="text-sm text-zinc-400">{targetCurrency}</span>
+                          <CountUp value={totalCost} /> <span className="text-sm text-zinc-400">{targetCurrency}</span>
                       </div>
                       <div className="w-full h-1 bg-zinc-100 dark:bg-zinc-800 mt-2 overflow-hidden rounded-full">
                           <div className="h-full bg-zinc-300 dark:bg-zinc-600 w-full opacity-50"></div>
@@ -225,7 +223,9 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                                   <input type="number" value={paymentTerms.advance1Percent} onChange={(e) => updatePaymentTerms({ advance1Percent: parseFloat(e.target.value) })} className="w-12 bg-transparent text-amber-500 font-mono font-bold text-sm text-center outline-none border-b border-zinc-200 focus:border-amber-500"/>
                                   <span className="text-zinc-400">%</span>
                               </div>
-                              <div className="text-[10px] text-zinc-600 dark:text-zinc-300 font-mono mt-1 text-right">{formatNumber(advance1Amount, 0)}</div>
+                              <div className="text-[10px] text-zinc-600 dark:text-zinc-300 font-mono mt-1 text-right">
+                                  <CountUp value={advance1Amount} decimals={0} />
+                              </div>
                           </div>
                           
                           {/* Advance 2 */}
@@ -247,7 +247,9 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                                   <input type="number" value={paymentTerms.advance2Percent} onChange={(e) => updatePaymentTerms({ advance2Percent: parseFloat(e.target.value) })} className="w-12 bg-transparent text-amber-500 font-mono font-bold text-sm text-center outline-none border-b border-zinc-200 focus:border-amber-500"/>
                                   <span className="text-zinc-400">%</span>
                               </div>
-                              <div className="text-[10px] text-zinc-600 dark:text-zinc-300 font-mono mt-1 text-right">{formatNumber(advance2Amount, 0)}</div>
+                              <div className="text-[10px] text-zinc-600 dark:text-zinc-300 font-mono mt-1 text-right">
+                                  <CountUp value={advance2Amount} decimals={0} />
+                              </div>
                           </div>
 
                           {/* Final Payment */}
@@ -266,7 +268,9 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                                   </div>
                               </div>
                               <div className="font-mono font-bold text-sm text-center py-0.5 text-zinc-900 dark:text-white">{finalPercent}%</div>
-                              <div className="text-[10px] text-zinc-600 dark:text-zinc-300 font-mono mt-1 text-right">{formatNumber(finalAmount, 0)}</div>
+                              <div className="text-[10px] text-zinc-600 dark:text-zinc-300 font-mono mt-1 text-right">
+                                  <CountUp value={finalAmount} decimals={0} />
+                              </div>
                           </div>
                       </div>
                   </div>
@@ -298,7 +302,7 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                               className="text-4xl font-mono font-bold text-zinc-900 dark:text-white w-full cursor-text hover:text-amber-600 dark:hover:text-amber-400 transition-colors break-words"
                               onClick={handlePriceFocus}
                           >
-                              {formatNumber(sellingPrice)}
+                              <CountUp value={sellingPrice} />
                           </div>
                       )}
                       <span className="text-zinc-400 font-mono text-xl">{targetCurrency}</span>
@@ -324,7 +328,7 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                       {showPlnPayment && (
                           <div className="text-[10px] font-mono font-bold text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded border border-amber-200 dark:border-amber-800 flex justify-between items-center animate-fadeIn">
                               <span className="uppercase tracking-wide opacity-80">Wartość PLN (Netto):</span>
-                              <span>{formatCurrency(paymentPlnNet, 'PLN')}</span>
+                              <span><CountUp value={paymentPlnNet} suffix=" PLN" /></span>
                           </div>
                       )}
 
@@ -332,11 +336,15 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                       <div className="flex flex-col gap-1 pt-2 border-t border-zinc-200 dark:border-zinc-800 w-full">
                           <div className="flex justify-between items-center text-[10px] text-zinc-500">
                               <span>Zysk:</span>
-                              <span className="text-green-600 dark:text-green-400 font-bold">+{formatCurrency(profit, targetCurrency)}</span>
+                              <span className="text-green-600 dark:text-green-400 font-bold">
+                                  +<CountUp value={profit} suffix={` ${targetCurrency}`} />
+                              </span>
                           </div>
                           <div className="flex justify-between items-center text-[10px] text-zinc-500">
                               <span>+VAT 23%:</span>
-                              <span className="font-mono text-zinc-700 dark:text-zinc-300">{formatCurrency(vatValuePLN, 'PLN')}</span>
+                              <span className="font-mono text-zinc-700 dark:text-zinc-300">
+                                  <CountUp value={vatValuePLN} suffix=" PLN" />
+                              </span>
                           </div>
                       </div>
                   </div>
