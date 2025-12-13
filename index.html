@@ -1,267 +1,331 @@
 <!DOCTYPE html>
 <html lang="pl">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>JH WE-Calc - Kalkulator Ceny Projektu</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            fontFamily: {
-                sans: ['"Inter"', 'sans-serif'],
-                mono: ['"JetBrains Mono"', 'monospace'],
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JH WE-Calc - Kalkulator Ceny Projektu</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Inter"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          borderRadius: {
+            'none': '0px',
+            'sm': '1px',
+            'md': '2px',
+            'lg': '2px',
+            'xl': '2px',
+            '2xl': '2px',
+            '3xl': '4px',
+            'full': '9999px',
+          },
+          colors: {
+            amber: {
+              50: '#fffbeb',
+              100: '#fef3c7',
+              200: '#fde68a',
+              300: '#fcd34d',
+              400: '#fbbf24',
+              500: '#F0C80E', // Jungheinrich Yellow (Primary)
+              600: '#d97706',
+              700: '#b45309',
+              800: '#92400e',
+              900: '#78350f',
             },
-            borderRadius: {
-                'none': '0px',
-                'sm': '1px',
-                'md': '2px',
-                'lg': '2px',
-                'xl': '2px', 
-                '2xl': '2px',
-                '3xl': '4px',
-                'full': '9999px',
+            cyan: {
+              50: '#e6f4fc',
+              100: '#cce9f9',
+              200: '#99d3f3',
+              300: '#66bded',
+              400: '#33a8e7',
+              500: '#0093DD', // Jungheinrich Cyan/Blue (Secondary)
+              600: '#007bb8',
+              700: '#006494',
+              800: '#004d71',
+              900: '#003852',
             },
-            colors: {
-              amber: {
-                50: '#fffbeb',
-                100: '#fef3c7',
-                200: '#fde68a',
-                300: '#fcd34d',
-                400: '#fbbf24',
-                500: '#F0C80E', // Jungheinrich Yellow (Primary)
-                600: '#d97706',
-                700: '#b45309',
-                800: '#92400e',
-                900: '#78350f',
-              },
-              cyan: {
-                50: '#e6f4fc',
-                100: '#cce9f9',
-                200: '#99d3f3',
-                300: '#66bded',
-                400: '#33a8e7',
-                500: '#0093DD', // Jungheinrich Cyan/Blue (Secondary)
-                600: '#007bb8',
-                700: '#006494',
-                800: '#004d71',
-                900: '#003852',
-              },
-              zinc: {
-                50: '#fafafa',
-                100: '#f4f4f5',
-                200: '#e4e4e7',
-                300: '#d4d4d8',
-                400: '#a1a1aa',
-                500: '#71717a',
-                600: '#52525b',
-                700: '#3f3f46',
-                800: '#27272a',
-                900: '#18181b', // Main Dark Surface
-                950: '#09090b', // Deep Black
-              }
+            zinc: {
+              50: '#fafafa',
+              100: '#f4f4f5',
+              200: '#e4e4e7',
+              300: '#d4d4d8',
+              400: '#a1a1aa',
+              500: '#71717a',
+              600: '#52525b',
+              700: '#3f3f46',
+              800: '#27272a',
+              900: '#18181b', // Main Dark Surface
+              950: '#09090b', // Deep Black
+            }
+          },
+          boxShadow: {
+            'sm': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+            'DEFAULT': '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+            'none': 'none',
+            'glow': '0 0 10px rgba(240, 200, 14, 0.3)',
+          },
+          animation: {
+            fadeIn: 'fadeIn 0.2s ease-out',
+            slideUp: 'slideUp 0.3s ease-out',
+            slideInRight: 'slideInRight 0.3s ease-out',
+            scaleIn: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+            pulseSubtle: 'pulseSubtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+          },
+          keyframes: {
+            fadeIn: {
+              '0%': { opacity: '0' },
+              '100%': { opacity: '1' },
             },
-            boxShadow: {
-                'sm': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-                'DEFAULT': '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
-                'none': 'none',
-                'glow': '0 0 10px rgba(240, 200, 14, 0.3)',
+            slideUp: {
+              '0%': { transform: 'translateY(10px)', opacity: '0' },
+              '100%': { transform: 'translateY(0)', opacity: '1' },
             },
-            animation: {
-                fadeIn: 'fadeIn 0.2s ease-out',
-                slideUp: 'slideUp 0.3s ease-out',
-                slideInRight: 'slideInRight 0.3s ease-out',
-                scaleIn: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-                pulseSubtle: 'pulseSubtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            slideInRight: {
+              '0%': { transform: 'translateX(20px)', opacity: '0' },
+              '100%': { transform: 'translateX(0)', opacity: '1' },
             },
-            keyframes: {
-                fadeIn: {
-                    '0%': { opacity: '0' },
-                    '100%': { opacity: '1' },
-                },
-                slideUp: {
-                    '0%': { transform: 'translateY(10px)', opacity: '0' },
-                    '100%': { transform: 'translateY(0)', opacity: '1' },
-                },
-                slideInRight: {
-                    '0%': { transform: 'translateX(20px)', opacity: '0' },
-                    '100%': { transform: 'translateX(0)', opacity: '1' },
-                },
-                scaleIn: {
-                    '0%': { transform: 'scale(0.95)', opacity: '0' },
-                    '100%': { transform: 'scale(1)', opacity: '1' },
-                },
-                pulseSubtle: {
-                    '0%, 100%': { opacity: '1' },
-                    '50%': { opacity: '0.85' },
-                }
+            scaleIn: {
+              '0%': { transform: 'scale(0.95)', opacity: '0' },
+              '100%': { transform: 'scale(1)', opacity: '1' },
+            },
+            pulseSubtle: {
+              '0%, 100%': { opacity: '1' },
+              '50%': { opacity: '0.85' },
             }
           }
         }
       }
-    </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-    <style>
-      body {
-        font-family: 'Inter', sans-serif;
-        background-color: #f4f4f5; /* Zinc-100 */
-        color: #09090b;
-        min-height: 100vh;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-        font-size: 13px;
-      }
-      
-      /* Tech Scrollbar */
-      ::-webkit-scrollbar {
-          width: 8px;
-          height: 8px;
-      }
-      ::-webkit-scrollbar-track {
-          background: transparent; 
-      }
-      ::-webkit-scrollbar-thumb {
-          background: #d4d4d8;
-          border: 2px solid transparent;
-          background-clip: content-box;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-          background: #a1a1aa;
-      }
-      
-      .dark ::-webkit-scrollbar-thumb {
-          background: #3f3f46;
-      }
-      .dark ::-webkit-scrollbar-thumb:hover {
-          background: #52525b;
+    }
+  </script>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f4f4f5;
+      /* Zinc-100 */
+      color: #09090b;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      font-size: 13px;
+    }
+
+    /* Tech Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #d4d4d8;
+      border: 2px solid transparent;
+      background-clip: content-box;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #a1a1aa;
+    }
+
+    .dark ::-webkit-scrollbar-thumb {
+      background: #3f3f46;
+    }
+
+    .dark ::-webkit-scrollbar-thumb:hover {
+      background: #52525b;
+    }
+
+    .dark body {
+      background-color: #000000;
+      color: #e4e4e7;
+    }
+
+    /* Input Reset for Tech Look */
+    input,
+    select,
+    textarea {
+      font-family: 'Inter', sans-serif;
+      border-radius: 0px !important;
+      background-color: #fff;
+      color: #09090b;
+      font-size: 12px;
+      transition: all 0.1s ease;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    select {
+      border: 1px solid #e4e4e7;
+    }
+
+    /* Monospace numbers in inputs */
+    input[type="number"] {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      outline: none;
+      border-color: #F0C80E !important;
+      /* Jungheinrich Yellow */
+      box-shadow: 0 0 0 1px #F0C80E !important;
+    }
+
+    .dark input,
+    .dark select,
+    .dark textarea {
+      background-color: #09090b !important;
+      border-color: #27272a !important;
+      color: #e4e4e7 !important;
+    }
+
+    .dark input:focus,
+    .dark select:focus,
+    .dark textarea:focus {
+      border-color: #F0C80E !important;
+      background-color: #09090b !important;
+    }
+
+    /* Utility classes for technical lines */
+    .tech-border-b {
+      border-bottom: 1px solid #e4e4e7;
+    }
+
+    .dark .tech-border-b {
+      border-bottom: 1px solid #27272a;
+    }
+
+    /* Mask for scroll indicators */
+    .mask-gradient-right {
+      mask-image: linear-gradient(to right, black 85%, transparent 100%);
+    }
+
+    /* PRINT STYLES */
+    @media print {
+      @page {
+        size: landscape;
+        margin: 0.5cm;
       }
 
-      .dark body {
-        background-color: #000000;
-        color: #e4e4e7;
-      }
-      
-      /* Input Reset for Tech Look */
-      input, select, textarea {
-        font-family: 'Inter', sans-serif;
-        border-radius: 0px !important;
-        background-color: #fff;
-        color: #09090b;
-        font-size: 12px;
-        transition: all 0.1s ease;
-      }
-      
-      input[type="text"], input[type="number"], input[type="date"], select {
-        border: 1px solid #e4e4e7;
+      /* HIDE UI ELEMENTS */
+      header,
+      .sticky,
+      button,
+      input[type="file"],
+      .xl\:col-span-2 {
+        /* Hides sidebar based on grid class */
+        display: none !important;
       }
 
-      /* Monospace numbers in inputs */
-      input[type="number"] {
-        font-family: 'JetBrains Mono', monospace;
+      /* Hide fixed elements ONLY if we are NOT printing the modal */
+      body:not(.modal-open-print) .fixed {
+        display: none !important;
       }
 
-      input:focus, select:focus, textarea:focus {
-        outline: none;
-        border-color: #F0C80E !important; /* Jungheinrich Yellow */
-        box-shadow: 0 0 0 1px #F0C80E !important;
+      /* RESET LAYOUT */
+      body,
+      #root,
+      main {
+        height: auto !important;
+        overflow: visible !important;
+        display: block !important;
+        background: white !important;
+        color: black !important;
       }
 
-      .dark input, .dark select, .dark textarea {
-        background-color: #09090b !important;
-        border-color: #27272a !important;
-        color: #e4e4e7 !important;
-      }
-      
-      .dark input:focus, .dark select:focus, .dark textarea:focus {
-        border-color: #F0C80E !important;
-        background-color: #09090b !important;
+      /* EXPAND CONTENT */
+      .xl\:col-span-10 {
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: block !important;
       }
 
-      /* Utility classes for technical lines */
-      .tech-border-b {
-        border-bottom: 1px solid #e4e4e7;
+      /* RESET INPUTS TO LOOK LIKE TEXT */
+      input,
+      select,
+      textarea {
+        border: none !important;
+        background: transparent !important;
+        padding: 0 !important;
+        -webkit-appearance: none;
+        box-shadow: none !important;
+        font-weight: bold;
+        resize: none !important;
+        /* Prevent resize handle in print */
       }
-      .dark .tech-border-b {
-        border-bottom: 1px solid #27272a;
+
+      /* Force light theme for inputs in print even if dark mode is active */
+      .dark input,
+      .dark select,
+      .dark textarea {
+        background-color: transparent !important;
+        border: none !important;
+        color: black !important;
+        box-shadow: none !important;
       }
-      
-      /* Mask for scroll indicators */
-      .mask-gradient-right {
-        mask-image: linear-gradient(to right, black 85%, transparent 100%);
+
+      /* Placeholder styling for empty inputs */
+      input::placeholder {
+        color: transparent !important;
       }
 
-      /* PRINT STYLES */
-      @media print {
-        @page {
-            size: landscape;
-            margin: 0.5cm;
-        }
-
-        /* HIDE UI ELEMENTS */
-        header, 
-        .fixed, 
-        .sticky, 
-        button, 
-        input[type="file"],
-        .xl\:col-span-2 { /* Hides sidebar based on grid class */
-            display: none !important;
-        }
-
-        /* RESET LAYOUT */
-        body, #root, main {
-            height: auto !important;
-            overflow: visible !important;
-            display: block !important;
-            background: white !important;
-            color: black !important;
-        }
-
-        /* EXPAND CONTENT */
-        .xl\:col-span-10 {
-            width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            display: block !important;
-        }
-
-        /* RESET INPUTS TO LOOK LIKE TEXT */
-        input, select {
-            border: none !important;
-            background: transparent !important;
-            padding: 0 !important;
-            -webkit-appearance: none;
-            box-shadow: none !important;
-            font-weight: bold;
-        }
-        
-        /* Placeholder styling for empty inputs */
-        input::placeholder {
-            color: transparent !important;
-        }
-
-        /* Ensure colors print (esp. cyan sections) */
-        * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-        }
-
-        /* Hide specific containers that might add padding */
-        .p-6, .pb-32 {
-            padding: 0 !important;
-        }
-        
-        /* Table adjustments */
-        table {
-            width: 100% !important;
-            font-size: 10px !important;
-        }
-        th, td {
-            padding: 4px 2px !important;
-        }
+      /* Ensure colors print (esp. cyan sections) */
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
-    </style>
+
+      /* Hide specific containers that might add padding */
+      .p-6,
+      .pb-32 {
+        padding: 0 !important;
+      }
+
+      /* Table adjustments */
+      table {
+        width: 100% !important;
+        font-size: 10px !important;
+      }
+
+      th,
+      td {
+        padding: 4px 2px !important;
+      }
+
+      /* MODAL PRINT ISOLATION */
+      body.modal-open-print * {
+        visibility: hidden;
+      }
+
+      body.modal-open-print .printable-content,
+      body.modal-open-print .printable-content * {
+        visibility: visible;
+      }
+
+      body.modal-open-print .printable-content {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+      }
+    }
+  </style>
   <script type="importmap">
 {
   "imports": {
@@ -275,7 +339,10 @@
 }
 </script>
 </head>
-  <body class="transition-colors duration-200">
-    <div id="root"></div>
-  </body>
+
+<body class="transition-colors duration-200">
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+
 </html>
