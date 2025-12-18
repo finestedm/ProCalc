@@ -268,6 +268,11 @@ export const Header: React.FC<Props> = ({
                     <input type="file" ref={projectInputRef} className="hidden" accept=".json" onChange={handleImport} />
                 </div>
             </div>
-        </header>
+
+            <ProfileEditModal
+                isOpen={showProfileEdit}
+                onClose={() => setShowProfileEdit(false)}
+            />
+        </header >
     );
 };

@@ -50,7 +50,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { fetchEurRate } from './services/currencyService';
 import { generateDiff } from './services/diffService';
 import { useAuth } from './contexts/AuthContext';
-import { Moon, Sun, History, Download, Upload, FilePlus, HardDrive, MousePointer2, X, Plus, Check, Trash2, Settings, Shield } from 'lucide-react';
+import { Moon, Sun, History, Download, Upload, FilePlus, HardDrive, MousePointer2, X, Plus, Check, Trash2, Settings, Shield, AlertCircle } from 'lucide-react';
 
 const STORAGE_KEY = 'procalc_data_v1';
 const THEME_KEY = 'procalc_theme';
@@ -164,7 +164,7 @@ const mergeScenarioData = (globalSource: CalculationData, scenario: CalculationS
 
 const App: React.FC = () => {
     // Authentication
-    const { user, profile, loading: authLoading } = useAuth();
+    const { user, profile, loading: authLoading, signOut } = useAuth();
 
     const [appState, setAppState] = useState<AppState>({
         initial: JSON.parse(JSON.stringify(EMPTY_CALCULATION)),
@@ -1670,6 +1670,27 @@ const App: React.FC = () => {
             {/* Authentication Modal - Show if not authenticated */}
             {!authLoading && !user && (
                 <AuthModal isOpen={true} onClose={() => { }} />
+            )}
+
+            {/* Error State - Authenticated but no profile (e.g. migration missing) */}
+            {!authLoading && user && !profile && (
+                <div className="fixed inset-0 z-[150] flex items-center justify-center bg-zinc-900 p-4">
+                    <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl p-8 max-w-md text-center border border-zinc-700">
+                        <AlertCircle size={48} className="text-red-500 mx-auto mb-4" />
+                        <h2 className="text-2xl font-bold text-zinc-800 dark:text-white mb-2">
+                            Błąd profilu
+                        </h2>
+                        <p className="text-zinc-600 dark:text-zinc-400 mb-6">
+                            Nie udało się załadować profilu użytkownika. Prawdopodobnie migracja bazy danych nie została wykonana.
+                        </p>
+                        <button
+                            onClick={() => signOut()}
+                            className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors"
+                        >
+                            Wyloguj się
+                        </button>
+                    </div>
+                </div>
             )}
 
             {/* Pending Approval Message - Show if authenticated but not approved */}
