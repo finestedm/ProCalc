@@ -1,8 +1,10 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { AppState, CalculationMode, ViewMode, ProjectStage } from '../types';
-import { Calculator as CalcIcon, Scale, LayoutDashboard, Undo2, Redo2, Menu, NotebookPen, FileText, HardDrive, Square, PanelRight, Keyboard, PenLine, Send, Lock } from 'lucide-react';
+import { Calculator as CalcIcon, Scale, LayoutDashboard, Undo2, Redo2, Menu, NotebookPen, FileText, HardDrive, Square, PanelRight, Keyboard, PenLine, Send, Lock, Shield, LogOut, User, Edit } from 'lucide-react';
 import { DropdownMenu } from './DropdownMenu';
+import { useAuth } from '../contexts/AuthContext';
+import { ProfileEditModal } from './ProfileEditModal';
 
 interface Props {
     appState: AppState;
@@ -14,6 +16,7 @@ interface Props {
     onShowComparison: () => void;
     onShowProjectManager: () => void;
     onShowShortcuts: () => void;
+    onShowAdminPanel: () => void;
     menuItems: any[];
     projectInputRef: React.RefObject<HTMLInputElement>;
     handleImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -30,11 +33,18 @@ export const Header: React.FC<Props> = ({
     onShowComparison,
     onShowProjectManager,
     onShowShortcuts,
+    onShowAdminPanel,
     menuItems,
     projectInputRef,
     handleImport,
     onToggleSidebar
 }) => {
+    const { profile, signOut } = useAuth();
+    const [showProfileEdit, setShowProfileEdit] = useState(false);
+
+    const handleLogout = async () => {
+        await signOut();
+    };
 
     const isFinal = appState.mode === CalculationMode.FINAL;
 
@@ -100,8 +110,8 @@ export const Header: React.FC<Props> = ({
                                     key={item.mode}
                                     onClick={() => setAppState(prev => ({ ...prev, viewMode: item.mode }))}
                                     className={`relative h-full flex items-center gap-2 text-xs font-bold uppercase tracking-wide transition-all duration-200 border-b-2 font-mono whitespace-nowrap ${isActive
-                                            ? 'text-zinc-900 dark:text-white border-zinc-900 dark:border-white'
-                                            : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300 border-transparent hover:border-zinc-200'
+                                        ? 'text-zinc-900 dark:text-white border-zinc-900 dark:border-white'
+                                        : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300 border-transparent hover:border-zinc-200'
                                         }`}
                                     title={item.label}
                                 >
@@ -129,8 +139,8 @@ export const Header: React.FC<Props> = ({
                                 <button
                                     onClick={() => setAppState(prev => ({ ...prev, mode: CalculationMode.INITIAL }))}
                                     className={`px-3 h-full text-[10px] font-bold uppercase tracking-wider transition-all flex items-center font-mono ${!isFinal
-                                            ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white'
-                                            : 'bg-transparent text-zinc-400 hover:text-zinc-600'
+                                        ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white'
+                                        : 'bg-transparent text-zinc-400 hover:text-zinc-600'
                                         }`}
                                 >
                                     Wstępna
@@ -139,8 +149,8 @@ export const Header: React.FC<Props> = ({
                                 <button
                                     onClick={() => setAppState(prev => ({ ...prev, mode: CalculationMode.FINAL }))}
                                     className={`px-3 h-full text-[10px] font-bold uppercase tracking-wider transition-all flex items-center font-mono ${isFinal
-                                            ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white'
-                                            : 'bg-transparent text-zinc-400 hover:text-zinc-600'
+                                        ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white'
+                                        : 'bg-transparent text-zinc-400 hover:text-zinc-600'
                                         }`}
                                 >
                                     Końcowa
@@ -208,6 +218,42 @@ export const Header: React.FC<Props> = ({
                             title="Skróty Klawiszowe (Alt+/)"
                         >
                             <Keyboard size={16} />
+                        </button>
+
+                        {/* User Info & Admin Panel */}
+                        <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block"></div>
+
+                        {profile?.is_admin && (
+                            <button
+                                onClick={onShowAdminPanel}
+                                className="w-8 h-8 flex items-center justify-center text-purple-500 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+                                title="Panel Administratora"
+                            >
+                                <Shield size={16} />
+                            </button>
+                        )}
+
+                        <div className="hidden md:flex items-center gap-2 px-2 py-1 bg-zinc-100 dark:bg-zinc-800 rounded">
+                            <User size={14} className="text-zinc-500" />
+                            <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                                {profile?.full_name || profile?.email || 'User'}
+                            </span>
+                        </div>
+
+                        <button
+                            onClick={() => setShowProfileEdit(true)}
+                            className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-blue-500 transition-colors"
+                            title="Edytuj profil"
+                        >
+                            <Edit size={16} />
+                        </button>
+
+                        <button
+                            onClick={handleLogout}
+                            className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-red-500 transition-colors"
+                            title="Wyloguj się"
+                        >
+                            <LogOut size={16} />
                         </button>
 
                         <DropdownMenu

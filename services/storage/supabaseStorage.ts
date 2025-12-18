@@ -23,6 +23,12 @@ export class SupabaseStorage implements ICalculationStorage {
             throw new Error('Supabase client not initialized. Database connection missing.');
         }
 
+        // Get current user
+        const { data: { user } } = await this.supabase.auth.getUser();
+        if (!user) {
+            throw new Error('User must be authenticated to save calculations');
+        }
+
         // Determine the source of metadata
         // If data is a ProjectFile (nested), we look inside appState
         // If data is flat CalculationData (from OfferGenerator), we use it directly
@@ -40,6 +46,7 @@ export class SupabaseStorage implements ICalculationStorage {
 
         // Mapping to User's specific table columns
         const payload = {
+            user_id: user.id, // Associate with current user
             specialist: meta.assistantPerson || '',
             engineer: meta.salesPerson || '',
             customer_name: orderingParty.name || 'Unknown',
