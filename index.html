@@ -11,19 +11,17 @@
       darkMode: 'class',
       theme: {
         extend: {
+          borderRadius: {
+            'sm': '0.2rem',
+            'DEFAULT': '0.4rem',
+            'md': '0.6rem',
+            'lg': '0.8rem',
+            'xl': '1.0rem',
+            '2xl': '1.5rem',
+          },
           fontFamily: {
             sans: ['"Inter"', 'sans-serif'],
             mono: ['"JetBrains Mono"', 'monospace'],
-          },
-          borderRadius: {
-            'none': '0px',
-            'sm': '1px',
-            'md': '2px',
-            'lg': '2px',
-            'xl': '2px',
-            '2xl': '2px',
-            '3xl': '4px',
-            'full': '9999px',
           },
           colors: {
             amber: {
@@ -156,7 +154,7 @@
     select,
     textarea {
       font-family: 'Inter', sans-serif;
-      border-radius: 0px !important;
+      border-radius: 0.4rem;
       background-color: #fff;
       color: #09090b;
       font-size: 12px;

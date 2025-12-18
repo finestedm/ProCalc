@@ -27,14 +27,14 @@ interface DataGridProps {
     className?: string; // Allow external layout control
     // Picking Mode
     isPickingMode?: boolean;
-    onPick?: (id: string, coords?: {x: number, y: number}) => void;
+    onPick?: (id: string, coords?: { x: number, y: number }) => void;
 }
 
-export const DataGrid: React.FC<DataGridProps> = ({ 
-    items, 
-    currency, 
-    isOrm, 
-    onUpdateItem, 
+export const DataGrid: React.FC<DataGridProps> = ({
+    items,
+    currency,
+    isOrm,
+    onUpdateItem,
     onDeleteItem,
     onAddItem,
     onMoveItem,
@@ -47,7 +47,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
     const [filterText, setFilterText] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    
+
     // Drag & Drop State
     const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
@@ -103,7 +103,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
         if (sortConfig || filterText) return; // Disable DnD when sorted/filtered
         setDraggedItemId(id);
         e.dataTransfer.effectAllowed = 'move';
-        
+
         // Create custom drag ghost
         const item = items.find(i => i.id === id);
         if (item) {
@@ -123,15 +123,15 @@ export const DataGrid: React.FC<DataGridProps> = ({
             ghost.style.display = 'flex';
             ghost.style.alignItems = 'center';
             ghost.style.gap = '8px';
-            
+
             ghost.innerHTML = `
                 <span style="background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 2px; font-family: monospace;">${item.quantity}x</span>
                 <span>${item.itemDescription.substring(0, 30)}${item.itemDescription.length > 30 ? '...' : ''}</span>
             `;
-            
+
             document.body.appendChild(ghost);
             e.dataTransfer.setDragImage(ghost, 0, 0);
-            
+
             // Clean up
             setTimeout(() => {
                 document.body.removeChild(ghost);
@@ -148,7 +148,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
     const handleDrop = (e: React.DragEvent, targetId: string) => {
         e.preventDefault();
         if (sortConfig || filterText) return;
-        
+
         if (draggedItemId && draggedItemId !== targetId && onReorderItems) {
             const fromIndex = items.findIndex(i => i.id === draggedItemId);
             const toIndex = items.findIndex(i => i.id === targetId);
@@ -196,7 +196,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
         const newCols = [...columns];
         const targetIndex = direction === 'left' ? index - 1 : index + 1;
         if (targetIndex < 0 || targetIndex >= newCols.length) return;
-        
+
         const temp = newCols[index];
         newCols[index] = newCols[targetIndex];
         newCols[targetIndex] = temp;
@@ -209,8 +209,8 @@ export const DataGrid: React.FC<DataGridProps> = ({
         // Filter
         if (filterText) {
             const lower = filterText.toLowerCase();
-            result = result.filter(i => 
-                (i.itemDescription?.toLowerCase() || '').includes(lower) || 
+            result = result.filter(i =>
+                (i.itemDescription?.toLowerCase() || '').includes(lower) ||
                 (i.componentNumber?.toLowerCase() || '').includes(lower)
             );
         }
@@ -223,20 +223,20 @@ export const DataGrid: React.FC<DataGridProps> = ({
 
                 // Computed fields sorting logic
                 if (sortConfig.key === 'totalValue') {
-                     const pA = isOrm ? (a.unitPrice * 0.5) : a.unitPrice;
-                     const pB = isOrm ? (b.unitPrice * 0.5) : b.unitPrice;
-                     valA = a.quantity * pA;
-                     valB = b.quantity * pB;
+                    const pA = isOrm ? (a.unitPrice * 0.5) : a.unitPrice;
+                    const pB = isOrm ? (b.unitPrice * 0.5) : b.unitPrice;
+                    valA = a.quantity * pA;
+                    valB = b.quantity * pB;
                 } else if (sortConfig.key === 'jhPrice') {
-                     valA = isOrm ? (a.unitPrice * 0.5) : a.unitPrice;
-                     valB = isOrm ? (b.unitPrice * 0.5) : b.unitPrice;
+                    valA = isOrm ? (a.unitPrice * 0.5) : a.unitPrice;
+                    valB = isOrm ? (b.unitPrice * 0.5) : b.unitPrice;
                 }
 
                 if (typeof valA === 'string') {
                     valA = valA.toLowerCase();
                     valB = valB.toLowerCase();
                 }
-                
+
                 if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
                 if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
                 return 0;
@@ -245,8 +245,8 @@ export const DataGrid: React.FC<DataGridProps> = ({
         return result;
     }, [items, filterText, sortConfig, isOrm]);
 
-    const pickingClass = isPickingMode 
-        ? "cursor-crosshair hover:animate-pulse-border" 
+    const pickingClass = isPickingMode
+        ? "cursor-crosshair hover:animate-pulse-border"
         : "hover:bg-zinc-50 dark:hover:bg-zinc-900/50";
 
     const isAllSelected = items.length > 0 && selectedIds.size === items.length;
@@ -266,23 +266,25 @@ export const DataGrid: React.FC<DataGridProps> = ({
             {/* Toolbar */}
             <div className="flex justify-between items-center mb-2 px-1 gap-2 shrink-0 pt-2">
                 <div className="relative w-64">
-                    <Search className="absolute left-2.5 top-2 text-zinc-400" size={14}/>
-                    <input 
-                        type="text" 
+                    <Search className="absolute left-2.5 top-2 text-zinc-400" size={14} />
+                    <input
+                        type="text"
                         placeholder="Filter items..."
-                        className="w-full pl-8 p-1.5 border border-zinc-200 dark:border-zinc-700 rounded-sm text-xs bg-white dark:bg-zinc-900 outline-none focus:border-yellow-500 transition-all font-mono"
+                        className="w-full pl-8 p-1.5 border border-zinc-200 dark:border-zinc-700 rounded text-xs bg-white dark:bg-zinc-900 outline-none focus:border-yellow-500 transition-all font-mono"
                         value={filterText}
                         onChange={(e) => setFilterText(e.target.value)}
                     />
                 </div>
-                <DropdownMenu 
+                <DropdownMenu
                     align="right"
-                    trigger={<Settings2 size={14} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"/>}
+                    trigger={<Settings2 size={14} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" />}
                     items={[
-                        { label: 'Reset Columns', onClick: () => {
-                            setColumns(defaultColumns);
-                            setSortConfig(null);
-                        }}
+                        {
+                            label: 'Reset Columns', onClick: () => {
+                                setColumns(defaultColumns);
+                                setSortConfig(null);
+                            }
+                        }
                     ]}
                 />
             </div>
@@ -291,7 +293,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
             <div className="flex-1 overflow-auto border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 relative min-h-[200px] flex flex-col">
                 {items.length === 0 ? (
                     <div className="flex-1 flex items-center justify-center bg-zinc-50/30 dark:bg-zinc-900/30">
-                        <EmptyState 
+                        <EmptyState
                             icon={PackageOpen}
                             title="Brak pozycji"
                             description="Lista elementów jest pusta."
@@ -315,51 +317,51 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                 {!readOnly && (
                                     <th className="w-8 border-r border-zinc-300 dark:border-zinc-700 text-center bg-zinc-100 dark:bg-zinc-900 align-middle">
                                         <button onClick={toggleSelectAll} className="flex items-center justify-center w-full h-full text-zinc-400 hover:text-zinc-600">
-                                            {isAllSelected ? <CheckSquare size={14}/> : <Square size={14}/>}
+                                            {isAllSelected ? <CheckSquare size={14} /> : <Square size={14} />}
                                         </button>
                                     </th>
                                 )}
 
                                 <th className="p-0 border-r border-zinc-300 dark:border-zinc-700 w-8 text-center bg-zinc-100 dark:bg-zinc-900">#</th>
-                                
+
                                 {columns.map((col, idx) => {
                                     if (col.id === 'jhPrice' && !isOrm) return null;
 
                                     return (
-                                        <th 
+                                        <th
                                             key={col.id}
                                             className={`p-2 relative group select-none border-r border-zinc-300 dark:border-zinc-700 last:border-r-0 ${col.id === 'jhPrice' ? 'bg-green-50/50 dark:bg-green-900/20 text-green-800 dark:text-green-400' : ''}`}
                                             style={{ width: col.width }}
                                         >
                                             <div className="flex items-center justify-between h-full">
-                                                <div 
+                                                <div
                                                     className={`flex items-center gap-1 cursor-pointer flex-1 truncate hover:text-zinc-900 dark:hover:text-white ${col.id === 'actions' ? 'justify-center' : ''}`}
                                                     onClick={() => handleSort(col.id)}
                                                 >
                                                     {col.label}
                                                     {sortConfig?.key === col.id && (
-                                                        sortConfig.direction === 'asc' ? <ChevronUp size={10}/> : <ChevronDown size={10}/>
+                                                        sortConfig.direction === 'asc' ? <ChevronUp size={10} /> : <ChevronDown size={10} />
                                                     )}
                                                 </div>
-                                                
+
                                                 {col.id !== 'actions' && (
                                                     <div className="flex opacity-0 group-hover:opacity-100 transition-opacity mr-1 gap-0.5">
-                                                        <button 
+                                                        <button
                                                             disabled={idx === 0}
                                                             onClick={(e) => { e.stopPropagation(); moveColumn(idx, 'left'); }}
                                                             className="text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 disabled:opacity-0"
-                                                        ><ArrowLeft size={10}/></button>
-                                                        <button 
+                                                        ><ArrowLeft size={10} /></button>
+                                                        <button
                                                             disabled={idx === columns.length - 1}
                                                             onClick={(e) => { e.stopPropagation(); moveColumn(idx, 'right'); }}
                                                             className="text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 disabled:opacity-0"
-                                                        ><ArrowRight size={10}/></button>
+                                                        ><ArrowRight size={10} /></button>
                                                     </div>
                                                 )}
                                             </div>
 
                                             {col.id !== 'actions' && (
-                                                <div 
+                                                <div
                                                     className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-yellow-500 active:bg-yellow-600 z-20"
                                                     onMouseDown={(e) => {
                                                         e.preventDefault();
@@ -386,12 +388,12 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                     <React.Fragment key={item.id}>
                                         {/* Drop Indicator Spacer */}
                                         {isDragOver && !isDragged && (
-                                            <tr 
+                                            <tr
                                                 onDragOver={(e) => handleDragOver(e, item.id)}
                                                 onDrop={(e) => handleDrop(e, item.id)}
                                             >
                                                 <td colSpan={columns.length + 3} className="p-0 border-0 bg-transparent">
-                                                    <div className="mx-1 my-1 border-2 border-dashed border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20 rounded-sm flex items-center justify-center relative overflow-hidden animate-slideDown">
+                                                    <div className="mx-1 my-1 border-2 border-dashed border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20 rounded-md flex items-center justify-center relative overflow-hidden animate-slideDown">
                                                         <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest">
                                                             Upuść tutaj
                                                         </span>
@@ -400,7 +402,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                             </tr>
                                         )}
 
-                                        <tr 
+                                        <tr
                                             draggable={!sortConfig && !filterText && !readOnly}
                                             onDragStart={(e) => handleDragStart(e, item.id)}
                                             onDragOver={(e) => handleDragOver(e, item.id)}
@@ -422,7 +424,7 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                             {/* Drag Handle */}
                                             {!sortConfig && !filterText && onReorderItems && (
                                                 <td className="w-6 border-r border-zinc-200 dark:border-zinc-800 text-center cursor-grab active:cursor-grabbing text-zinc-300 hover:text-zinc-500">
-                                                    <div className="flex justify-center"><GripVertical size={12}/></div>
+                                                    <div className="flex justify-center"><GripVertical size={12} /></div>
                                                 </td>
                                             )}
 
@@ -430,31 +432,31 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                             {!readOnly && (
                                                 <td className="w-8 border-r border-zinc-200 dark:border-zinc-800 text-center">
                                                     <button onClick={(e) => { e.stopPropagation(); toggleSelectItem(item.id); }} className={`flex items-center justify-center w-full h-full ${isSelected ? 'text-amber-500' : 'text-zinc-300 hover:text-zinc-500'}`}>
-                                                        {isSelected ? <CheckSquare size={14}/> : <Square size={14}/>}
+                                                        {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
                                                     </button>
                                                 </td>
                                             )}
 
                                             <td className="p-1 text-center text-zinc-400 text-[10px] font-mono border-r border-zinc-200 dark:border-zinc-800">{index + 1}</td>
-                                            
+
                                             {columns.map(col => {
                                                 if (col.id === 'jhPrice' && !isOrm) return null;
-                                                
+
                                                 // Special Action Column
                                                 if (col.id === 'actions') {
                                                     return (
                                                         <td key={col.id} className="p-1 text-center border-r border-zinc-200 dark:border-zinc-800 last:border-r-0">
                                                             <div className="flex items-center justify-center gap-1">
-                                                                <button 
+                                                                <button
                                                                     onClick={(e) => { e.stopPropagation(); onUpdateItem(item.id, 'isExcluded', !item.isExcluded); }}
                                                                     className={`p-1 rounded transition-colors ${isExcluded ? 'text-zinc-400 hover:text-zinc-600' : 'text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20'}`}
                                                                     title={isExcluded ? "Include" : "Exclude"}
                                                                 >
-                                                                    {isExcluded ? <EyeOff size={10}/> : <Eye size={10}/>}
+                                                                    {isExcluded ? <EyeOff size={10} /> : <Eye size={10} />}
                                                                 </button>
                                                                 {!readOnly && (
                                                                     <button onClick={(e) => { e.stopPropagation(); onDeleteItem(item.id); }} className="p-1 rounded text-zinc-300 hover:text-red-500 transition-colors">
-                                                                        <Trash2 size={10}/>
+                                                                        <Trash2 size={10} />
                                                                     </button>
                                                                 )}
                                                             </div>
@@ -464,54 +466,54 @@ export const DataGrid: React.FC<DataGridProps> = ({
 
                                                 // Data Columns
                                                 const cellClass = "p-0 relative border-r border-zinc-200 dark:border-zinc-800 last:border-r-0 h-[28px]";
-                                                const commonInputClass = `w-full h-full px-2 bg-transparent outline-none border-none rounded-none focus:ring-1 focus:ring-inset focus:ring-yellow-500 text-xs font-mono transition-all ${isExcluded ? 'text-zinc-400' : 'text-zinc-800 dark:text-zinc-200'}`;
+                                                const commonInputClass = `w-full h-full px-2 bg-transparent outline-none border-none rounded-sm focus:ring-1 focus:ring-inset focus:ring-yellow-500 text-xs font-mono transition-all ${isExcluded ? 'text-zinc-400' : 'text-zinc-800 dark:text-zinc-200'}`;
 
                                                 return (
                                                     <td key={col.id} className={cellClass}>
                                                         {col.id === 'itemDescription' && (
-                                                            <input 
-                                                                type="text" 
+                                                            <input
+                                                                type="text"
                                                                 className={`${commonInputClass} font-sans`}
-                                                                value={item.itemDescription} 
+                                                                value={item.itemDescription}
                                                                 onChange={(e) => onUpdateItem(item.id, 'itemDescription', e.target.value)}
                                                                 readOnly={readOnly || isExcluded}
                                                                 onClick={(e) => e.stopPropagation()}
                                                             />
                                                         )}
                                                         {col.id === 'componentNumber' && (
-                                                            <input 
-                                                                type="text" 
+                                                            <input
+                                                                type="text"
                                                                 className={commonInputClass}
-                                                                value={item.componentNumber} 
+                                                                value={item.componentNumber}
                                                                 onChange={(e) => onUpdateItem(item.id, 'componentNumber', e.target.value)}
                                                                 readOnly={readOnly || isExcluded}
                                                                 onClick={(e) => e.stopPropagation()}
                                                             />
                                                         )}
                                                         {col.id === 'quantity' && (
-                                                            <input 
-                                                                type="number" 
+                                                            <input
+                                                                type="number"
                                                                 className={`${commonInputClass} text-center font-bold`}
-                                                                value={item.quantity} 
+                                                                value={item.quantity}
                                                                 onChange={(e) => onUpdateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
                                                                 readOnly={readOnly || isExcluded}
                                                                 onClick={(e) => e.stopPropagation()}
                                                             />
                                                         )}
                                                         {col.id === 'weight' && (
-                                                            <input 
-                                                                type="number" 
+                                                            <input
+                                                                type="number"
                                                                 className={`${commonInputClass} text-center text-zinc-500`}
-                                                                value={item.weight} 
+                                                                value={item.weight}
                                                                 onChange={(e) => onUpdateItem(item.id, 'weight', parseFloat(e.target.value) || 0)}
                                                                 readOnly={readOnly || isExcluded}
                                                                 onClick={(e) => e.stopPropagation()}
                                                             />
                                                         )}
                                                         {col.id === 'unitPrice' && (
-                                                            <SmartInput 
+                                                            <SmartInput
                                                                 className={`${commonInputClass} text-right ${isOrm && !isExcluded ? 'text-orange-600 dark:text-orange-400' : ''}`}
-                                                                value={item.unitPrice} 
+                                                                value={item.unitPrice}
                                                                 onChange={(val) => onUpdateItem(item.id, 'unitPrice', val)}
                                                                 readOnly={readOnly || isExcluded}
                                                                 onClick={(e) => e.stopPropagation()}
@@ -539,28 +541,28 @@ export const DataGrid: React.FC<DataGridProps> = ({
                     </table>
                 )}
             </div>
-            
+
             {/* FLOATING BULK ACTIONS BAR */}
             {selectedIds.size > 0 && (
                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 bg-zinc-900 text-white px-4 py-2 rounded shadow-xl flex items-center gap-4 animate-slideUp">
                     <span className="text-xs font-bold">{selectedIds.size} wybranych</span>
                     <div className="h-4 w-px bg-zinc-700"></div>
                     <button onClick={() => handleBulkExclude(true)} className="flex items-center gap-1 text-xs hover:text-amber-400 transition-colors">
-                        <EyeOff size={14}/> Wyklucz
+                        <EyeOff size={14} /> Wyklucz
                     </button>
                     <button onClick={() => handleBulkExclude(false)} className="flex items-center gap-1 text-xs hover:text-green-400 transition-colors">
-                        <Eye size={14}/> Przywróć
+                        <Eye size={14} /> Przywróć
                     </button>
                     <button onClick={handleBulkDelete} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 transition-colors">
-                        <Trash2 size={14}/> Usuń
+                        <Trash2 size={14} /> Usuń
                     </button>
-                    <button onClick={() => setSelectedIds(new Set())} className="ml-2 hover:text-zinc-400"><X size={14}/></button>
+                    <button onClick={() => setSelectedIds(new Set())} className="ml-2 hover:text-zinc-400"><X size={14} /></button>
                 </div>
             )}
 
             {!readOnly && onAddItem && items.length > 0 && (
                 <div className="mt-2 shrink-0 border-t border-dashed border-zinc-300 dark:border-zinc-700 pt-2">
-                    <button onClick={onAddItem} className="text-[10px] uppercase font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 px-4 py-2 rounded-sm flex items-center gap-2 transition-colors w-full justify-center border border-zinc-200 dark:border-zinc-700">
+                    <button onClick={onAddItem} className="text-[10px] uppercase font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 px-4 py-2 rounded flex items-center gap-2 transition-colors w-full justify-center border border-zinc-200 dark:border-zinc-700">
                         <Plus size={12} /> Add Item Row
                     </button>
                 </div>

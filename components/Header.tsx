@@ -20,14 +20,14 @@ interface Props {
     onToggleSidebar?: () => void;
 }
 
-export const Header: React.FC<Props> = ({ 
-    appState, 
-    setAppState, 
-    onUndo, 
-    onRedo, 
-    canUndo, 
-    canRedo, 
-    onShowComparison, 
+export const Header: React.FC<Props> = ({
+    appState,
+    setAppState,
+    onUndo,
+    onRedo,
+    canUndo,
+    canRedo,
+    onShowComparison,
     onShowProjectManager,
     onShowShortcuts,
     menuItems,
@@ -35,14 +35,14 @@ export const Header: React.FC<Props> = ({
     handleImport,
     onToggleSidebar
 }) => {
-    
+
     const isFinal = appState.mode === CalculationMode.FINAL;
 
     const navItems = [
-        { mode: ViewMode.CALCULATOR, label: 'Kalkulator', icon: <CalcIcon size={18}/> },
-        { mode: ViewMode.LOGISTICS, label: 'Logistyka', icon: <LayoutDashboard size={18}/> },
-        { mode: ViewMode.NOTES, label: 'Notatki', icon: <NotebookPen size={18}/> },
-        { mode: ViewMode.DOCUMENTS, label: 'Dokumenty', icon: <FileText size={18}/> },
+        { mode: ViewMode.CALCULATOR, label: 'Kalkulator', icon: <CalcIcon size={18} /> },
+        { mode: ViewMode.LOGISTICS, label: 'Logistyka', icon: <LayoutDashboard size={18} /> },
+        { mode: ViewMode.NOTES, label: 'Notatki', icon: <NotebookPen size={18} /> },
+        { mode: ViewMode.DOCUMENTS, label: 'Dokumenty', icon: <FileText size={18} /> },
     ];
 
     const getStageConfig = (stage: ProjectStage) => {
@@ -66,7 +66,7 @@ export const Header: React.FC<Props> = ({
     return (
         <header className="w-full bg-white dark:bg-black h-14 shrink-0 z-50 transition-colors border-b border-zinc-200 dark:border-zinc-800">
             <div className="max-w-[1920px] mx-auto px-4 md:px-6 h-full flex items-center justify-between">
-                
+
                 {/* 1. LEFT: Brand */}
                 <div className="flex items-center gap-3 shrink-0">
                     <div className="w-8 h-8 flex items-center justify-center mr-1">
@@ -96,14 +96,13 @@ export const Header: React.FC<Props> = ({
                         {navItems.map((item) => {
                             const isActive = appState.viewMode === item.mode;
                             return (
-                                <button 
+                                <button
                                     key={item.mode}
                                     onClick={() => setAppState(prev => ({ ...prev, viewMode: item.mode }))}
-                                    className={`relative h-full flex items-center gap-2 text-xs font-bold uppercase tracking-wide transition-all duration-200 border-b-2 font-mono whitespace-nowrap ${
-                                        isActive 
-                                        ? 'text-zinc-900 dark:text-white border-zinc-900 dark:border-white' 
-                                        : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300 border-transparent hover:border-zinc-200'
-                                    }`}
+                                    className={`relative h-full flex items-center gap-2 text-xs font-bold uppercase tracking-wide transition-all duration-200 border-b-2 font-mono whitespace-nowrap ${isActive
+                                            ? 'text-zinc-900 dark:text-white border-zinc-900 dark:border-white'
+                                            : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300 border-transparent hover:border-zinc-200'
+                                        }`}
                                     title={item.label}
                                 >
                                     <span className="block md:hidden">{item.icon}</span>
@@ -116,7 +115,7 @@ export const Header: React.FC<Props> = ({
 
                 {/* 3. RIGHT: Actions & Mode Switcher */}
                 <div className="flex items-center gap-2 md:gap-4 shrink-0">
-                    
+
                     {/* Stage Indicator & Mode Switcher */}
                     {appState.viewMode === ViewMode.CALCULATOR && (
                         <div className="flex items-center gap-3">
@@ -126,25 +125,23 @@ export const Header: React.FC<Props> = ({
                                 {stageConfig.label}
                             </div>
 
-                            <div className="hidden lg:flex items-center border border-zinc-200 dark:border-zinc-800 rounded-sm overflow-hidden h-8">
+                            <div className="hidden lg:flex items-center border border-zinc-200 dark:border-zinc-800 rounded overflow-hidden h-8">
                                 <button
                                     onClick={() => setAppState(prev => ({ ...prev, mode: CalculationMode.INITIAL }))}
-                                    className={`px-3 h-full text-[10px] font-bold uppercase tracking-wider transition-all flex items-center font-mono ${
-                                        !isFinal 
-                                        ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white' 
-                                        : 'bg-transparent text-zinc-400 hover:text-zinc-600'
-                                    }`}
+                                    className={`px-3 h-full text-[10px] font-bold uppercase tracking-wider transition-all flex items-center font-mono ${!isFinal
+                                            ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white'
+                                            : 'bg-transparent text-zinc-400 hover:text-zinc-600'
+                                        }`}
                                 >
                                     Wstępna
                                 </button>
                                 <div className="w-px h-full bg-zinc-200 dark:bg-zinc-800"></div>
                                 <button
                                     onClick={() => setAppState(prev => ({ ...prev, mode: CalculationMode.FINAL }))}
-                                    className={`px-3 h-full text-[10px] font-bold uppercase tracking-wider transition-all flex items-center font-mono ${
-                                        isFinal 
-                                        ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white' 
-                                        : 'bg-transparent text-zinc-400 hover:text-zinc-600'
-                                    }`}
+                                    className={`px-3 h-full text-[10px] font-bold uppercase tracking-wider transition-all flex items-center font-mono ${isFinal
+                                            ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white'
+                                            : 'bg-transparent text-zinc-400 hover:text-zinc-600'
+                                        }`}
                                 >
                                     Końcowa
                                 </button>
@@ -156,52 +153,52 @@ export const Header: React.FC<Props> = ({
 
                     {/* Actions */}
                     <div className="flex items-center gap-1 md:gap-2">
-                         {/* Mobile Sidebar Toggle - Only on small screens */}
-                         {onToggleSidebar && (
-                             <button 
-                                 onClick={onToggleSidebar}
-                                 className="xl:hidden w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                                 title="Podsumowanie Projektu"
-                             >
-                                 <PanelRight size={18} />
-                             </button>
-                         )}
+                        {/* Mobile Sidebar Toggle - Only on small screens */}
+                        {onToggleSidebar && (
+                            <button
+                                onClick={onToggleSidebar}
+                                className="xl:hidden w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                                title="Podsumowanie Projektu"
+                            >
+                                <PanelRight size={18} />
+                            </button>
+                        )}
 
-                         <button 
-                             onClick={onShowProjectManager}
-                             className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                             title="Menedżer Projektów (Ctrl+O)"
+                        <button
+                            onClick={onShowProjectManager}
+                            className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                            title="Menedżer Projektów (Ctrl+O)"
                         >
-                             <HardDrive size={16} />
+                            <HardDrive size={16} />
                         </button>
 
-                         {appState.viewMode === ViewMode.CALCULATOR && (
-                            <button 
-                                onClick={onShowComparison} 
+                        {appState.viewMode === ViewMode.CALCULATOR && (
+                            <button
+                                onClick={onShowComparison}
                                 className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
                                 title="Porównaj Wersje (Alt+C)"
                             >
-                                <Scale size={16}/>
+                                <Scale size={16} />
                             </button>
-                         )}
+                        )}
 
-                         <div className="hidden sm:flex items-center gap-1">
-                             <button 
-                                onClick={onUndo} 
-                                disabled={!canUndo} 
-                                className="w-8 h-8 flex items-center justify-center text-zinc-500 disabled:opacity-20 hover:text-zinc-900 dark:hover:text-white transition-colors" 
+                        <div className="hidden sm:flex items-center gap-1">
+                            <button
+                                onClick={onUndo}
+                                disabled={!canUndo}
+                                className="w-8 h-8 flex items-center justify-center text-zinc-500 disabled:opacity-20 hover:text-zinc-900 dark:hover:text-white transition-colors"
                                 title="Cofnij (Ctrl+Z)"
-                             >
-                                 <Undo2 size={16}/>
-                             </button>
-                             <button 
-                                onClick={onRedo} 
-                                disabled={!canRedo} 
-                                className="w-8 h-8 flex items-center justify-center text-zinc-500 disabled:opacity-20 hover:text-zinc-900 dark:hover:text-white transition-colors" 
+                            >
+                                <Undo2 size={16} />
+                            </button>
+                            <button
+                                onClick={onRedo}
+                                disabled={!canRedo}
+                                className="w-8 h-8 flex items-center justify-center text-zinc-500 disabled:opacity-20 hover:text-zinc-900 dark:hover:text-white transition-colors"
                                 title="Ponów (Ctrl+Y)"
-                             >
-                                 <Redo2 size={16}/>
-                             </button>
+                            >
+                                <Redo2 size={16} />
+                            </button>
                         </div>
 
                         {/* Shortcuts Help */}
@@ -213,12 +210,12 @@ export const Header: React.FC<Props> = ({
                             <Keyboard size={16} />
                         </button>
 
-                        <DropdownMenu 
+                        <DropdownMenu
                             trigger={
-                                <div className="w-8 h-8 flex items-center justify-center text-zinc-900 dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-sm transition-colors">
+                                <div className="w-8 h-8 flex items-center justify-center text-zinc-900 dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors">
                                     <Menu size={16} />
                                 </div>
-                            } 
+                            }
                             items={menuItems}
                         />
                     </div>

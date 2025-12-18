@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { CalculationData, AppState, Currency, Language } from '../types';
-import { X, Printer, LayoutTemplate, Merge, RotateCcw } from 'lucide-react';
+import { X, Printer, LayoutTemplate, Merge, RotateCcw, Save } from 'lucide-react';
 import { calculateProjectCosts, formatCurrency, formatNumber } from '../services/calculationService';
+import { storageService } from '../services/storage';
 import { SmartInput } from './SmartInput';
 
 interface Props {
@@ -177,6 +178,32 @@ export const OfferGeneratorModal: React.FC<Props> = ({ data, appState, onClose }
         setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
     };
 
+    const [isSaving, setIsSaving] = useState(false);
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            // 1. Calculate Internal Cost (Backend calculation based on source data)
+            const rate = appState.exchangeRate;
+            const ormFee = appState.globalSettings.ormFeePercent;
+            const costs = calculateProjectCosts(data, rate, currency, appState.mode, ormFee, appState.targetMargin, appState.manualPrice);
+
+            // 2. Calculate Final Price (Based on the actual rows in the UI, which user might have edited)
+            const currentTotalNet = rows.reduce((sum, r) => sum + r.price, 0);
+
+            await storageService.saveCalculation(data, {
+                totalCost: costs.total,
+                totalPrice: currentTotalNet
+            });
+            alert('Oferta została zapisana w bazie danych!');
+        } catch (error) {
+            console.error(error);
+            alert('Błąd zapisu! Upewnij się, że konfiguracja bazy danych jest poprawna.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     const handlePrint = () => window.print();
 
     // Summary Calcs based on Edited Rows
@@ -247,6 +274,9 @@ export const OfferGeneratorModal: React.FC<Props> = ({ data, appState, onClose }
                     </div>
 
                     <div className="flex gap-2">
+                        <button onClick={handleSave} disabled={isSaving} className={`bg-zinc-700 hover:bg-zinc-600 text-white px-4 py-1.5 rounded text-xs font-bold flex items-center gap-2 transition-colors ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                            <Save size={14} /> {isSaving ? 'Zapisywanie...' : 'Zapisz (Chmura)'}
+                        </button>
                         <button onClick={handlePrint} className="bg-amber-500 hover:bg-amber-600 text-black px-4 py-1.5 rounded text-xs font-bold flex items-center gap-2 transition-colors">
                             <Printer size={14} /> Drukuj / PDF
                         </button>
