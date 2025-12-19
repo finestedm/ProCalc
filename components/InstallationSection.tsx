@@ -39,7 +39,7 @@ interface SearchResult {
 
 export const InstallationSection: React.FC<Props> = ({
     data, onChange, exchangeRate, offerCurrency, suppliers,
-    isPickingMode, onPick, onEnterPickingMode, onEditPackage
+    isPickingMode, onPick, onEnterPickingMode, onEditPackage, readOnly
 }) => {
     const [isOpen, setIsOpen] = useState(true);
     const [collapsedStages, setCollapsedStages] = useState<Set<string>>(new Set());
@@ -131,6 +131,21 @@ export const InstallationSection: React.FC<Props> = ({
             window.removeEventListener('resize', updateSearchDropdownPosition);
         };
     }, [showDropdown, searchTerm]);
+
+    // Scroll to new stage when added
+    useEffect(() => {
+        if (data.stages.length > 0) {
+            // Find the last stage element and scroll to it
+            // Implementation detail: using a timeout to ensure DOM is updated
+            setTimeout(() => {
+                const stagesList = document.querySelectorAll('[data-stage-id]');
+                const lastStage = stagesList[stagesList.length - 1];
+                if (lastStage) {
+                    lastStage.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 100);
+        }
+    }, [data.stages.length]);
 
     const stages = data.stages || [];
 
@@ -586,18 +601,18 @@ export const InstallationSection: React.FC<Props> = ({
                 ${isDragged ? 'opacity-30' : ''}
                 ${pickingClass}
             `}
-                draggable={!isPickingMode}
-                onDragStart={(e) => handleDragStart(e, item.id)}
-                onDragOver={(e) => handleDragOver(e, item.id)}
-                onDrop={(e) => handleDrop(e, item.id)}
+                draggable={!isPickingMode && !readOnly}
+                onDragStart={(e) => !readOnly && handleDragStart(e, item.id)}
+                onDragOver={(e) => !readOnly && handleDragOver(e, item.id)}
+                onDrop={(e) => !readOnly && handleDrop(e, item.id)}
                 onDragEnd={handleDragEnd}
                 onClick={(e) => handleGlobalItemPick(e, item)}
                 style={{ paddingLeft: `${(depth * 20) + 8}px` }}
             >
                 {/* Drop Indicators */}
-                {isDragOver && dragPosition === 'top' && <div className="absolute top-0 left-0 right-0 h-0.5 bg-blue-500 z-50"></div>}
-                {isDragOver && dragPosition === 'bottom' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 z-50"></div>}
-                {isDragOver && dragPosition === 'middle' && <div className="absolute inset-0 border-2 border-blue-500 bg-blue-50/20 z-50 pointer-events-none rounded"></div>}
+                {!readOnly && isDragOver && dragPosition === 'top' && <div className="absolute top-0 left-0 right-0 h-0.5 bg-blue-500 z-50"></div>}
+                {!readOnly && isDragOver && dragPosition === 'bottom' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 z-50"></div>}
+                {!readOnly && isDragOver && dragPosition === 'middle' && <div className="absolute inset-0 border-2 border-blue-500 bg-blue-50/20 z-50 pointer-events-none rounded"></div>}
 
                 {/* Hierarchy Visuals */}
                 {depth > 0 && (
@@ -607,7 +622,7 @@ export const InstallationSection: React.FC<Props> = ({
                 )}
 
                 {/* Drag Handle */}
-                {!isPickingMode && (
+                {!isPickingMode && !readOnly && (
                     <div className="cursor-grab active:cursor-grabbing text-zinc-300 hover:text-zinc-500">
                         <GripVertical size={14} />
                     </div>
@@ -629,17 +644,19 @@ export const InstallationSection: React.FC<Props> = ({
                 <div className="relative flex-1 group/input">
                     <input
                         type="text"
-                        className={`w-full p-1.5 border-0 bg-transparent text-xs font-medium outline-none focus:ring-1 focus:ring-amber-300 rounded transition-all ${isLinked ? 'pl-7' : ''} ${hasChildren ? 'font-bold text-zinc-800 dark:text-zinc-100' : ''}`}
+                        className={`w-full p-1.5 border-0 bg-transparent text-xs font-medium outline-none focus:ring-1 focus:ring-amber-300 rounded transition-all ${isLinked ? 'pl-7' : ''} ${hasChildren ? 'font-bold text-zinc-800 dark:text-zinc-100' : ''} ${readOnly ? 'opacity-80 pointer-events-none' : ''}`}
                         value={item.description}
                         onChange={e => updateGlobalCustomItem(item.id, 'description', e.target.value)}
                         placeholder={hasChildren ? "Nazwa Grupy/Pakietu..." : "Opis pozycji..."}
+                        readOnly={readOnly}
                     />
                     {isLinked && (
                         <div className="absolute left-1.5 top-1/2 -translate-y-1/2 flex items-center">
                             <button
                                 onClick={(e) => { e.stopPropagation(); handleUnlinkGlobalItem(item.id); }}
-                                className="text-cyan-500 hover:text-red-500"
+                                className={`text-cyan-500 hover:text-red-500 ${readOnly ? 'pointer-events-none opacity-50' : ''}`}
                                 title={`Połączono z ${linkedCount} elementami. Kliknij aby odłączyć.`}
+                                disabled={readOnly}
                             >
                                 <Link size={12} />
                             </button>
@@ -648,6 +665,7 @@ export const InstallationSection: React.FC<Props> = ({
                                     onClick={(e) => { e.stopPropagation(); onEditPackage(item); }}
                                     className="ml-1 text-zinc-300 hover:text-purple-500 opacity-0 group-hover/input:opacity-100 transition-opacity"
                                     title="Edytuj szczegóły pakietu"
+                                    disabled={readOnly}
                                 >
                                     <Edit3 size={12} />
                                 </button>
@@ -666,14 +684,15 @@ export const InstallationSection: React.FC<Props> = ({
                         <>
                             <input
                                 type="number"
-                                className={`w-full p-1.5 border-0 rounded text-xs text-center outline-none focus:ring-1 focus:ring-amber-300 ${isAuto ? 'bg-cyan-50 text-cyan-700 font-bold' : 'bg-zinc-50 dark:bg-zinc-800'}`}
+                                className={`w-full p-1.5 border-0 rounded text-xs text-center outline-none focus:ring-1 focus:ring-amber-300 ${isAuto ? 'bg-cyan-50 text-cyan-700 font-bold' : 'bg-zinc-50 dark:bg-zinc-800'} ${readOnly ? 'opacity-80 pointer-events-none' : ''}`}
                                 value={item.quantity}
                                 onChange={e => updateGlobalCustomItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
+                                readOnly={readOnly}
                             />
                             {isAuto && (
                                 <Lock size={8} className="absolute right-1 top-2 text-cyan-300" />
                             )}
-                            {!isAuto && isLinked && (
+                            {!isAuto && isLinked && !readOnly && (
                                 <button
                                     onClick={() => handleSyncGlobalItem(item.id)}
                                     className="absolute right-1 top-2 text-orange-400 hover:text-cyan-600"
@@ -696,26 +715,29 @@ export const InstallationSection: React.FC<Props> = ({
                         className="w-20 p-1.5 border-0 bg-zinc-50 dark:bg-zinc-800 rounded text-xs text-right outline-none focus:ring-1 focus:ring-amber-300"
                         value={item.unitPrice}
                         onChange={val => updateGlobalCustomItem(item.id, 'unitPrice', val)}
+                        readOnly={readOnly}
                     />
                 )}
 
                 {/* Actions */}
-                <div className="flex items-center gap-1 pl-2 border-l border-zinc-100 dark:border-zinc-800 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                        onClick={() => updateGlobalCustomItem(item.id, 'isExcluded', !item.isExcluded)}
-                        className={`p-1.5 rounded transition-colors ${item.isExcluded ? 'text-zinc-400 hover:text-zinc-600' : 'text-zinc-300 hover:text-amber-500'}`}
-                        title={item.isExcluded ? "Przywróć" : "Wyklucz"}
-                    >
-                        {item.isExcluded ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                    <button
-                        onClick={() => removeGlobalCustomItem(item.id)}
-                        className="text-zinc-300 hover:text-red-500 p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
-                        title="Usuń"
-                    >
-                        <Trash2 size={14} />
-                    </button>
-                </div>
+                {!readOnly && (
+                    <div className="flex items-center gap-1 pl-2 border-l border-zinc-100 dark:border-zinc-800 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                            onClick={() => updateGlobalCustomItem(item.id, 'isExcluded', !item.isExcluded)}
+                            className={`p-1.5 rounded transition-colors ${item.isExcluded ? 'text-zinc-400 hover:text-zinc-600' : 'text-zinc-300 hover:text-amber-500'}`}
+                            title={item.isExcluded ? "Przywróć" : "Wyklucz"}
+                        >
+                            {item.isExcluded ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                        <button
+                            onClick={() => removeGlobalCustomItem(item.id)}
+                            className="text-zinc-300 hover:text-red-500 p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                            title="Usuń"
+                        >
+                            <Trash2 size={14} />
+                        </button>
+                    </div>
+                )}
             </div>
         );
     };
@@ -749,6 +771,7 @@ export const InstallationSection: React.FC<Props> = ({
                 stageDuration = timeBasedDuration;
             }
         }
+        if (stageDuration < 1) stageDuration = 1;
 
         const addCustomItem = () => updateStage(stage.id, { customItems: [...stage.customItems, { id: Math.random().toString(36).substr(2, 9), description: '', quantity: 1, unitPrice: 0 }] });
         const removeCustomItem = (idx: number) => updateStage(stage.id, { customItems: stage.customItems.filter((_, i) => i !== idx) });
@@ -842,13 +865,14 @@ export const InstallationSection: React.FC<Props> = ({
                         <div className="relative group flex-1">
                             <input
                                 type="text"
-                                className="font-bold text-base text-zinc-800 dark:text-zinc-100 bg-transparent outline-none border-0 focus:ring-0 px-0 transition-all w-full"
+                                className={`font-bold text-base text-zinc-800 dark:text-zinc-100 bg-transparent outline-none border-0 focus:ring-0 px-0 transition-all w-full ${readOnly ? 'opacity-90 pointer-events-none' : ''}`}
                                 value={stage.name}
                                 onChange={(e) => updateStage(stage.id, { name: e.target.value })}
                                 placeholder="Nazwa Etapu (np. Antresola)"
                                 onClick={(e) => e.stopPropagation()}
+                                readOnly={readOnly}
                             />
-                            <Edit2 size={12} className="absolute -right-4 top-1/2 -translate-y-1/2 text-zinc-400 opacity-0 group-hover/opacity-100 transition-opacity pointer-events-none" />
+                            {!readOnly && <Edit2 size={12} className="absolute -right-4 top-1/2 -translate-y-1/2 text-zinc-400 opacity-0 group-hover/opacity-100 transition-opacity pointer-events-none" />}
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
@@ -856,7 +880,9 @@ export const InstallationSection: React.FC<Props> = ({
                             <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Koszt Etapu</span>
                             <div className="font-mono font-bold text-zinc-800 dark:text-zinc-200 text-sm">{formatNumber(stageCost)} PLN</div>
                         </div>
-                        <button onClick={(e) => { e.stopPropagation(); removeStage(stage.id); }} className="text-zinc-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors"><Trash2 size={16} /></button>
+                        {!readOnly && (
+                            <button onClick={(e) => { e.stopPropagation(); removeStage(stage.id); }} className="text-zinc-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors"><Trash2 size={16} /></button>
+                        )}
                     </div>
                 </div>
 
@@ -877,13 +903,14 @@ export const InstallationSection: React.FC<Props> = ({
                                             return (
                                                 <button
                                                     key={s.id}
-                                                    onClick={() => toggleSupplierInStage(stage.id, s.id)}
+                                                    onClick={() => !readOnly && toggleSupplierInStage(stage.id, s.id)}
+                                                    disabled={readOnly}
                                                     className={`w-full text-left px-2 py-1.5 text-[11px] flex justify-between items-center transition-all rounded ${isLinked
                                                         ? 'bg-white dark:bg-zinc-900 border border-cyan-200 dark:border-cyan-800 text-cyan-800 dark:text-cyan-400 font-bold shadow-sm'
                                                         : linkedElsewhere
                                                             ? 'bg-transparent text-zinc-400 border border-transparent opacity-60'
                                                             : 'bg-white dark:bg-zinc-950 text-zinc-600 dark:text-zinc-300 border border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                                                        }`}
+                                                        } ${readOnly ? 'pointer-events-none opacity-80' : ''}`}
                                                 >
                                                     <span className="truncate">{s.customTabName || s.name}</span>
                                                     {isLinked && <CheckLink size={12} className="text-cyan-500" />}
@@ -895,19 +922,19 @@ export const InstallationSection: React.FC<Props> = ({
 
                                 <div className="lg:col-span-2 space-y-4">
                                     <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded">
-                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'PALLETS' })} className={`flex-1 py-1.5 text-[10px] font-bold transition-all rounded ${stage.calcMethod === 'PALLETS' ? 'bg-white dark:bg-zinc-600 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'}`}>Miejsca Paletowe</button>
-                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'TIME' })} className={`flex-1 py-1.5 text-[10px] font-bold transition-all rounded ${stage.calcMethod === 'TIME' ? 'bg-white dark:bg-zinc-600 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'}`}>Roboczogodziny</button>
-                                        <button onClick={() => updateStage(stage.id, { calcMethod: 'BOTH' })} className={`flex-1 py-1.5 text-[10px] font-bold transition-all rounded ${stage.calcMethod === 'BOTH' ? 'bg-white dark:bg-zinc-600 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'}`}>Łączona</button>
+                                        <button disabled={readOnly} onClick={() => updateStage(stage.id, { calcMethod: 'PALLETS' })} className={`flex-1 py-1.5 text-[10px] font-bold transition-all rounded ${stage.calcMethod === 'PALLETS' ? 'bg-white dark:bg-zinc-600 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'} ${readOnly ? 'opacity-80 pointer-events-none' : ''}`}>Miejsca Paletowe</button>
+                                        <button disabled={readOnly} onClick={() => updateStage(stage.id, { calcMethod: 'TIME' })} className={`flex-1 py-1.5 text-[10px] font-bold transition-all rounded ${stage.calcMethod === 'TIME' ? 'bg-white dark:bg-zinc-600 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'} ${readOnly ? 'opacity-80 pointer-events-none' : ''}`}>Roboczogodziny</button>
+                                        <button disabled={readOnly} onClick={() => updateStage(stage.id, { calcMethod: 'BOTH' })} className={`flex-1 py-1.5 text-[10px] font-bold transition-all rounded ${stage.calcMethod === 'BOTH' ? 'bg-white dark:bg-zinc-600 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700'} ${readOnly ? 'opacity-80 pointer-events-none' : ''}`}>Łączona</button>
                                     </div>
 
                                     {(stage.calcMethod === 'PALLETS' || stage.calcMethod === 'BOTH') && (
                                         <div className="grid grid-cols-3 gap-3 animate-fadeIn bg-zinc-50/50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 p-3 rounded">
                                             {stage.calcMethod === 'BOTH' && <div className="col-span-3 text-[10px] font-bold text-amber-600 uppercase border-b border-amber-100 pb-1 mb-1">Część 1: Miejsca Paletowe</div>}
-                                            <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Ilość Miejsc</label><input type="number" className="w-full p-2 border-0 rounded text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400" value={stage.palletSpots} onChange={(e) => updateStage(stage.id, { palletSpots: parseFloat(e.target.value) || 0 })} /></div>
-                                            <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Wydajność (szt/dzień)</label><input type="number" className="w-full p-2 border-0 rounded text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400" value={stage.palletSpotsPerDay} onChange={(e) => updateStage(stage.id, { palletSpotsPerDay: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Ilość Miejsc</label><input type="number" className={`w-full p-2 border-0 rounded text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400 ${readOnly ? 'opacity-80 pointer-events-none' : ''}`} value={stage.palletSpots} onChange={(e) => updateStage(stage.id, { palletSpots: parseFloat(e.target.value) || 0 })} readOnly={readOnly} /></div>
+                                            <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Wydajność (szt/dzień)</label><input type="number" className={`w-full p-2 border-0 rounded text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400 ${readOnly ? 'opacity-80 pointer-events-none' : ''}`} value={stage.palletSpotsPerDay} onChange={(e) => updateStage(stage.id, { palletSpotsPerDay: parseFloat(e.target.value) || 0 })} readOnly={readOnly} /></div>
                                             <div>
                                                 <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Cena / Miejsce</label>
-                                                <SmartInput className="w-full p-2 border-0 rounded text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400" value={stage.palletSpotPrice} onChange={(val) => updateStage(stage.id, { palletSpotPrice: val })} />
+                                                <SmartInput className={`w-full p-2 border-0 rounded text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-amber-400 ${readOnly ? 'opacity-80 pointer-events-none' : ''}`} value={stage.palletSpotPrice} onChange={(val) => updateStage(stage.id, { palletSpotPrice: val })} readOnly={readOnly} />
                                             </div>
                                         </div>
                                     )}
@@ -917,14 +944,14 @@ export const InstallationSection: React.FC<Props> = ({
                                             {stage.calcMethod === 'BOTH' && <div className="col-span-4 text-[10px] font-bold text-cyan-600 uppercase border-b border-cyan-100 pb-1 mb-1">Część 2: Roboczogodziny</div>}
                                             <div className="col-span-4 bg-cyan-50 dark:bg-cyan-900/20 p-2 flex justify-between items-center text-xs text-cyan-800 dark:text-cyan-300 border border-cyan-100 dark:border-cyan-800/50">
                                                 <span>ORM: <strong>{stageHours.toFixed(1)}h</strong></span>
-                                                <span className="flex items-center">+ Manual: <input type="number" className="w-12 p-0.5 text-center border-0 bg-white dark:bg-zinc-950 ml-1 focus:ring-1 focus:ring-cyan-300 outline-none text-xs" value={stage.manualLaborHours} onChange={(e) => updateStage(stage.id, { manualLaborHours: parseFloat(e.target.value) || 0 })} /> h</span>
+                                                <span className="flex items-center">+ Manual: <input type="number" className={`w-12 p-0.5 text-center border-0 bg-white dark:bg-zinc-950 ml-1 focus:ring-1 focus:ring-cyan-300 outline-none text-xs ${readOnly ? 'opacity-80 pointer-events-none' : ''}`} value={stage.manualLaborHours} onChange={(e) => updateStage(stage.id, { manualLaborHours: parseFloat(e.target.value) || 0 })} readOnly={readOnly} /> h</span>
                                                 <span>= <strong>{stageTotalHours.toFixed(1)}h</strong></span>
                                             </div>
-                                            <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Osoby</label><input type="number" className="w-full p-2 border-0 rounded text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-400" value={stage.installersCount} onChange={(e) => updateStage(stage.id, { installersCount: parseFloat(e.target.value) || 0 })} /></div>
-                                            <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">h/Dzień</label><input type="number" className="w-full p-2 border-0 rounded text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-400" value={stage.workDayHours} onChange={(e) => updateStage(stage.id, { workDayHours: parseFloat(e.target.value) || 0 })} /></div>
+                                            <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Osoby</label><input type="number" className={`w-full p-2 border-0 rounded text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-400 ${readOnly ? 'opacity-80 pointer-events-none' : ''}`} value={stage.installersCount} onChange={(e) => updateStage(stage.id, { installersCount: parseFloat(e.target.value) || 0 })} readOnly={readOnly} /></div>
+                                            <div><label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">h/Dzień</label><input type="number" className={`w-full p-2 border-0 rounded text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-400 ${readOnly ? 'opacity-80 pointer-events-none' : ''}`} value={stage.workDayHours} onChange={(e) => updateStage(stage.id, { workDayHours: parseFloat(e.target.value) || 0 })} readOnly={readOnly} /></div>
                                             <div className="col-span-2">
                                                 <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Stawka (osobodzień)</label>
-                                                <SmartInput className="w-full p-2 border-0 rounded text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-400" value={stage.manDayRate} onChange={(val) => updateStage(stage.id, { manDayRate: val })} />
+                                                <SmartInput className={`w-full p-2 border-0 rounded text-xs bg-white dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-400 ${readOnly ? 'opacity-80 pointer-events-none' : ''}`} value={stage.manDayRate} onChange={(val) => updateStage(stage.id, { manDayRate: val })} readOnly={readOnly} />
                                             </div>
                                         </div>
                                     )}
@@ -936,30 +963,34 @@ export const InstallationSection: React.FC<Props> = ({
                             <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
                                 <div className="flex justify-between items-center mb-3">
                                     <h4 className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1"><Truck size={12} /> Sprzęt dla etapu</h4>
-                                    <div className="flex gap-2">
-                                        {!hasForklift && (
-                                            <button onClick={() => updateStage(stage.id, { hasForklift: true, forkliftDays: 1 })} className="text-[10px] bg-white border border-zinc-200 hover:border-amber-400 hover:text-amber-600 px-2 py-1 rounded flex items-center gap-1 transition-all">
-                                                <Plus size={10} /> Dodaj Wózek
-                                            </button>
-                                        )}
-                                        {!hasScissorLift && (
-                                            <button onClick={() => updateStage(stage.id, { hasScissorLift: true, scissorLiftDays: 1 })} className="text-[10px] bg-white border border-zinc-200 hover:border-amber-400 hover:text-amber-600 px-2 py-1 rounded flex items-center gap-1 transition-all">
-                                                <Plus size={10} /> Dodaj Podnośnik
-                                            </button>
-                                        )}
-                                    </div>
+                                    {!readOnly && (
+                                        <div className="flex gap-2">
+                                            {!hasForklift && (
+                                                <button onClick={() => updateStage(stage.id, { hasForklift: true, forkliftDays: 1 })} className="text-[10px] bg-white border border-zinc-200 hover:border-amber-400 hover:text-amber-600 px-2 py-1 rounded flex items-center gap-1 transition-all">
+                                                    <Plus size={10} /> Dodaj Wózek
+                                                </button>
+                                            )}
+                                            {!hasScissorLift && (
+                                                <button onClick={() => updateStage(stage.id, { hasScissorLift: true, scissorLiftDays: 1 })} className="text-[10px] bg-white border border-zinc-200 hover:border-amber-400 hover:text-amber-600 px-2 py-1 rounded flex items-center gap-1 transition-all">
+                                                    <Plus size={10} /> Dodaj Podnośnik
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {hasForklift && (
                                         <div className="bg-zinc-50 dark:bg-zinc-900/30 p-3 border border-zinc-100 dark:border-zinc-800 relative group animate-fadeIn rounded">
-                                            <button
-                                                onClick={() => updateStage(stage.id, { hasForklift: false, forkliftDays: 0, forkliftDailyRate: 0, forkliftTransportPrice: 0 })}
-                                                className="absolute top-2 right-2 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                                                title="Usuń Wózek"
-                                            >
-                                                <Trash2 size={12} />
-                                            </button>
+                                            {!readOnly && (
+                                                <button
+                                                    onClick={() => updateStage(stage.id, { hasForklift: false, forkliftDays: 0, forkliftDailyRate: 0, forkliftTransportPrice: 0 })}
+                                                    className="absolute top-2 right-2 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                                                    title="Usuń Wózek"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            )}
                                             <div className="flex justify-between mb-2"><span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Wózek Widłowy</span></div>
                                             <div className="grid grid-cols-4 gap-2 text-[9px] text-zinc-400 font-bold uppercase mb-0.5">
                                                 <div>Stawka dzienna</div>
@@ -968,10 +999,10 @@ export const InstallationSection: React.FC<Props> = ({
                                                 <div>Koszt Transportu</div>
                                             </div>
                                             <div className="grid grid-cols-4 gap-2">
-                                                <SmartInput placeholder="0.00" className="p-1.5 border-0 text-xs bg-white dark:bg-zinc-800" value={stage.forkliftDailyRate} onChange={val => updateStage(stage.id, { forkliftDailyRate: val })} />
+                                                <SmartInput placeholder="0.00" className={`p-1.5 border-0 text-xs bg-white dark:bg-zinc-800 ${readOnly ? 'opacity-80 pointer-events-none' : ''}`} value={stage.forkliftDailyRate} onChange={val => updateStage(stage.id, { forkliftDailyRate: val })} readOnly={readOnly} />
                                                 <div className="relative">
-                                                    <input type="number" placeholder="0" className={`p-1.5 border-0 text-xs w-full bg-white dark:bg-zinc-800 ${stage.forkliftDays !== Math.max(0, stageDuration - (stage.forkliftStartOffset || 0)) ? 'ring-1 ring-orange-300' : ''}`} value={stage.forkliftDays} onChange={e => updateStage(stage.id, { forkliftDays: parseFloat(e.target.value) || 0 })} />
-                                                    {stage.forkliftDays !== stageDuration && stageDuration > 0 && (
+                                                    <input type="number" placeholder="0" className={`p-1.5 border-0 text-xs w-full bg-white dark:bg-zinc-800 ${stage.forkliftDays !== Math.max(0, stageDuration - (stage.forkliftStartOffset || 0)) ? 'ring-1 ring-orange-300' : ''} ${readOnly ? 'opacity-80 pointer-events-none' : ''}`} value={stage.forkliftDays} onChange={e => updateStage(stage.id, { forkliftDays: parseFloat(e.target.value) || 0 })} readOnly={readOnly} />
+                                                    {stage.forkliftDays !== stageDuration && stageDuration > 0 && !readOnly && (
                                                         <button onClick={() => updateStage(stage.id, { forkliftDays: stageDuration })} className="absolute right-1 top-1 text-blue-500 hover:text-blue-700 p-0.5" title="Sync"><RefreshCw size={10} /></button>
                                                     )}
                                                 </div>
@@ -980,26 +1011,29 @@ export const InstallationSection: React.FC<Props> = ({
                                                     <input
                                                         type="number"
                                                         placeholder="0"
-                                                        className="p-1.5 pl-5 border-0 text-xs w-full bg-white dark:bg-zinc-800 text-zinc-500"
+                                                        className={`p-1.5 pl-5 border-0 text-xs w-full bg-white dark:bg-zinc-800 text-zinc-500 ${readOnly ? 'opacity-80 pointer-events-none' : ''}`}
                                                         value={stage.forkliftStartOffset || 0}
                                                         onChange={e => handleForkliftOffsetChange(parseFloat(e.target.value) || 0)}
                                                         title="Opóźnienie względem startu etapu (dni)"
+                                                        readOnly={readOnly}
                                                     />
                                                 </div>
-                                                <SmartInput placeholder="0.00" className="p-1.5 border-0 text-xs bg-white dark:bg-zinc-800" value={stage.forkliftTransportPrice} onChange={val => updateStage(stage.id, { forkliftTransportPrice: val })} />
+                                                <SmartInput placeholder="0.00" className={`p-1.5 border-0 text-xs bg-white dark:bg-zinc-800 ${readOnly ? 'opacity-80 pointer-events-none' : ''}`} value={stage.forkliftTransportPrice} onChange={val => updateStage(stage.id, { forkliftTransportPrice: val })} readOnly={readOnly} />
                                             </div>
                                         </div>
                                     )}
 
                                     {hasScissorLift && (
                                         <div className="bg-zinc-50 dark:bg-zinc-900/30 p-3 border border-zinc-100 dark:border-zinc-800 relative group animate-fadeIn rounded">
-                                            <button
-                                                onClick={() => updateStage(stage.id, { hasScissorLift: false, scissorLiftDays: 0, scissorLiftDailyRate: 0, scissorLiftTransportPrice: 0 })}
-                                                className="absolute top-2 right-2 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                                                title="Usuń Podnośnik"
-                                            >
-                                                <Trash2 size={12} />
-                                            </button>
+                                            {!readOnly && (
+                                                <button
+                                                    onClick={() => updateStage(stage.id, { hasScissorLift: false, scissorLiftDays: 0, scissorLiftDailyRate: 0, scissorLiftTransportPrice: 0 })}
+                                                    className="absolute top-2 right-2 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                                                    title="Usuń Podnośnik"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            )}
                                             <div className="flex justify-between mb-2"><span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Podnośnik</span></div>
                                             <div className="grid grid-cols-4 gap-2 text-[9px] text-zinc-400 font-bold uppercase mb-0.5">
                                                 <div>Stawka dzienna</div>
@@ -1008,10 +1042,10 @@ export const InstallationSection: React.FC<Props> = ({
                                                 <div>Koszt Transportu</div>
                                             </div>
                                             <div className="grid grid-cols-4 gap-2">
-                                                <SmartInput placeholder="0.00" className="p-1.5 border-0 text-xs bg-white dark:bg-zinc-800" value={stage.scissorLiftDailyRate} onChange={val => updateStage(stage.id, { scissorLiftDailyRate: val })} />
+                                                <SmartInput placeholder="0.00" className={`p-1.5 border-0 text-xs bg-white dark:bg-zinc-800 ${readOnly ? 'opacity-80 pointer-events-none' : ''}`} value={stage.scissorLiftDailyRate} onChange={val => updateStage(stage.id, { scissorLiftDailyRate: val })} readOnly={readOnly} />
                                                 <div className="relative">
-                                                    <input type="number" placeholder="0" className={`p-1.5 border-0 text-xs w-full bg-white dark:bg-zinc-800 ${stage.scissorLiftDays !== Math.max(0, stageDuration - (stage.scissorLiftStartOffset || 0)) ? 'ring-1 ring-orange-300' : ''}`} value={stage.scissorLiftDays} onChange={e => updateStage(stage.id, { scissorLiftDays: parseFloat(e.target.value) || 0 })} />
-                                                    {stage.scissorLiftDays !== stageDuration && stageDuration > 0 && (
+                                                    <input type="number" placeholder="0" className={`p-1.5 border-0 text-xs w-full bg-white dark:bg-zinc-800 ${stage.scissorLiftDays !== Math.max(0, stageDuration - (stage.scissorLiftStartOffset || 0)) ? 'ring-1 ring-orange-300' : ''} ${readOnly ? 'opacity-80 pointer-events-none' : ''}`} value={stage.scissorLiftDays} onChange={e => updateStage(stage.id, { scissorLiftDays: parseFloat(e.target.value) || 0 })} readOnly={readOnly} />
+                                                    {stage.scissorLiftDays !== stageDuration && stageDuration > 0 && !readOnly && (
                                                         <button onClick={() => updateStage(stage.id, { scissorLiftDays: stageDuration })} className="absolute right-1 top-1 text-blue-500 hover:text-blue-700 p-0.5" title="Sync"><RefreshCw size={10} /></button>
                                                     )}
                                                 </div>
@@ -1020,20 +1054,21 @@ export const InstallationSection: React.FC<Props> = ({
                                                     <input
                                                         type="number"
                                                         placeholder="0"
-                                                        className="p-1.5 pl-5 border-0 text-xs w-full bg-white dark:bg-zinc-800 text-zinc-500"
+                                                        className={`p-1.5 pl-5 border-0 text-xs w-full bg-white dark:bg-zinc-800 text-zinc-500 ${readOnly ? 'opacity-80 pointer-events-none' : ''}`}
                                                         value={stage.scissorLiftStartOffset || 0}
                                                         onChange={e => handleScissorOffsetChange(parseFloat(e.target.value) || 0)}
                                                         title="Opóźnienie względem startu etapu (dni)"
+                                                        readOnly={readOnly}
                                                     />
                                                 </div>
-                                                <SmartInput placeholder="0.00" className="p-1.5 border-0 text-xs bg-white dark:bg-zinc-800" value={stage.scissorLiftTransportPrice} onChange={val => updateStage(stage.id, { scissorLiftTransportPrice: val })} />
+                                                <SmartInput placeholder="0.00" className={`p-1.5 border-0 text-xs bg-white dark:bg-zinc-800 ${readOnly ? 'opacity-80 pointer-events-none' : ''}`} value={stage.scissorLiftTransportPrice} onChange={val => updateStage(stage.id, { scissorLiftTransportPrice: val })} readOnly={readOnly} />
                                             </div>
                                         </div>
                                     )}
 
                                     {!hasForklift && !hasScissorLift && (
                                         <div className="col-span-1 md:col-span-2 p-4 text-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded text-xs text-zinc-400 italic">
-                                            Brak sprzętu w tym etapie. Dodaj wózek lub podnośnik przyciskiem powyżej.
+                                            Brak sprzętu w tym etapie.{!readOnly && " Dodaj wózek lub podnośnik przyciskiem powyżej."}
                                         </div>
                                     )}
                                 </div>
@@ -1042,7 +1077,7 @@ export const InstallationSection: React.FC<Props> = ({
                             <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800">
                                 <div className="flex justify-between items-center mb-2">
                                     <h4 className="text-[10px] font-bold text-zinc-500 uppercase flex items-center gap-1"><Settings size={12} /> Dodatki (W Etapie)</h4>
-                                    <button onClick={addCustomItem} className="text-[10px] bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-700 dark:hover:bg-zinc-600 px-2 py-1 flex items-center gap-1 transition-colors font-bold"><Plus size={10} /> Dodaj</button>
+                                    {!readOnly && <button onClick={addCustomItem} className="text-[10px] bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-700 dark:hover:bg-zinc-600 px-2 py-1 flex items-center gap-1 transition-colors font-bold"><Plus size={10} /> Dodaj</button>}
                                 </div>
 
                                 {stage.customItems.map((item, idx) => {
@@ -1055,16 +1090,18 @@ export const InstallationSection: React.FC<Props> = ({
                                             <div className="relative flex-1">
                                                 <input
                                                     type="text"
-                                                    className={`w-full p-1.5 border-0 rounded text-xs bg-zinc-50 dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-300 transition-all ${isLinked ? 'pl-7' : ''}`}
+                                                    className={`w-full p-1.5 border-0 rounded text-xs bg-zinc-50 dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-300 transition-all ${isLinked ? 'pl-7' : ''} ${readOnly ? 'opacity-80 pointer-events-none' : ''}`}
                                                     value={item.description}
                                                     onChange={e => updateCustomItem(idx, 'description', e.target.value)}
                                                     placeholder="Opis..."
+                                                    readOnly={readOnly}
                                                 />
                                                 {isLinked && (
                                                     <button
-                                                        onClick={() => handleUnlinkAll(idx)}
-                                                        className="absolute left-1.5 top-1/2 -translate-y-1/2 text-cyan-500 hover:text-red-500"
+                                                        onClick={() => !readOnly && handleUnlinkAll(idx)}
+                                                        className={`absolute left-1.5 top-1/2 -translate-y-1/2 text-cyan-500 hover:text-red-500 ${readOnly ? 'pointer-events-none opacity-50' : ''}`}
                                                         title={`Połączono z ${linkedCount} elementami. Kliknij aby odłączyć.`}
+                                                        disabled={readOnly}
                                                     >
                                                         <Link size={12} />
                                                     </button>
@@ -1074,14 +1111,15 @@ export const InstallationSection: React.FC<Props> = ({
                                             <div className="relative w-16">
                                                 <input
                                                     type="number"
-                                                    className={`w-full p-1.5 border-0 rounded text-xs text-center outline-none ${isAuto ? 'bg-cyan-50 text-cyan-700 font-bold' : 'bg-zinc-50 dark:bg-zinc-800'}`}
+                                                    className={`w-full p-1.5 border-0 rounded text-xs text-center outline-none ${isAuto ? 'bg-cyan-50 text-cyan-700 font-bold' : 'bg-zinc-50 dark:bg-zinc-800'} ${readOnly ? 'opacity-80 pointer-events-none' : ''}`}
                                                     value={item.quantity}
                                                     onChange={e => updateCustomItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                                                    readOnly={readOnly}
                                                 />
                                                 {isAuto && (
                                                     <Lock size={8} className="absolute right-1 top-2 text-cyan-300" />
                                                 )}
-                                                {!isAuto && isLinked && (
+                                                {!isAuto && isLinked && !readOnly && (
                                                     <button
                                                         onClick={() => handleSyncItem(idx)}
                                                         className="absolute right-1 top-2 text-orange-400 hover:text-cyan-600"
@@ -1092,17 +1130,19 @@ export const InstallationSection: React.FC<Props> = ({
                                                 )}
                                             </div>
 
-                                            <SmartInput className="w-16 p-1.5 border-0 rounded text-xs text-right bg-zinc-50 dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-300" value={item.unitPrice} onChange={val => updateCustomItem(idx, 'unitPrice', val)} />
+                                            <SmartInput className={`w-16 p-1.5 border-0 rounded text-xs text-right bg-zinc-50 dark:bg-zinc-800 outline-none focus:ring-1 focus:ring-cyan-300 ${readOnly ? 'opacity-80 pointer-events-none' : ''}`} value={item.unitPrice} onChange={val => updateCustomItem(idx, 'unitPrice', val)} readOnly={readOnly} />
 
                                             <div className="relative">
                                                 <button
                                                     onClick={(e) => {
+                                                        if (readOnly) return;
                                                         const rect = e.currentTarget.getBoundingClientRect();
                                                         setDropdownPos({ top: rect.bottom + 5, left: Math.max(10, rect.right - 320) });
                                                         setLinkMenuOpen({ stageId: stage.id, itemIdx: idx });
                                                     }}
-                                                    className={`p-1.5 text-zinc-400 hover:text-cyan-500 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 transition-colors ${linkMenuOpen?.stageId === stage.id && linkMenuOpen.itemIdx === idx ? 'bg-cyan-100 text-cyan-600' : ''}`}
+                                                    className={`p-1.5 text-zinc-400 hover:text-cyan-500 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 transition-colors ${linkMenuOpen?.stageId === stage.id && linkMenuOpen.itemIdx === idx ? 'bg-cyan-100 text-cyan-600' : ''} ${readOnly ? 'pointer-events-none opacity-50' : ''}`}
                                                     title="Wybierz elementy/grupy do zsumowania"
+                                                    disabled={readOnly}
                                                 >
                                                     <Link size={14} />
                                                 </button>
@@ -1200,8 +1240,12 @@ export const InstallationSection: React.FC<Props> = ({
                                                 )}
                                             </div>
 
-                                            <button onClick={() => updateCustomItem(idx, 'isExcluded', !item.isExcluded)} className="text-zinc-400 hover:text-zinc-600">{item.isExcluded ? <EyeOff size={14} /> : <Eye size={14} />}</button>
-                                            <button onClick={() => removeCustomItem(idx)} className="text-zinc-300 hover:text-red-500"><Trash2 size={14} /></button>
+                                            {!readOnly && (
+                                                <>
+                                                    <button onClick={() => updateCustomItem(idx, 'isExcluded', !item.isExcluded)} className="text-zinc-400 hover:text-zinc-600">{item.isExcluded ? <EyeOff size={14} /> : <Eye size={14} />}</button>
+                                                    <button onClick={() => removeCustomItem(idx)} className="text-zinc-300 hover:text-red-500"><Trash2 size={14} /></button>
+                                                </>
+                                            )}
                                         </div>
                                     );
                                 })}
@@ -1212,6 +1256,8 @@ export const InstallationSection: React.FC<Props> = ({
             </div>
         );
     };
+
+
 
     return (
         <div className="bg-white dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 mb-6 transition-colors relative z-10">
@@ -1254,8 +1300,8 @@ export const InstallationSection: React.FC<Props> = ({
                                 <EmptyState
                                     icon={Wrench}
                                     title="Brak Etapów Montażu"
-                                    description="Projekt nie zawiera jeszcze kosztów montażu. Dodaj pierwszy etap, aby rozpocząć kalkulację prac i sprzętu."
-                                    action={{
+                                    description={readOnly ? "Projekt nie zawiera kosztów montażu." : "Projekt nie zawiera jeszcze kosztów montażu. Dodaj pierwszy etap, aby rozpocząć kalkulację prac i sprzętu."}
+                                    action={readOnly ? undefined : {
                                         label: "Dodaj Pierwszy Etap",
                                         onClick: addStage,
                                         icon: Plus
@@ -1266,7 +1312,7 @@ export const InstallationSection: React.FC<Props> = ({
 
                         {stages.map((stage, idx) => renderStage(stage, idx))}
 
-                        {stages.length > 0 && (
+                        {stages.length > 0 && !readOnly && (
                             <div className="mt-2 flex justify-center">
                                 <button
                                     onClick={addStage}
@@ -1293,7 +1339,7 @@ export const InstallationSection: React.FC<Props> = ({
                                         <input
                                             ref={searchInputRef}
                                             type="text"
-                                            className="w-full pl-9 p-2 border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-none focus:border-amber-400 dark:bg-zinc-900 dark:text-white transition-all font-mono bg-white"
+                                            className={`w-full pl-9 p-2 border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-none focus:border-amber-400 dark:bg-zinc-900 dark:text-white transition-all font-mono bg-white ${readOnly ? 'opacity-80 pointer-events-none' : ''}`}
                                             placeholder="Szukaj elementów do montażu..."
                                             value={searchTerm}
                                             onChange={(e) => {
@@ -1301,9 +1347,10 @@ export const InstallationSection: React.FC<Props> = ({
                                                 setShowDropdown(true);
                                             }}
                                             onFocus={() => setShowDropdown(true)}
+                                            readOnly={readOnly}
                                         />
                                     </div>
-                                    {onEnterPickingMode && (
+                                    {onEnterPickingMode && !readOnly && (
                                         <button
                                             onClick={() => onEnterPickingMode('GLOBAL_INSTALLATION')}
                                             className="bg-amber-400 hover:bg-amber-500 text-black px-3 py-2 rounded transition-colors shadow-sm flex items-center gap-2 font-bold text-[10px] uppercase whitespace-nowrap"
@@ -1315,7 +1362,7 @@ export const InstallationSection: React.FC<Props> = ({
                                 </div>
 
                                 {/* Search Dropdown */}
-                                {showDropdown && searchTerm && searchDropdownPosition && (
+                                {showDropdown && searchTerm && searchDropdownPosition && !readOnly && (
                                     <div
                                         ref={dropdownRef}
                                         className="fixed bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-2xl rounded max-h-80 overflow-y-auto z-[9999] flex flex-col"
@@ -1351,7 +1398,7 @@ export const InstallationSection: React.FC<Props> = ({
                                     {data.customItems.length === 0 && (
                                         <div className="text-xs text-zinc-400 italic text-center py-6 bg-zinc-50 dark:bg-zinc-900/50">
                                             <Archive size={24} className="mx-auto mb-2 opacity-20" />
-                                            Brak globalnych pozycji montażowych. Dodaj przez wyszukiwanie lub ręcznie.
+                                            {readOnly ? "Brak globalnych pozycji montażowych." : "Brak globalnych pozycji montażowych. Dodaj przez wyszukiwanie lub ręcznie."}
                                         </div>
                                     )}
 
@@ -1364,14 +1411,16 @@ export const InstallationSection: React.FC<Props> = ({
                                     ))}
                                 </div>
 
-                                <div className="flex justify-end">
-                                    <button
-                                        onClick={addGlobalCustomItem}
-                                        className="text-[10px] bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 px-3 py-1 rounded flex items-center gap-1 transition-colors font-bold shadow-sm"
-                                    >
-                                        <Plus size={10} /> Dodaj pusty wiersz
-                                    </button>
-                                </div>
+                                {!readOnly && (
+                                    <div className="flex justify-end">
+                                        <button
+                                            onClick={addGlobalCustomItem}
+                                            className="text-[10px] bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 px-3 py-1 rounded flex items-center gap-1 transition-colors font-bold shadow-sm"
+                                        >
+                                            <Plus size={10} /> Dodaj pusty wiersz
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -1382,10 +1431,11 @@ export const InstallationSection: React.FC<Props> = ({
                                     <p className="text-[9px] text-zinc-400">Koszty nieprzypisane do konkretnego etapu (np. dojazd koordynatora).</p>
                                 </div>
                                 <SmartInput
-                                    className="w-24 p-2 border-0 bg-white dark:bg-zinc-800 text-right font-bold focus:ring-1 focus:ring-amber-400 outline-none text-sm"
+                                    className={`w-24 p-2 border-0 bg-white dark:bg-zinc-800 text-right font-bold focus:ring-1 focus:ring-amber-400 outline-none text-sm ${readOnly ? 'opacity-80 pointer-events-none' : ''}`}
                                     value={data.otherInstallationCosts}
                                     onChange={(val) => onChange({ ...data, otherInstallationCosts: val })}
                                     placeholder="0.00"
+                                    readOnly={readOnly}
                                 />
                             </div>
                         </div>

@@ -1,27 +1,19 @@
 /// <reference types="vite/client" />
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { supabase } from '../supabaseClient';
 import { CalculationData } from '../../types';
 import { ICalculationStorage, SavedCalculation } from './types';
 
 export class SupabaseStorage implements ICalculationStorage {
-    private supabase: SupabaseClient | null = null;
+    private supabase: SupabaseClient = supabase;
     private tableName = 'calculations';
 
     constructor() {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
-
-        if (supabaseUrl && supabaseKey) {
-            this.supabase = createClient(supabaseUrl, supabaseKey);
-        } else {
-            console.warn('Supabase credentials not found. Storage will not work.');
-        }
+        // Client initialized via shared instance
     }
 
     async saveCalculation(data: any, summary: { totalCost: number, totalPrice: number }): Promise<string> {
-        if (!this.supabase) {
-            throw new Error('Supabase client not initialized. Database connection missing.');
-        }
+
 
         // Get current user
         const { data: { user } } = await this.supabase.auth.getUser();
@@ -55,6 +47,7 @@ export class SupabaseStorage implements ICalculationStorage {
             close_date: meta.protocolDate || null,
             total_cost: summary.totalCost,
             total_price: summary.totalPrice,
+            is_locked: appState?.isLocked || false, // [NEW] Persist lock state
             calc: data // We still save the full object (ProjectFile or CalculationData) in the JSON column
         };
 
@@ -73,11 +66,11 @@ export class SupabaseStorage implements ICalculationStorage {
     }
 
     async getCalculations(): Promise<SavedCalculation[]> {
-        if (!this.supabase) return [];
+
 
         const { data, error } = await this.supabase
             .from(this.tableName)
-            .select('*')
+            .select('*, user:users!user_id(full_name)')
             .order('created_at', { ascending: false });
 
         if (error) {
@@ -89,7 +82,7 @@ export class SupabaseStorage implements ICalculationStorage {
     }
 
     async deleteCalculation(id: string): Promise<void> {
-        if (!this.supabase) throw new Error('Supabase client not initialized');
+
 
         console.log('Attempting to delete calculation with ID:', id);
 
@@ -107,6 +100,99 @@ export class SupabaseStorage implements ICalculationStorage {
 
         if (count === 0) {
             console.warn('No rows were deleted. This might be due to RLS policies or an incorrect ID.');
+        }
+    }
+
+    async setLockState(id: string, isLocked: boolean): Promise<void> {
+        // 1. Fetch the current calculation to get the JSON blob
+        const { data: calcRow, error: fetchError } = await this.supabase
+            .from(this.tableName)
+            .select('calc')
+            .eq('id', id)
+            .single();
+
+        if (fetchError) {
+            console.error('Supabase Fetch for Lock Error:', fetchError);
+            throw new Error(fetchError.message);
+        }
+
+        // 2. Update the JSON blob's lock state
+        const updatedCalc = { ...calcRow.calc };
+        if (updatedCalc.appState) {
+            updatedCalc.appState.isLocked = isLocked;
+        } else {
+            // If it's a flat CalculationData, it might not have appState.
+            // But usually we save ProjectFile which has appState.
+            updatedCalc.isLocked = isLocked;
+        }
+
+        // 3. Update both the column and the JSON blob
+        const { error: updateError } = await this.supabase
+            .from(this.tableName)
+            .update({
+                is_locked: isLocked,
+                calc: updatedCalc
+            })
+            .eq('id', id);
+
+        if (updateError) {
+            console.error('Supabase Lock Error:', updateError);
+            throw new Error(updateError.message);
+        }
+    }
+
+    // Access Requests
+    async createAccessRequest(calculationId: string, message?: string): Promise<void> {
+        const { data: { user } } = await this.supabase.auth.getUser();
+        if (!user) throw new Error('User must be authenticated');
+
+        const { error } = await this.supabase
+            .from('access_requests')
+            .insert({
+                calculation_id: calculationId,
+                user_id: user.id,
+                message: message || 'Prośba o odblokowanie edycji.',
+                status: 'pending'
+            });
+
+        if (error) {
+            console.error('Supabase Create Access Request Error:', error);
+            throw new Error(error.message);
+        }
+    }
+
+    async getPendingAccessRequests(): Promise<any[]> {
+        const { data, error } = await this.supabase
+            .from('access_requests')
+            .select('*, user:users!user_id(full_name), calculation:calculations!calculation_id(project_id, customer_name)')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Supabase Get Access Requests Error:', error);
+            throw new Error(error.message);
+        }
+
+        return data;
+    }
+
+    async updateAccessRequestStatus(requestId: string, status: 'approved' | 'rejected'): Promise<void> {
+        // 1. Update the request status
+        const { data: request, error: requestError } = await this.supabase
+            .from('access_requests')
+            .update({ status })
+            .eq('id', requestId)
+            .select()
+            .single();
+
+        if (requestError) {
+            console.error('Supabase Update Access Request Status Error:', requestError);
+            throw new Error(requestError.message);
+        }
+
+        // 2. If approved, unlock the calculation
+        if (status === 'approved' && request) {
+            await this.setLockState(request.calculation_id, false);
         }
     }
 }

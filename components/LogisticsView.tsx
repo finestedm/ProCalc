@@ -7,7 +7,8 @@ import { OrderPreviewModal } from './OrderPreviewModal';
 
 interface Props {
     data: CalculationData;
-    onChange: (data: CalculationData) => void;
+    onChange: (data: Partial<CalculationData>) => void;
+    readOnly?: boolean;
 }
 
 // --- HELPER: Transport Organization Detection ---
@@ -20,16 +21,18 @@ const isOrganizedBySupplier = (s: Supplier, transport: TransportItem[]) => {
     );
 };
 
-export const LogisticsView: React.FC<Props> = ({ data, onChange }) => {
+export const LogisticsView: React.FC<Props> = ({ data, onChange, readOnly }) => {
     const [previewSuppliers, setPreviewSuppliers] = useState<Supplier[] | null>(null);
 
     const onUpdateSupplier = (supplierId: string, updates: Partial<Supplier>) => {
+        if (readOnly) return;
         const updatedSuppliers = data.suppliers.map(s => s.id === supplierId ? { ...s, ...updates } : s);
-        onChange({ ...data, suppliers: updatedSuppliers });
+        onChange({ suppliers: updatedSuppliers });
     };
 
     const updateInstallation = (updates: Partial<typeof data.installation>) => {
-        onChange({ ...data, installation: { ...data.installation, ...updates } });
+        if (readOnly) return;
+        onChange({ installation: { ...data.installation, ...updates } });
     };
 
     const activeSuppliers = data.suppliers.filter(s => s.isIncluded !== false);
@@ -145,7 +148,8 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange }) => {
                     <select
                         value={supplier.status}
                         onChange={(e) => onUpdateSupplier(supplier.id, { status: e.target.value as SupplierStatus })}
-                        className={`h-8 px-3 rounded text-[10px] font-bold uppercase outline-none border transition-colors cursor-pointer appearance-none ${getStatusColor(supplier.status)}`}
+                        disabled={readOnly}
+                        className={`h-8 px-3 rounded text-[10px] font-bold uppercase outline-none border transition-colors cursor-pointer appearance-none ${getStatusColor(supplier.status)} ${readOnly ? 'opacity-70 cursor-not-allowed' : ''}`}
                     >
                         <option value={SupplierStatus.TO_ORDER}>Do Zamówienia</option>
                         <option value={SupplierStatus.ORDERED}>Zamówione</option>
@@ -154,7 +158,8 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange }) => {
                     <div className="flex items-center h-8 border border-zinc-200 dark:border-zinc-700 rounded overflow-hidden">
                         <button
                             onClick={() => onUpdateSupplier(supplier.id, { language: supplier.language === Language.PL ? Language.EN : Language.PL })}
-                            className="h-full px-2 bg-zinc-50 dark:bg-zinc-800 text-[10px] font-bold text-zinc-500 hover:text-zinc-900 border-r border-zinc-200 dark:border-zinc-700 transition-colors w-8 flex items-center justify-center"
+                            disabled={readOnly}
+                            className="h-full px-2 bg-zinc-50 dark:bg-zinc-800 text-[10px] font-bold text-zinc-500 hover:text-zinc-900 border-r border-zinc-200 dark:border-zinc-700 transition-colors w-8 flex items-center justify-center disabled:opacity-50"
                             title="Zmień język zamówienia"
                         >
                             {supplier.language}
@@ -287,7 +292,8 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange }) => {
                     onUpdateInstallation={updateInstallation}
                     onUpdateSupplier={onUpdateSupplier}
                     tasks={data.tasks}
-                    onUpdateTasks={(tasks) => onChange({ ...data, tasks })}
+                    onUpdateTasks={(tasks) => onChange({ tasks })}
+                    readOnly={readOnly}
                 />
             </div>
 

@@ -3,6 +3,8 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Supplier, InstallationData, ProjectMeta, SupplierStatus, CustomTimelineItem, ProjectTask, InstallationStage, Dependency, TransportItem } from '../types';
 import { Calendar, ZoomIn, ZoomOut, GripHorizontal, GripVertical, MousePointer2, Truck, Plus, Trash2, PenLine, Layers, ClipboardList, X, CheckSquare, Square, Flag, Wrench, ArrowUp, ArrowDown, RefreshCcw, Link2, Link, Car, Maximize2, Minimize2, ChevronRight, ChevronDown, Combine, ChevronLeft, LayoutGrid, Save, Clock, PanelLeft } from 'lucide-react';
 import { DropdownMenu } from './DropdownMenu';
+import { toISODateString, toEuropeanDateString, formatDisplayDate } from '../services/dateUtils';
+import { DatePickerInput } from './DatePickerInput';
 
 interface Props {
     suppliers: Supplier[];
@@ -13,6 +15,7 @@ interface Props {
     onUpdateSupplier: (supplierId: string, updates: Partial<Supplier>) => void;
     tasks?: ProjectTask[];
     onUpdateTasks?: (tasks: ProjectTask[]) => void;
+    readOnly?: boolean;
 }
 
 // --- CONSTANTS ---
@@ -56,7 +59,7 @@ const getWeekNumber = (d: Date) => {
     return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 };
 
-export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, transport = [], onUpdateInstallation, onUpdateSupplier, tasks = [], onUpdateTasks }) => {
+export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, transport = [], onUpdateInstallation, onUpdateSupplier, tasks = [], onUpdateTasks, readOnly }) => {
     const [viewMode, setViewMode] = useState<'GANTT' | 'CALENDAR'>('GANTT');
     const [zoom, setZoom] = useState(1); // 1 = 40px per day
     const [isCompact, setIsCompact] = useState(false);
@@ -223,23 +226,34 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
             if (stage.isExcluded) return;
 
             // Calculate Duration
-            let durationDays = 1;
+            let durationDays = 0;
+
+            // 1. Calculate Time-Based Duration (Standard or Fallback)
+            let totalMinutes = 0;
+            if (stage.linkedSupplierIds) {
+                stage.linkedSupplierIds.forEach(sid => {
+                    const sup = suppliers.find(s => s.id === sid);
+                    if (sup) sup.items.forEach(i => !i.isExcluded && (totalMinutes += (i.quantity * (i.timeMinutes || 0))));
+                });
+            }
+            const totalHours = (totalMinutes / 60) + (stage.manualLaborHours || 0);
+            const cap = (stage.workDayHours || 10) * (stage.installersCount || 1);
+            const timeBasedDuration = cap > 0 ? Math.ceil(totalHours / cap) : 0;
+
+            // 2. Select Method
             if (stage.calcMethod === 'TIME' || stage.calcMethod === 'BOTH') {
-                let totalMinutes = 0;
-                if (stage.linkedSupplierIds) {
-                    stage.linkedSupplierIds.forEach(sid => {
-                        const sup = suppliers.find(s => s.id === sid);
-                        if (sup) sup.items.forEach(i => !i.isExcluded && (totalMinutes += (i.quantity * (i.timeMinutes || 0))));
-                    });
-                }
-                const totalHours = (totalMinutes / 60) + (stage.manualLaborHours || 0);
-                const cap = (stage.workDayHours || 10) * (stage.installersCount || 1);
-                durationDays = cap > 0 ? Math.ceil(totalHours / cap) : 1;
+                durationDays = timeBasedDuration;
             } else {
                 // Pallets
-                const speed = stage.palletSpotsPerDay || 1;
-                durationDays = Math.ceil(stage.palletSpots / speed);
+                if (stage.palletSpots > 0 && stage.palletSpotsPerDay > 0) {
+                    durationDays = Math.ceil(stage.palletSpots / stage.palletSpotsPerDay);
+                } else {
+                    // Fallback to time if pallets invalid
+                    durationDays = timeBasedDuration;
+                }
             }
+
+            // Ensure at least 1 day duration for visibility
             if (durationDays < 1) durationDays = 1;
 
             let start: Date;
@@ -252,14 +266,17 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                 start = new Date(nextStageStart);
             }
 
-            if (stage.endDate) {
+            if (stage.endDate && stage.endDate !== stage.startDate) {
                 end = new Date(stage.endDate);
                 end.setHours(0, 0, 0, 0);
             } else {
+                // strict add: if duration is 0, end = start. If 1, end = start + 1 day
                 end = addBusinessDays(start, durationDays);
             }
 
             // Advance cursor for next stage
+            // If duration was 0, next stage starts on same day (or next business day if logic preferred)
+            // But usually waterfall implies "after this is done". If 0 duration, it's done immediately.
             nextStageStart = addBusinessDays(end, 0);
 
             // Prepare Rentals Data attached to Stage
@@ -360,6 +377,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
     }, [generatedItems, customOrder]);
 
     const moveRow = (index: number, direction: 'up' | 'down') => {
+        if (readOnly) return;
         const newIndex = direction === 'up' ? index - 1 : index + 1;
         if (newIndex < 0 || newIndex >= timelineItems.length) return;
 
@@ -462,9 +480,10 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
     // --- 3. ITEM ACTIONS ---
 
     const handleAddTemplate = (type: 'ASSEMBLY' | 'RENTAL' | 'CUSTOM') => {
+        if (readOnly) return;
         const newId = Math.random().toString(36).substr(2, 9);
-        const sDate = new Date(orderDate).toISOString().split('T')[0];
-        const eDate = new Date(orderDate.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const sDate = toISODateString(orderDate);
+        const eDate = toISODateString(new Date(orderDate.getTime() + 5 * 24 * 60 * 60 * 1000));
 
         if (type === 'CUSTOM') {
             const newItem: CustomTimelineItem = {
@@ -506,6 +525,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
     };
 
     const handleDeleteCustomRow = (id: string) => {
+        if (readOnly) return;
         onUpdateInstallation({ customTimelineItems: (installation.customTimelineItems || []).filter(i => i.id !== id) });
     };
 
@@ -520,6 +540,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
     };
 
     const handleMouseDownItem = (e: React.MouseEvent, id: string, type: typeof dragType, subType: string | null = null) => {
+        if (readOnly) return;
         e.stopPropagation();
         e.preventDefault();
         const item = timelineItems.find(i => i.id === id);
@@ -543,6 +564,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
     };
 
     const handleConnectStart = (e: React.MouseEvent, id: string) => {
+        if (readOnly) return;
         e.stopPropagation();
         e.preventDefault();
         const scrollRect = scrollContainerRef.current?.getBoundingClientRect();
@@ -642,13 +664,18 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                 if (!tState) return;
 
                 if (tState.start < sourceEnd) {
-                    const duration = diffDays(tState.start, tState.end);
+                    const tItem = timelineItems.find(i => i.id === targetId);
+                    let duration = diffDays(tState.start, tState.end);
+                    if ((tItem?.type === 'STAGE' || tItem?.type === 'CUSTOM') && duration < 1) {
+                        duration = 1;
+                    }
+
                     const newStart = new Date(sourceEnd);
                     const newEnd = addBusinessDays(newStart, duration);
 
                     updatesMap.set(targetId, {
-                        start: newStart.toISOString().split('T')[0],
-                        end: newEnd.toISOString().split('T')[0]
+                        start: toISODateString(newStart),
+                        end: toISODateString(newEnd)
                     });
 
                     queue.push(targetId);
@@ -747,8 +774,8 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                         if (dragType === 'DELIVERY' && dragOriginalDate) {
                             const newDate = new Date(dragOriginalDate);
                             newDate.setDate(newDate.getDate() + deltaDays);
-                            const sStr = newDate.toISOString().split('T')[0];
-                            const eStr = addBusinessDays(newDate, 1).toISOString().split('T')[0];
+                            const sStr = toISODateString(newDate);
+                            const eStr = toISODateString(addBusinessDays(newDate, 1));
                             updates[isDragging] = { start: sStr, end: eStr };
 
                         } else if ((dragType === 'STAGE_MOVE' || dragType === 'CUSTOM_MOVE') && dragOriginalDate && dragOriginalEndDate) {
@@ -758,8 +785,8 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                             newEnd.setDate(newEnd.getDate() + deltaDays);
 
                             updates[isDragging] = {
-                                start: newStart.toISOString().split('T')[0],
-                                end: newEnd.toISOString().split('T')[0]
+                                start: toISODateString(newStart),
+                                end: toISODateString(newEnd)
                             };
 
                         } else if ((dragType === 'STAGE_RESIZE' || dragType === 'CUSTOM_RESIZE') && dragOriginalEndDate && dragOriginalDate) {
@@ -768,8 +795,8 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
 
                             if (newEnd >= dragOriginalDate) {
                                 updates[isDragging] = {
-                                    start: dragOriginalDate.toISOString().split('T')[0],
-                                    end: newEnd.toISOString().split('T')[0]
+                                    start: toISODateString(dragOriginalDate),
+                                    end: toISODateString(newEnd)
                                 };
                             }
                         }
@@ -794,6 +821,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
     }, [isDragging, dragOriginalDate, dragOriginalEndDate, dragStartX, pxPerDay, dragType, dragSubType, installation, isConnecting, timelineItems, transport]);
 
     const handleDateChange = (id: string, type: string, field: 'start' | 'end', val: string) => {
+        if (readOnly) return;
         const updates: Record<string, { start: string, end: string }> = {};
         const item = timelineItems.find(i => i.id === id);
         if (!item) return;
@@ -803,9 +831,9 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
             const currentEnd = item.end;
 
             if (field === 'start') {
-                updates[id] = { start: val, end: currentEnd.toISOString().split('T')[0] };
+                updates[id] = { start: val, end: toISODateString(currentEnd) };
             } else {
-                updates[id] = { start: currentStart.toISOString().split('T')[0], end: val };
+                updates[id] = { start: toISODateString(currentStart), end: val };
             }
         } else {
             // Supplier or Group
@@ -817,12 +845,12 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
 
                 // Let's assume 'val' is the chosen Delivery Date.
                 const d = new Date(val);
-                const eStr = addBusinessDays(d, 1).toISOString().split('T')[0];
+                const eStr = toISODateString(addBusinessDays(d, 1));
                 updates[id] = { start: val, end: eStr };
             } else {
                 // Changing start directly also maps to delivery date
                 const d = new Date(val);
-                const eStr = addBusinessDays(d, 1).toISOString().split('T')[0];
+                const eStr = toISODateString(addBusinessDays(d, 1));
                 updates[id] = { start: val, end: eStr };
             }
         }
@@ -845,7 +873,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
     };
 
     const addTaskToItem = () => {
-        if (!newTaskText.trim() || !activeTaskModal || !onUpdateTasks) return;
+        if (readOnly || !newTaskText.trim() || !activeTaskModal || !onUpdateTasks) return;
 
         const newTask: ProjectTask = {
             id: Math.random().toString(36).substr(2, 9),
@@ -862,7 +890,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
     };
 
     const toggleTask = (taskId: string) => {
-        if (!onUpdateTasks) return;
+        if (readOnly || !onUpdateTasks) return;
         const updated = tasks.map(t => t.id === taskId ? { ...t, isCompleted: !t.isCompleted } : t);
         onUpdateTasks(updated);
     };
@@ -877,7 +905,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
         const date = new Date(minDate);
         date.setDate(date.getDate() + dayIndex);
 
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = toISODateString(date);
 
         const containerRect = mainContainerRef.current?.getBoundingClientRect();
         const relativeTop = containerRect ? rect.top - containerRect.top : 0;
@@ -895,8 +923,8 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
         // Calculate position relative to container to avoid clipping if possible, or fixed
         const rect = (e.target as HTMLElement).getBoundingClientRect();
 
-        setEditStart(range.start.toISOString().split('T')[0]);
-        setEditEnd(range.end.toISOString().split('T')[0]);
+        setEditStart(toISODateString(range.start));
+        setEditEnd(toISODateString(range.end));
         setEditPopover({
             id: item.id,
             type: item.type,
@@ -1306,11 +1334,11 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                     <div className="space-y-2">
                         <div>
                             <label className="text-[10px] text-zinc-500 uppercase font-bold">Start</label>
-                            <input type="date" className="w-full text-xs p-1 border rounded" value={editStart} onChange={(e) => setEditStart(e.target.value)} />
+                            <DatePickerInput className="w-full text-xs p-1 border rounded" value={editStart} onChange={setEditStart} />
                         </div>
                         <div>
                             <label className="text-[10px] text-zinc-500 uppercase font-bold">Koniec</label>
-                            <input type="date" className="w-full text-xs p-1 border rounded" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} />
+                            <DatePickerInput className="w-full text-xs p-1 border rounded" value={editEnd} onChange={setEditEnd} />
                         </div>
                         <button onClick={saveEditPopover} className="w-full bg-blue-600 text-white text-xs py-1.5 rounded font-bold hover:bg-blue-700 flex items-center justify-center gap-2">
                             <Save size={12} /> Zapisz
@@ -1355,11 +1383,10 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                             autoFocus
                         />
                         <div className="flex gap-1">
-                            <input
-                                type="date"
+                            <DatePickerInput
                                 className="text-[10px] p-1 border rounded bg-transparent dark:text-white"
                                 value={newTaskDate}
-                                onChange={(e) => setNewTaskDate(e.target.value)}
+                                onChange={setNewTaskDate}
                             />
                             <button
                                 onClick={addTaskToItem}
@@ -1394,11 +1421,11 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                         <div className="flex items-center gap-2">
                             <DropdownMenu
                                 trigger={
-                                    <div className="text-[10px] bg-white border border-zinc-300 hover:bg-zinc-50 px-2 py-1 rounded flex items-center gap-1 transition-colors cursor-pointer select-none">
+                                    <div className={`text-[10px] bg-white border border-zinc-300 px-2 py-1 rounded flex items-center gap-1 transition-colors select-none ${readOnly ? 'opacity-50 cursor-not-allowed' : 'hover:bg-zinc-50 cursor-pointer'}`}>
                                         <Plus size={10} /> Dodaj pozycję
                                     </div>
                                 }
-                                items={[
+                                items={readOnly ? [] : [
                                     { label: 'Montaż / Robocizna', icon: <Wrench size={14} />, onClick: () => handleAddTemplate('ASSEMBLY') },
                                     { label: 'Własne Zadanie', icon: <PenLine size={14} />, onClick: () => handleAddTemplate('CUSTOM') }
                                 ]}
@@ -1413,8 +1440,9 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                             </button>
                             {customOrder.length > 0 && (
                                 <button
-                                    onClick={resetOrder}
-                                    className="text-[10px] bg-white border border-zinc-300 hover:bg-zinc-50 text-zinc-600 px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                                    onClick={readOnly ? undefined : resetOrder}
+                                    disabled={readOnly}
+                                    className="text-[10px] bg-white border border-zinc-300 hover:bg-zinc-50 text-zinc-600 px-2 py-1 rounded flex items-center gap-1 transition-colors disabled:opacity-50"
                                     title="Resetuj kolejność"
                                 >
                                     <RefreshCcw size={10} /> Reset
@@ -1498,15 +1526,15 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                                 <div className="flex justify-between items-center mb-1 gap-2">
                                                     <div className="flex flex-col gap-0.5 justify-center opacity-0 group-hover:opacity-100 transition-opacity w-4">
                                                         <button
-                                                            onClick={() => moveRow(index, 'up')}
-                                                            disabled={index === 0}
+                                                            onClick={readOnly ? undefined : () => moveRow(index, 'up')}
+                                                            disabled={index === 0 || readOnly}
                                                             className="text-zinc-400 hover:text-zinc-800 disabled:opacity-20"
                                                         >
                                                             <ArrowUp size={10} />
                                                         </button>
                                                         <button
-                                                            onClick={() => moveRow(index, 'down')}
-                                                            disabled={index === timelineItems.length - 1}
+                                                            onClick={readOnly ? undefined : () => moveRow(index, 'down')}
+                                                            disabled={index === timelineItems.length - 1 || readOnly}
                                                             className="text-zinc-400 hover:text-zinc-800 disabled:opacity-20"
                                                         >
                                                             <ArrowDown size={10} />
@@ -1534,9 +1562,10 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                                         ) : (
                                                             <input
                                                                 type="text"
-                                                                className="font-bold text-xs text-zinc-800 dark:text-zinc-200 bg-transparent border-b border-transparent hover:border-zinc-300 outline-none w-full"
+                                                                className={`font-bold text-xs text-zinc-800 dark:text-zinc-200 bg-transparent border-b border-transparent outline-none w-full ${readOnly ? '' : 'hover:border-zinc-300'}`}
                                                                 value={item.name}
                                                                 onChange={(e) => item.type === 'STAGE' ? updateStageName(item.id, e.target.value) : updateCustomItemName(item.id, e.target.value)}
+                                                                readOnly={readOnly}
                                                             />
                                                         )}
                                                     </div>
@@ -1551,7 +1580,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                                             {activeTasks > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full text-[7px] text-white flex items-center justify-center font-bold">{activeTasks}</span>}
                                                         </button>
 
-                                                        {item.type === 'CUSTOM' && (
+                                                        {item.type === 'CUSTOM' && !readOnly && (
                                                             <button onClick={() => handleDeleteCustomRow(item.id)} className="text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12} /></button>
                                                         )}
                                                         {item.isDateEstimated && !isGroup && <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" title="Data szacunkowa"></span>}
@@ -1563,12 +1592,22 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                                         <div className="flex flex-col">
                                                             <span className="text-zinc-400 text-[9px] uppercase font-bold">{item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' ? 'Produkcja' : 'Start'}</span>
                                                             {item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP' ? (
-                                                                <input type="date" className="bg-transparent border-b border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 w-full outline-none focus:border-amber-500 p-0 text-[10px] h-4" value={item.prodStart.toISOString().split('T')[0]} onChange={(e) => handleDateChange(item.id, item.type, 'start', e.target.value)} />
-                                                            ) : <span className="text-zinc-500 font-mono">{item.prodStart.toLocaleDateString()}</span>}
+                                                                <DatePickerInput
+                                                                    className={`bg-transparent border-b border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 w-full outline-none p-0 text-[10px] h-4 ${readOnly ? '' : 'focus:border-amber-500'}`}
+                                                                    value={toISODateString(item.prodStart)}
+                                                                    onChange={(val) => handleDateChange(item.id, item.type, 'start', val)}
+                                                                    disabled={readOnly}
+                                                                />
+                                                            ) : <span className="text-zinc-500 font-mono">{toEuropeanDateString(item.prodStart)}</span>}
                                                         </div>
                                                         <div className="flex flex-col">
                                                             <span className="text-zinc-400 text-[9px] uppercase font-bold">{item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' ? 'Dostawa' : 'Koniec'}</span>
-                                                            <input type="date" className="bg-transparent border-b border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 w-full outline-none focus:border-amber-500 p-0 text-[10px] h-4 font-bold" value={item.delStart.toISOString().split('T')[0]} onChange={(e) => handleDateChange(item.id, item.type, 'end', e.target.value)} disabled={isChild} />
+                                                            <DatePickerInput
+                                                                className={`bg-transparent border-b border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 w-full outline-none p-0 text-[10px] h-4 font-bold ${readOnly ? '' : 'focus:border-amber-500'}`}
+                                                                value={toISODateString(item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' ? item.delStart : item.end)}
+                                                                onChange={(val) => handleDateChange(item.id, item.type, 'end', val)}
+                                                                disabled={isChild || readOnly}
+                                                            />
                                                         </div>
                                                     </div>
                                                 )}
@@ -1583,8 +1622,9 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                                                     <Link size={8} />
                                                                     <span className="truncate max-w-[80px]">{sourceItem?.name || 'Nieznany'}</span>
                                                                     <button
-                                                                        onClick={() => removeDependency(dep.id)}
-                                                                        className="ml-1 text-zinc-400 hover:text-red-500 opacity-0 group-hover/badge:opacity-100 transition-opacity"
+                                                                        onClick={readOnly ? undefined : () => removeDependency(dep.id)}
+                                                                        disabled={readOnly}
+                                                                        className={`ml-1 text-zinc-400 hover:text-red-500 transition-opacity ${readOnly ? 'opacity-0 cursor-default' : 'opacity-0 group-hover/badge:opacity-100'}`}
                                                                     >
                                                                         <X size={8} />
                                                                     </button>

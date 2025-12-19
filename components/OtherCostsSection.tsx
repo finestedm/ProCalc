@@ -16,6 +16,7 @@ interface Props {
     isPickingMode?: boolean;
     onPick?: (item: { id: string, type: VariantItemType, label: string }, origin?: { x: number, y: number }) => void;
     totalPalletSpots?: number; // New prop for IBL calculation
+    readOnly?: boolean;
 }
 
 // --- HELPER FUNCTIONS ---
@@ -138,7 +139,8 @@ const adjustFormula = (formula: string, rowOffset: number, colOffset: number): s
 export const OtherCostsSection: React.FC<Props> = ({
     costs, onChange, exchangeRate, offerCurrency,
     isPickingMode, onPick,
-    totalPalletSpots = 0
+    totalPalletSpots = 0,
+    readOnly
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [activeCostIdForEditing, setActiveCostIdForEditing] = useState<string | null>(null);
@@ -749,7 +751,7 @@ export const OtherCostsSection: React.FC<Props> = ({
 
                         {/* ACTIONS HEADER */}
                         <div className="flex justify-end gap-2 mb-2 pt-2">
-                            {!isSheetVisible && (
+                            {!isSheetVisible && !readOnly && (
                                 <>
                                     <button onClick={() => { setIsSheetVisible(true); resetSheet(); setTimeout(() => gridContainerRef.current?.focus(), 100); }} className="text-[10px] font-bold text-green-700 dark:text-green-300 hover:text-black bg-green-50 dark:bg-green-900/20 hover:bg-green-100 border border-green-200 dark:border-green-800 px-3 py-1.5 rounded flex items-center gap-1 transition-colors">
                                         <Grid3X3 size={12} /> Arkusz Kalkulacyjny
@@ -826,8 +828,8 @@ export const OtherCostsSection: React.FC<Props> = ({
                                                 <tr key={row.id}>
                                                     {/* Row Header */}
                                                     <td className={`border-r border-b border-zinc-300 dark:border-zinc-700 text-center text-xs font-bold ${selectionStart && selectionEnd && rowIdx >= Math.min(selectionStart.row, selectionEnd.row) && rowIdx <= Math.max(selectionStart.row, selectionEnd.row)
-                                                            ? 'bg-blue-200 dark:bg-blue-900 text-blue-800 dark:text-white'
-                                                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
+                                                        ? 'bg-blue-200 dark:bg-blue-900 text-blue-800 dark:text-white'
+                                                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
                                                         }`}>
                                                         {rowIdx + 1}
                                                     </td>
@@ -892,8 +894,8 @@ export const OtherCostsSection: React.FC<Props> = ({
                                     <EmptyState
                                         icon={Receipt}
                                         title="Brak Innych Kosztów"
-                                        description="Brak dodatkowych kosztów (hotele, delegacje itp.)."
-                                        action={{
+                                        description={readOnly ? "Brak dodatkowych kosztów." : "Brak dodatkowych kosztów (hotele, delegacje itp.)."}
+                                        action={readOnly ? undefined : {
                                             label: "Dodaj koszt",
                                             onClick: addCost,
                                             icon: Plus
@@ -923,48 +925,55 @@ export const OtherCostsSection: React.FC<Props> = ({
                                                     <input
                                                         type="text"
                                                         placeholder="np. Hotel, Paliwo"
-                                                        className="w-full bg-transparent border-none outline-none font-medium"
+                                                        className={`w-full bg-transparent border-none outline-none font-medium ${readOnly ? 'pointer-events-none' : ''}`}
                                                         value={cost.description}
                                                         onChange={(e) => updateCost(idx, 'description', e.target.value)}
                                                         onClick={(e) => e.stopPropagation()}
+                                                        readOnly={readOnly}
                                                     />
                                                 </td>
                                                 <td className="p-2 border-b border-zinc-50 dark:border-zinc-800/50 text-xs relative group">
                                                     {cost.attachedSheet ? (
                                                         <div className="flex items-center justify-end gap-2 h-full">
                                                             <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200 cursor-default" title="Wartość z arkusza">{cost.price.toFixed(2)}</span>
-                                                            <button
-                                                                onClick={(e) => { e.stopPropagation(); editCostSheet(cost); }}
-                                                                className="p-1 text-green-600 bg-green-50 dark:bg-green-900/20 rounded hover:bg-green-100 transition-colors"
-                                                                title="Edytuj Obliczenia (Arkusz)"
-                                                            >
-                                                                <Calculator size={14} />
-                                                            </button>
+                                                            {!readOnly && (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); editCostSheet(cost); }}
+                                                                    className="p-1 text-green-600 bg-green-50 dark:bg-green-900/20 rounded hover:bg-green-100 transition-colors"
+                                                                    title="Edytuj Obliczenia (Arkusz)"
+                                                                >
+                                                                    <Calculator size={14} />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     ) : (
                                                         <SmartInput
-                                                            className="w-full text-right bg-transparent border-none outline-none font-mono font-bold focus:bg-zinc-100 dark:focus:bg-zinc-800 rounded p-1"
+                                                            className={`w-full text-right bg-transparent border-none outline-none font-mono font-bold focus:bg-zinc-100 dark:focus:bg-zinc-800 rounded p-1 ${readOnly ? 'pointer-events-none' : ''}`}
                                                             value={cost.price}
                                                             onChange={(val) => updateCost(idx, 'price', val)}
                                                             onClick={(e) => e.stopPropagation()}
+                                                            readOnly={readOnly}
                                                         />
                                                     )}
                                                 </td>
                                                 <td className="p-2 border-b border-zinc-50 dark:border-zinc-800/50 text-xs">
                                                     <select
-                                                        className="w-full bg-transparent border-none outline-none text-center cursor-pointer"
+                                                        className={`w-full bg-transparent border-none outline-none text-center cursor-pointer ${readOnly ? 'pointer-events-none opacity-80' : ''}`}
                                                         value={cost.currency}
                                                         onChange={(e) => updateCost(idx, 'currency', e.target.value)}
                                                         onClick={(e) => e.stopPropagation()}
+                                                        disabled={readOnly}
                                                     >
                                                         <option value={Currency.PLN}>PLN</option>
                                                         <option value={Currency.EUR}>EUR</option>
                                                     </select>
                                                 </td>
                                                 <td className="p-2 border-b border-zinc-50 dark:border-zinc-800/50 text-xs text-center">
-                                                    <button onClick={(e) => { e.stopPropagation(); removeCost(idx); }} className="p-1 rounded text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                                                        <Trash2 size={12} />
-                                                    </button>
+                                                    {!readOnly && (
+                                                        <button onClick={(e) => { e.stopPropagation(); removeCost(idx); }} className="p-1 rounded text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                                                            <Trash2 size={12} />
+                                                        </button>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))}
@@ -992,9 +1001,10 @@ export const OtherCostsSection: React.FC<Props> = ({
                                     <input
                                         type="number"
                                         min="1"
-                                        className="h-8 w-full p-2 text-xs border border-zinc-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 focus:border-amber-400 outline-none text-center font-bold"
+                                        className={`h-8 w-full p-2 text-xs border border-zinc-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 focus:border-amber-400 outline-none text-center font-bold ${readOnly ? 'opacity-80 pointer-events-none' : ''}`}
                                         value={iblCount}
                                         onChange={(e) => setIblCount(Math.max(1, parseInt(e.target.value) || 1))}
+                                        readOnly={readOnly}
                                     />
                                 </div>
 
@@ -1002,9 +1012,10 @@ export const OtherCostsSection: React.FC<Props> = ({
                                     <label className="text-[10px] text-zinc-400 font-bold uppercase mb-1">Stawka za przegląd</label>
                                     <div className="relative">
                                         <SmartInput
-                                            className="h-8 w-full p-2 text-xs border border-zinc-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 focus:border-amber-400 outline-none text-right font-bold pr-8"
+                                            className={`h-8 w-full p-2 text-xs border border-zinc-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 focus:border-amber-400 outline-none text-right font-bold pr-8 ${readOnly ? 'opacity-80 pointer-events-none' : ''}`}
                                             value={iblRate}
                                             onChange={setIblRate}
+                                            readOnly={readOnly}
                                         />
                                         <span className="absolute right-2 top-2 text-[10px] text-zinc-400 font-bold">PLN</span>
                                     </div>
@@ -1019,7 +1030,7 @@ export const OtherCostsSection: React.FC<Props> = ({
 
                                 <button
                                     onClick={handleAddIblCost}
-                                    disabled={totalPalletSpots <= 0}
+                                    disabled={totalPalletSpots <= 0 || readOnly}
                                     className="h-8 px-4 bg-amber-500 hover:bg-amber-600 disabled:bg-zinc-300 disabled:cursor-not-allowed text-white text-xs font-bold rounded flex items-center gap-2 transition-colors shadow-sm"
                                 >
                                     <Plus size={14} /> Dodaj Koszt IBL

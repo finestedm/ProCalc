@@ -24,6 +24,7 @@ interface Props {
     onConfirm: (title: string, message: string, onConfirm: () => void, isDanger?: boolean) => void;
     isPickingMode?: boolean;
     onPick?: (item: { id: string, type: VariantItemType, label: string }, origin?: { x: number, y: number }) => void;
+    readOnly?: boolean;
 }
 
 interface OrmSheetResult {
@@ -60,7 +61,7 @@ const validateSupplierData = (s: Supplier): { isValid: boolean, missing: string[
 
 export const SuppliersSection: React.FC<Props> = ({
     suppliers, transport, installation, onChange, onBatchChange, onOpenComparison, exchangeRate, offerCurrency, nameplateQty, onNameplateChange, onConfirm,
-    isPickingMode, onPick
+    isPickingMode, onPick, readOnly
 }) => {
     const [activeTab, setActiveTab] = useState<number>(0);
     const [isOpen, setIsOpen] = useState(true);
@@ -518,10 +519,12 @@ export const SuppliersSection: React.FC<Props> = ({
 
     const supplierMenuItems = [
         { label: 'Porównaj Dostawców', icon: <SplitSquareHorizontal size={14} />, onClick: onOpenComparison },
-        { label: 'Importuj Excel (Dołącz do aktywnej)', icon: <FileSpreadsheet size={14} />, onClick: () => fileInputRef.current?.click() },
-        { label: 'Inteligentny Import (PDF/Img)', icon: <Sparkles size={14} />, onClick: () => pdfInputRef.current?.click() },
-        { label: 'Duplikuj', icon: <Copy size={14} />, onClick: () => duplicateSupplier(activeTab), disabled: currentSupplier?.isOrm },
-        { label: 'Usuń dostawcę', icon: <Trash2 size={14} />, onClick: () => removeSupplier(activeTab), danger: true }
+        ...(readOnly ? [] : [
+            { label: 'Importuj Excel (Dołącz do aktywnej)', icon: <FileSpreadsheet size={14} />, onClick: () => fileInputRef.current?.click() },
+            { label: 'Inteligentny Import (PDF/Img)', icon: <Sparkles size={14} />, onClick: () => pdfInputRef.current?.click() },
+            { label: 'Duplikuj', icon: <Copy size={14} />, onClick: () => duplicateSupplier(activeTab), disabled: currentSupplier?.isOrm },
+            { label: 'Usuń dostawcę', icon: <Trash2 size={14} />, onClick: () => removeSupplier(activeTab), danger: true }
+        ])
     ];
 
     const addButtonMenuItems = [
@@ -624,23 +627,27 @@ export const SuppliersSection: React.FC<Props> = ({
                             </div>
 
                             <div className="flex items-center h-full border-l border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 shrink-0">
-                                <button
-                                    onClick={addSupplier}
-                                    className="w-10 h-full text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors flex items-center justify-center border-r border-zinc-200 dark:border-zinc-800"
-                                    title="Dodaj pustą kartę dostawcy"
-                                >
-                                    <Plus size={16} />
-                                </button>
-                                <DropdownMenu
-                                    items={addButtonMenuItems}
-                                    trigger={
-                                        <div className="w-10 h-full flex items-center justify-center hover:bg-zinc-200 dark:hover:bg-zinc-800 cursor-pointer text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors">
-                                            <ChevronDown size={16} />
-                                        </div>
-                                    }
-                                    buttonClassName="block h-full w-full focus:outline-none"
-                                    align="right"
-                                />
+                                {!readOnly && (
+                                    <>
+                                        <button
+                                            onClick={addSupplier}
+                                            className="w-10 h-full text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors flex items-center justify-center border-r border-zinc-200 dark:border-zinc-800"
+                                            title="Dodaj pustą kartę dostawcy"
+                                        >
+                                            <Plus size={16} />
+                                        </button>
+                                        <DropdownMenu
+                                            items={addButtonMenuItems}
+                                            trigger={
+                                                <div className="w-10 h-full flex items-center justify-center hover:bg-zinc-200 dark:hover:bg-zinc-800 cursor-pointer text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors">
+                                                    <ChevronDown size={16} />
+                                                </div>
+                                            }
+                                            buttonClassName="block h-full w-full focus:outline-none"
+                                            align="right"
+                                        />
+                                    </>
+                                )}
                             </div>
                         </div>
 
@@ -665,10 +672,11 @@ export const SuppliersSection: React.FC<Props> = ({
                                         </label>
                                         <input
                                             type="text"
-                                            className="w-full px-2 h-9 border border-zinc-200 dark:border-zinc-700 rounded text-xs focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none bg-white dark:bg-zinc-950 font-bold transition-all"
+                                            className={`w-full px-2 h-9 border border-zinc-200 dark:border-zinc-700 rounded text-xs focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none bg-white dark:bg-zinc-950 font-bold transition-all ${readOnly ? 'opacity-70 pointer-events-none' : ''}`}
                                             value={currentSupplier.customTabName || currentSupplier.name}
                                             onChange={(e) => updateSupplier(activeTab, 'customTabName', e.target.value)}
                                             placeholder="Nazwa widoczna na zakładce"
+                                            readOnly={readOnly}
                                         />
                                     </div>
 
@@ -677,11 +685,11 @@ export const SuppliersSection: React.FC<Props> = ({
                                         <div className="flex gap-1 h-9 relative">
                                             {/* Supplier Select / Input Combo */}
                                             <div className="relative flex-1">
-                                                {currentSupplier.isOrm ? (
+                                                {currentSupplier.isOrm || readOnly ? (
                                                     // If ORM, lock it but allow editing name if needed
                                                     <input
                                                         type="text"
-                                                        className="w-full px-2 h-full border border-zinc-200 dark:border-zinc-700 rounded text-xs focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none bg-white dark:bg-zinc-950 transition-all text-zinc-500"
+                                                        className={`w-full px-2 h-full border border-zinc-200 dark:border-zinc-700 rounded text-xs focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none bg-white dark:bg-zinc-950 transition-all text-zinc-500 ${readOnly ? 'opacity-70 pointer-events-none' : ''}`}
                                                         value={currentSupplier.name}
                                                         readOnly
                                                         disabled
@@ -691,7 +699,7 @@ export const SuppliersSection: React.FC<Props> = ({
                                                         className={`w-full px-2 h-full border rounded text-xs focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none bg-white dark:bg-zinc-950 transition-all ${isCurrentMissingData ? 'border-red-400 text-red-600 font-bold' : 'border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-white'}`}
                                                         value={PREDEFINED_SUPPLIERS.some(s => s.name === currentSupplier.name) ? currentSupplier.name : 'OTHER'}
                                                         onChange={(e) => handleSupplierSelect(activeTab, e.target.value)}
-                                                        disabled={!isCurrentIncluded}
+                                                        disabled={!isCurrentIncluded || readOnly}
                                                     >
                                                         {PREDEFINED_SUPPLIERS.map(s => (
                                                             <option key={s.id} value={s.name}>{s.name}</option>
@@ -702,16 +710,18 @@ export const SuppliersSection: React.FC<Props> = ({
                                                 {isCurrentMissingData && <div className="absolute right-6 top-1/2 -translate-y-1/2 text-red-500 pointer-events-none animate-pulse"><AlertTriangle size={14} /></div>}
                                             </div>
 
-                                            <button
-                                                onClick={() => updateSupplier(activeTab, 'isIncluded', !isCurrentIncluded)}
-                                                className={`h-full w-9 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center flex-shrink-0 transition-colors rounded ${isCurrentIncluded
-                                                    ? 'bg-white dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 hover:text-red-500'
-                                                    : 'bg-red-50 text-red-600'
-                                                    }`}
-                                                style={{ pointerEvents: 'auto' }}
-                                            >
-                                                {isCurrentIncluded ? <Eye size={14} /> : <EyeOff size={14} />}
-                                            </button>
+                                            {!readOnly && (
+                                                <button
+                                                    onClick={() => updateSupplier(activeTab, 'isIncluded', !isCurrentIncluded)}
+                                                    className={`h-full w-9 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center flex-shrink-0 transition-colors rounded ${isCurrentIncluded
+                                                        ? 'bg-white dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 hover:text-red-500'
+                                                        : 'bg-red-50 text-red-600'
+                                                        }`}
+                                                    style={{ pointerEvents: 'auto' }}
+                                                >
+                                                    {isCurrentIncluded ? <Eye size={14} /> : <EyeOff size={14} />}
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={() => setDetailViewIndex(activeTab)}
                                                 className={`h-full w-9 border flex items-center justify-center transition-colors rounded ${isCurrentMissingData ? 'bg-red-50 border-red-300 text-red-600 hover:bg-red-100' : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-amber-600 hover:border-amber-400'}`}
@@ -719,17 +729,19 @@ export const SuppliersSection: React.FC<Props> = ({
                                             >
                                                 <Maximize2 size={14} />
                                             </button>
-                                            <div className="h-full">
-                                                <DropdownMenu
-                                                    trigger={
-                                                        <div className="h-9 w-9 flex items-center justify-center bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded hover:bg-zinc-50 dark:hover:bg-zinc-800">
-                                                            <ChevronDown size={14} />
-                                                        </div>
-                                                    }
-                                                    items={supplierMenuItems}
-                                                    buttonClassName="block focus:outline-none"
-                                                />
-                                            </div>
+                                            {!readOnly && (
+                                                <div className="h-full">
+                                                    <DropdownMenu
+                                                        trigger={
+                                                            <div className="h-9 w-9 flex items-center justify-center bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded hover:bg-zinc-50 dark:hover:bg-zinc-800">
+                                                                <ChevronDown size={14} />
+                                                            </div>
+                                                        }
+                                                        items={supplierMenuItems}
+                                                        buttonClassName="block focus:outline-none"
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
                                         {currentSupplier.isOrm && <span className="text-[9px] text-green-600 dark:text-green-400 font-bold ml-1">ORM</span>}
                                         {isCurrentMissingData && <span className="text-[9px] text-red-500 font-bold ml-1 block mt-1">! Uzupełnij: {validationState.missing.join(', ')}</span>}
@@ -744,7 +756,7 @@ export const SuppliersSection: React.FC<Props> = ({
                                                     className="w-full pl-6 h-9 border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 bg-white dark:bg-zinc-950 disabled:bg-zinc-100 dark:disabled:bg-zinc-800 transition-all"
                                                     value={currentSupplier.currency}
                                                     onChange={(e) => updateSupplier(activeTab, 'currency', e.target.value)}
-                                                    disabled={currentSupplier.isOrm}
+                                                    disabled={currentSupplier.isOrm || readOnly}
                                                 >
                                                     <option value={Currency.PLN}>PLN</option>
                                                     <option value={Currency.EUR}>EUR</option>
@@ -764,16 +776,18 @@ export const SuppliersSection: React.FC<Props> = ({
                                                         className="w-full pl-6 h-full border border-zinc-200 dark:border-zinc-700 rounded text-xs focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none bg-white dark:bg-zinc-950 disabled:bg-zinc-100 dark:disabled:bg-zinc-800 disabled:text-zinc-400 transition-all"
                                                         value={currentSupplier.deliveryDate === 'ASAP' ? '' : currentSupplier.deliveryDate}
                                                         onChange={(e) => updateSupplier(activeTab, 'deliveryDate', e.target.value)}
-                                                        disabled={currentSupplier.deliveryDate === 'ASAP'}
+                                                        disabled={currentSupplier.deliveryDate === 'ASAP' || readOnly}
                                                     />
                                                 </div>
-                                                <button
-                                                    onClick={() => updateSupplier(activeTab, 'deliveryDate', currentSupplier.deliveryDate === 'ASAP' ? '' : 'ASAP')}
-                                                    className={`px-3 h-full text-[9px] font-bold border transition-colors flex-shrink-0 whitespace-nowrap rounded flex items-center justify-center ${currentSupplier.deliveryDate === 'ASAP' ? 'bg-red-500 text-white border-red-600' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700 hover:border-red-400 hover:text-red-500'}`}
-                                                    title="Ustaw ASAP"
-                                                >
-                                                    ASAP
-                                                </button>
+                                                {!readOnly && (
+                                                    <button
+                                                        onClick={() => updateSupplier(activeTab, 'deliveryDate', currentSupplier.deliveryDate === 'ASAP' ? '' : 'ASAP')}
+                                                        className={`px-3 h-full text-[9px] font-bold border transition-colors flex-shrink-0 whitespace-nowrap rounded flex items-center justify-center ${currentSupplier.deliveryDate === 'ASAP' ? 'bg-red-500 text-white border-red-600' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700 hover:border-red-400 hover:text-red-500'}`}
+                                                        title="Ustaw ASAP"
+                                                    >
+                                                        ASAP
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -804,7 +818,8 @@ export const SuppliersSection: React.FC<Props> = ({
                                                 min="0"
                                                 value={nameplateQty || 0}
                                                 onChange={(e) => onNameplateChange(parseFloat(e.target.value) || 0)}
-                                                className="w-24 p-2 text-center text-xl font-bold border-2 border-zinc-200 focus:border-amber-400 outline-none bg-transparent rounded"
+                                                className={`w-24 p-2 text-center text-xl font-bold border-2 border-zinc-200 focus:border-amber-400 outline-none bg-transparent rounded ${readOnly ? 'opacity-80' : ''}`}
+                                                readOnly={readOnly}
                                             />
                                         </div>
                                         <div className="text-xl text-zinc-300 dark:text-zinc-600 font-light">=</div>
@@ -843,6 +858,7 @@ export const SuppliersSection: React.FC<Props> = ({
                                                     }
                                                 }
                                             }}
+                                            readOnly={readOnly}
                                         />
                                     </div>
 
@@ -865,9 +881,10 @@ export const SuppliersSection: React.FC<Props> = ({
                                                     type="number"
                                                     min="0"
                                                     max="100"
-                                                    className="w-12 p-0.5 border rounded text-center text-xs focus:border-amber-400 outline-none font-bold bg-white dark:bg-zinc-950"
+                                                    className={`w-12 p-0.5 border rounded text-center text-xs focus:border-amber-400 outline-none font-bold bg-white dark:bg-zinc-950 ${readOnly ? 'opacity-80' : ''}`}
                                                     value={currentSupplier.discount}
                                                     onChange={(e) => updateSupplier(activeTab, 'discount', parseFloat(e.target.value) || 0)}
+                                                    readOnly={readOnly}
                                                 />
                                             </div>
                                             <div className="flex items-center gap-2 border-l border-zinc-200 dark:border-zinc-700 pl-3">
@@ -875,10 +892,11 @@ export const SuppliersSection: React.FC<Props> = ({
                                                 <input
                                                     type="number"
                                                     step="0.5"
-                                                    className="w-12 p-0.5 border rounded text-center text-xs focus:border-amber-400 outline-none font-bold bg-white dark:bg-zinc-950 text-blue-600"
+                                                    className={`w-12 p-0.5 border rounded text-center text-xs focus:border-amber-400 outline-none font-bold bg-white dark:bg-zinc-950 text-blue-600 ${readOnly ? 'opacity-80' : ''}`}
                                                     value={currentSupplier.extraMarkupPercent || 0}
                                                     onChange={(e) => updateSupplier(activeTab, 'extraMarkupPercent', parseFloat(e.target.value) || 0)}
                                                     placeholder="0"
+                                                    readOnly={readOnly}
                                                 />
                                             </div>
                                             <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 pl-3 border-l border-zinc-200 dark:border-zinc-700">
@@ -895,16 +913,18 @@ export const SuppliersSection: React.FC<Props> = ({
                                         {!currentSupplier.notes ? (
                                             <button
                                                 onClick={handleAddNotes}
-                                                className="text-[10px] flex items-center gap-1 text-zinc-500 hover:text-amber-600 bg-white dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 px-2 py-1 hover:border-amber-400 transition-all"
+                                                disabled={readOnly}
+                                                className={`text-[10px] flex items-center gap-1 text-zinc-500 hover:text-amber-600 bg-white dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 px-2 py-1 hover:border-amber-400 transition-all ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
                                             >
                                                 <MessageSquarePlus size={12} /> Dodaj uwagi
                                             </button>
                                         ) : (
                                             <textarea
-                                                className="w-full p-2 border rounded text-xs min-h-[60px] focus:border-amber-400 outline-none bg-white dark:bg-zinc-950 animate-fadeIn"
+                                                className={`w-full p-2 border rounded text-xs min-h-[60px] focus:border-amber-400 outline-none bg-white dark:bg-zinc-950 animate-fadeIn ${readOnly ? 'opacity-80' : ''}`}
                                                 placeholder="Wpisz uwagi..."
                                                 value={currentSupplier.notes || ''}
                                                 onChange={(e) => updateSupplier(activeTab, 'notes', e.target.value)}
+                                                readOnly={readOnly}
                                             />
                                         )}
                                     </div>

@@ -41,121 +41,86 @@ export const ProfileEditModal: React.FC<Props> = ({ isOpen, onClose }) => {
     if (!isOpen) return null;
 
     return (
-        <div
-            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn"
-            onClick={onClose}
-        >
-            <div
-                className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-scaleIn border border-zinc-200 dark:border-zinc-700"
-                onClick={(e) => e.stopPropagation()}
-            >
-                {/* Header */}
-                <div className="p-6 border-b border-zinc-200 dark:border-zinc-700 bg-gradient-to-r from-blue-600 to-indigo-600">
-                    <div className="flex justify-between items-center">
-                        <div>
-                            <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                                <User size={24} />
-                                Edycja Profilu
-                            </h2>
-                            <p className="text-blue-100 text-sm mt-1">Zaktualizuj swoje dane</p>
-                        </div>
-                        <button
-                            onClick={onClose}
-                            className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors"
-                        >
-                            <X size={24} />
-                        </button>
-                    </div>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl p-6 w-full max-w-md border border-zinc-200 dark:border-zinc-800">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">Edytuj Profil</h2>
+                    <button onClick={onClose} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors">
+                        <X size={20} className="text-zinc-500" />
+                    </button>
                 </div>
 
-                {/* Content */}
-                <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                    {/* Error Message */}
-                    {error && (
-                        <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2">
-                            <AlertCircle size={18} className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                            <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
-                        </div>
-                    )}
-
-                    {/* Success Message */}
-                    {success && (
-                        <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-start gap-2">
-                            <CheckCircle size={18} className="text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-                            <p className="text-sm text-green-700 dark:text-green-300">Profil zaktualizowany!</p>
-                        </div>
-                    )}
-
-                    <div>
-                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-2">
-                            Email (nie można zmienić)
-                        </label>
-                        <input
-                            type="email"
-                            value={profile?.email || ''}
-                            disabled
-                            className="w-full p-3 border border-zinc-300 dark:border-zinc-600 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 cursor-not-allowed"
-                        />
+                {error && (
+                    <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-sm flex items-center gap-2">
+                        <AlertCircle size={16} />
+                        {error}
                     </div>
+                )}
 
+                {success && (
+                    <div className="mb-4 p-3 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg text-sm">
+                        Zmiana zapisana pomyślnie.
+                    </div>
+                )}
+
+                {profile?.pending_role && (
+                    <div className="mb-4 p-3 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-sm">
+                        <strong>Oczekująca zmiana roli:</strong> {
+                            profile.pending_role === 'engineer' ? 'Inżynier' :
+                                profile.pending_role === 'specialist' ? 'Specjalista' :
+                                    profile.pending_role === 'logistics' ? 'Logistyka' : 'Menadżer'
+                        }
+                    </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-2">
-                            Imię i nazwisko
+                        <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                            Imię i Nazwisko
                         </label>
                         <input
                             type="text"
-                            required
                             value={fullName}
                             onChange={(e) => setFullName(e.target.value)}
-                            className="w-full p-3 border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-400"
-                            placeholder="Jan Kowalski"
-                            disabled={loading}
+                            className="w-full px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                            required
                         />
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-zinc-500 uppercase mb-2">
-                            Rola *
+                        <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                            Rola
                         </label>
                         <select
-                            required
                             value={role}
-                            onChange={(e) => setRole(e.target.value as 'engineer' | 'specialist' | 'admin')}
-                            className="w-full p-3 border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-400"
-                            disabled={loading}
+                            onChange={(e) => setRole(e.target.value as 'engineer' | 'specialist' | 'manager' | 'logistics')}
+                            className="w-full px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                            required
                         >
                             <option value="engineer">Inżynier</option>
                             <option value="specialist">Specjalista</option>
-                            <option value="admin">Administrator</option>
+                            <option value="manager">Menadżer</option>
+                            <option value="logistics">Logistyka</option>
                         </select>
-                        <p className="text-xs text-zinc-400 mt-1">Wybierz swoją rolę w firmie</p>
+                        {!profile?.is_admin && role !== profile?.role && (
+                            <p className="text-xs text-amber-600 mt-1">Zmiana roli wymaga zatwierdzenia.</p>
+                        )}
                     </div>
 
-                    <div className="flex gap-2 pt-4">
+                    <div className="flex justify-end gap-3 mt-6">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex-1 px-4 py-2 text-sm font-bold text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors"
-                            disabled={loading}
+                            className="px-4 py-2 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
                         >
                             Anuluj
                         </button>
                         <button
                             type="submit"
                             disabled={loading}
-                            className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
                         >
-                            {loading ? (
-                                <>
-                                    <Loader size={16} className="animate-spin" />
-                                    Zapisywanie...
-                                </>
-                            ) : (
-                                <>
-                                    <Save size={16} />
-                                    Zapisz
-                                </>
-                            )}
+                            {loading ? 'Zapisywanie...' : 'Zapisz zmiany'}
                         </button>
                     </div>
                 </form>

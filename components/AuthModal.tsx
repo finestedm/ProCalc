@@ -15,10 +15,17 @@ export const AuthModal: React.FC<Props> = ({ isOpen, onClose }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [fullName, setFullName] = useState('');
-    const [role, setRole] = useState<'engineer' | 'specialist' | 'admin'>('engineer');
+    const [role, setRole] = useState<'engineer' | 'specialist' | 'manager'>('engineer');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+    const [formData, setFormData] = useState({
+        email: '',
+        password: '',
+        fullName: '',
+        role: 'engineer' as 'engineer' | 'specialist' | 'manager'
+    });
 
     const resetForm = () => {
         setEmail('');
@@ -244,19 +251,19 @@ export const AuthModal: React.FC<Props> = ({ isOpen, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-zinc-500 uppercase mb-2">
-                                    Rola *
+                                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                                    Rola <span className="text-red-500">*</span>
                                 </label>
                                 <select
-                                    required
                                     value={role}
-                                    onChange={(e) => setRole(e.target.value as 'engineer' | 'specialist' | 'admin')}
-                                    className="w-full p-3 border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-400"
-                                    disabled={loading}
+                                    onChange={(e) => setRole(e.target.value as 'engineer' | 'specialist' | 'manager' | 'logistics')}
+                                    className="w-full px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                    required
                                 >
                                     <option value="engineer">Inżynier</option>
                                     <option value="specialist">Specjalista</option>
-                                    <option value="admin">Administrator</option>
+                                    <option value="manager">Menadżer</option>
+                                    <option value="logistics">Logistyka</option>
                                 </select>
                                 <p className="text-xs text-zinc-400 mt-1">Wybierz swoją rolę w firmie</p>
                             </div>

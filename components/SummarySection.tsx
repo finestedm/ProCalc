@@ -10,9 +10,10 @@ interface Props {
     appState: AppState;
     onUpdateState: (updates: Partial<AppState>) => void;
     data: CalculationData;
+    readOnly?: boolean;
 }
 
-export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data }) => {
+export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data, readOnly }) => {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isEditingPrice, setIsEditingPrice] = useState(false);
     // Specific override toggle for invoice currency payment
@@ -72,6 +73,7 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
 
     const paymentTerms = data.paymentTerms || EMPTY_PAYMENT_TERMS;
     const updatePaymentTerms = (updates: Partial<PaymentTerms>) => {
+        if (readOnly) return;
         const newData = { ...data, paymentTerms: { ...paymentTerms, ...updates } };
         const key = appState.mode === CalculationMode.INITIAL ? 'initial' : 'final';
         onUpdateState({ [key]: newData });
@@ -85,10 +87,12 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
     };
 
     const handleMarginChange = (newMargin: number) => {
+        if (readOnly) return;
         onUpdateState({ targetMargin: newMargin, manualPrice: null });
     };
 
     const handlePriceFocus = () => {
+        if (readOnly) return;
         setIsEditingPrice(true);
     };
 
@@ -130,7 +134,7 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                         <div className={`p-6 flex flex-col justify-between hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors relative ${isCriticalMargin ? 'bg-red-50/30 dark:bg-red-900/10' : ''}`}>
                             <div className="flex justify-between items-start">
                                 <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Marża Celowana</span>
-                                {appState.manualPrice !== null && (
+                                {appState.manualPrice !== null && !readOnly && (
                                     <button
                                         type="button"
                                         className="text-amber-500 cursor-pointer"
@@ -147,7 +151,8 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                                     step="0.1"
                                     value={parseFloat(marginPercent.toFixed(2))}
                                     onChange={(e) => handleMarginChange(parseFloat(e.target.value) || 0)}
-                                    className={`bg-transparent text-4xl font-mono font-bold outline-none w-32 placeholder-zinc-300 ${marginColorClass}`}
+                                    disabled={readOnly}
+                                    className={`bg-transparent text-4xl font-mono font-bold outline-none w-32 placeholder-zinc-300 ${marginColorClass} ${readOnly ? 'opacity-70' : ''}`}
                                 />
                                 <span className="text-zinc-400 font-mono text-xl">%</span>
                             </div>
@@ -165,7 +170,8 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                                     step="0.0001"
                                     value={appState.exchangeRate}
                                     onChange={(e) => onUpdateState({ exchangeRate: parseFloat(e.target.value) || 0 })}
-                                    className="bg-transparent text-2xl font-mono font-bold text-zinc-700 dark:text-zinc-300 outline-none w-24 border-b border-zinc-200 dark:border-zinc-700 focus:border-amber-500 transition-colors"
+                                    disabled={readOnly}
+                                    className={`bg-transparent text-2xl font-mono font-bold text-zinc-700 dark:text-zinc-300 outline-none w-24 border-b border-zinc-200 dark:border-zinc-700 focus:border-amber-500 transition-colors ${readOnly ? 'opacity-70' : ''}`}
                                 />
                             </div>
 
@@ -176,8 +182,8 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                                         <button
                                             key={c}
                                             onClick={() => !isFinalMode && onUpdateState({ offerCurrency: c, clientCurrency: c === Currency.PLN ? Currency.PLN : appState.clientCurrency })}
-                                            disabled={isFinalMode}
-                                            className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${appState.offerCurrency === c ? 'bg-zinc-800 text-white border-zinc-800 dark:bg-zinc-100 dark:text-black dark:border-zinc-100' : 'text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-zinc-400'}`}
+                                            disabled={isFinalMode || readOnly}
+                                            className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${appState.offerCurrency === c ? 'bg-zinc-800 text-white border-zinc-800 dark:bg-zinc-100 dark:text-black dark:border-zinc-100' : 'text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-zinc-400'} ${readOnly ? 'opacity-50' : ''}`}
                                         >
                                             {c}
                                         </button>
@@ -213,14 +219,14 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                                                 type="number"
                                                 min="0"
                                                 value={paymentTerms.advance1Days}
-                                                onChange={(e) => updatePaymentTerms({ advance1Days: parseInt(e.target.value) || 0 })}
-                                                className="w-8 bg-transparent text-right outline-none text-zinc-500 focus:text-amber-500 transition-colors"
+                                                disabled={readOnly}
+                                                className={`w-8 bg-transparent text-right outline-none text-zinc-500 focus:text-amber-500 transition-colors ${readOnly ? 'opacity-50' : ''}`}
                                             />
                                             <span className="ml-1 text-zinc-400">dni</span>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1">
-                                        <input type="number" value={paymentTerms.advance1Percent} onChange={(e) => updatePaymentTerms({ advance1Percent: parseFloat(e.target.value) })} className="w-12 bg-transparent text-amber-500 font-mono font-bold text-sm text-center outline-none border-b border-zinc-200 focus:border-amber-500" />
+                                        <input type="number" value={paymentTerms.advance1Percent} onChange={(e) => updatePaymentTerms({ advance1Percent: parseFloat(e.target.value) })} disabled={readOnly} className={`w-12 bg-transparent text-amber-500 font-mono font-bold text-sm text-center outline-none border-b border-zinc-200 focus:border-amber-500 ${readOnly ? 'opacity-70' : ''}`} />
                                         <span className="text-zinc-400">%</span>
                                     </div>
                                     <div className="text-[10px] text-zinc-600 dark:text-zinc-300 font-mono mt-1 text-right">
@@ -237,14 +243,14 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                                                 type="number"
                                                 min="0"
                                                 value={paymentTerms.advance2Days}
-                                                onChange={(e) => updatePaymentTerms({ advance2Days: parseInt(e.target.value) || 0 })}
-                                                className="w-8 bg-transparent text-right outline-none text-zinc-500 focus:text-amber-500 transition-colors"
+                                                disabled={readOnly}
+                                                className={`w-8 bg-transparent text-right outline-none text-zinc-500 focus:text-amber-500 transition-colors ${readOnly ? 'opacity-50' : ''}`}
                                             />
                                             <span className="ml-1 text-zinc-400">dni</span>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1">
-                                        <input type="number" value={paymentTerms.advance2Percent} onChange={(e) => updatePaymentTerms({ advance2Percent: parseFloat(e.target.value) })} className="w-12 bg-transparent text-amber-500 font-mono font-bold text-sm text-center outline-none border-b border-zinc-200 focus:border-amber-500" />
+                                        <input type="number" value={paymentTerms.advance2Percent} onChange={(e) => updatePaymentTerms({ advance2Percent: parseFloat(e.target.value) })} disabled={readOnly} className={`w-12 bg-transparent text-amber-500 font-mono font-bold text-sm text-center outline-none border-b border-zinc-200 focus:border-amber-500 ${readOnly ? 'opacity-70' : ''}`} />
                                         <span className="text-zinc-400">%</span>
                                     </div>
                                     <div className="text-[10px] text-zinc-600 dark:text-zinc-300 font-mono mt-1 text-right">
@@ -261,8 +267,8 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data 
                                                 type="number"
                                                 min="0"
                                                 value={paymentTerms.finalPaymentDays}
-                                                onChange={(e) => updatePaymentTerms({ finalPaymentDays: parseInt(e.target.value) || 0 })}
-                                                className="w-8 bg-transparent text-right outline-none text-zinc-500 focus:text-amber-500 transition-colors"
+                                                disabled={readOnly}
+                                                className={`w-8 bg-transparent text-right outline-none text-zinc-500 focus:text-amber-500 transition-colors ${readOnly ? 'opacity-50' : ''}`}
                                             />
                                             <span className="ml-1">dni</span>
                                         </div>

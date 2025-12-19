@@ -16,12 +16,14 @@ interface Props {
     isPickingMode?: boolean;
     onPick?: (item: { id: string, type: VariantItemType, label: string }, origin?: { x: number, y: number }) => void;
     truckLoadCapacity?: number; // In KG
+    readOnly?: boolean;
 }
 
 export const TransportSection: React.FC<Props> = ({
     transport, suppliers, onChange, exchangeRate, offerCurrency,
     isPickingMode, onPick,
-    truckLoadCapacity = 22000
+    truckLoadCapacity = 22000,
+    readOnly
 }) => {
     const [isOpen, setIsOpen] = useState(true);
 
@@ -373,7 +375,7 @@ export const TransportSection: React.FC<Props> = ({
                     <div className="border-t border-zinc-100 dark:border-zinc-800 p-4 pt-0">
 
                         {/* Suggestions Bar */}
-                        {potentialMerges.length > 0 && (
+                        {potentialMerges.length > 0 && !readOnly && (
                             <div className="bg-blue-50 dark:bg-blue-900/20 p-3 mb-4 rounded flex flex-wrap gap-4 items-center justify-center border-b border-blue-100 dark:border-blue-900/30">
                                 <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 text-[10px] font-bold">
                                     <Info size={12} /> Sugerowane łączenie:
@@ -390,14 +392,16 @@ export const TransportSection: React.FC<Props> = ({
                             </div>
                         )}
 
-                        <div className="flex justify-end gap-2 mb-2 pt-2">
-                            <button onClick={() => openMergeCreator()} className="text-[10px] font-bold bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1.5 rounded flex items-center gap-1 transition-colors">
-                                <Combine size={12} /> Kreator Łączenia
-                            </button>
-                            <button type="button" onClick={addManualTransport} className="text-[10px] font-bold bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-200 px-3 py-1.5 rounded flex items-center gap-1 transition-colors">
-                                <Plus size={12} /> Dodaj ręczny transport
-                            </button>
-                        </div>
+                        {!readOnly && (
+                            <div className="flex justify-end gap-2 mb-2 pt-2">
+                                <button onClick={() => openMergeCreator()} className="text-[10px] font-bold bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1.5 rounded flex items-center gap-1 transition-colors">
+                                    <Combine size={12} /> Kreator Łączenia
+                                </button>
+                                <button type="button" onClick={addManualTransport} className="text-[10px] font-bold bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-200 px-3 py-1.5 rounded flex items-center gap-1 transition-colors">
+                                    <Plus size={12} /> Dodaj ręczny transport
+                                </button>
+                            </div>
+                        )}
 
                         <div className="overflow-x-auto border border-zinc-100 dark:border-zinc-800 min-h-[150px] flex flex-col rounded">
                             {isEmpty ? (
@@ -406,7 +410,7 @@ export const TransportSection: React.FC<Props> = ({
                                         icon={Truck}
                                         title="Brak Transportu"
                                         description="Lista transportów jest pusta. Dodaj dostawcę, aby zobaczyć koszty transportu."
-                                        action={{
+                                        action={readOnly ? undefined : {
                                             label: "Dodaj ręczny transport",
                                             onClick: addManualTransport,
                                             icon: Plus
@@ -480,7 +484,7 @@ export const TransportSection: React.FC<Props> = ({
                                                         {formatNumber(item.totalPrice)}
                                                     </td>
                                                     <td className={`${cellClass} text-center`}>
-                                                        <button onClick={(e) => { e.stopPropagation(); handleUnmerge(item.id); }} className="text-zinc-400 hover:text-red-500 p-1" title="Rozdziel transport">
+                                                        <button onClick={(e) => { e.stopPropagation(); handleUnmerge(item.id); }} className={`text-zinc-400 hover:text-red-500 p-1 ${readOnly ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`} title="Rozdziel transport" disabled={readOnly}>
                                                             <Unplug size={14} />
                                                         </button>
                                                     </td>
@@ -507,6 +511,7 @@ export const TransportSection: React.FC<Props> = ({
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); updateSupplierTransport(s.id, { isSupplierOrganized: !tItem.isSupplierOrganized }); }}
                                                             className={`text-[9px] px-2 py-0.5 rounded border uppercase font-bold transition-all ${tItem.isSupplierOrganized ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-white dark:bg-zinc-800 text-zinc-500 border-zinc-300'}`}
+                                                            disabled={readOnly}
                                                         >
                                                             {tItem.isSupplierOrganized ? 'Dostawca' : 'JH'}
                                                         </button>
@@ -531,11 +536,13 @@ export const TransportSection: React.FC<Props> = ({
                                                                         value={tItem.trucksCount}
                                                                         onChange={(e) => handleManualInputChange(s.id, parseFloat(e.target.value) || 0)}
                                                                         onClick={(e) => e.stopPropagation()}
+                                                                        readOnly={readOnly}
                                                                     />
                                                                     <button
                                                                         className={`absolute -right-2 -top-2 p-0.5 bg-white dark:bg-zinc-800 border rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity ${isManual ? 'text-blue-500' : 'text-zinc-300'}`}
                                                                         onClick={(e) => handleToggleAutoManual(e, s)}
                                                                         title={isManual ? "Przywróć Auto" : "Ustaw Ręcznie"}
+                                                                        disabled={readOnly}
                                                                     >
                                                                         {isManual ? <Square size={8} fill="currentColor" /> : <CheckSquare size={8} />}
                                                                     </button>
@@ -547,6 +554,7 @@ export const TransportSection: React.FC<Props> = ({
                                                                     value={tItem.pricePerTruck}
                                                                     onChange={(val) => updateSupplierTransport(s.id, { pricePerTruck: val })}
                                                                     onClick={(e) => e.stopPropagation()}
+                                                                    readOnly={readOnly}
                                                                 />
                                                             </td>
                                                             <td className={cellClass}>
@@ -555,6 +563,7 @@ export const TransportSection: React.FC<Props> = ({
                                                                     value={tItem.currency}
                                                                     onChange={(e) => updateSupplierTransport(s.id, { currency: e.target.value as Currency })}
                                                                     onClick={(e) => e.stopPropagation()}
+                                                                    disabled={readOnly}
                                                                 >
                                                                     <option value={Currency.PLN}>PLN</option>
                                                                     <option value={Currency.EUR}>EUR</option>
@@ -570,68 +579,79 @@ export const TransportSection: React.FC<Props> = ({
                                             );
                                         })}
 
-                                        {/* 3. MANUAL TRANSPORTS */}
-                                        {manualItems.map(item => (
-                                            <tr
-                                                key={item.id}
-                                                className={`${pickingClass} transition-colors border-l-4 border-l-zinc-300 dark:border-l-zinc-600`}
-                                                onClick={(e) => handlePick(e, item)}
-                                            >
-                                                <td className={`${cellClass} pl-4`}>
-                                                    <input
-                                                        type="text"
-                                                        className={textInputClass}
-                                                        value={item.name}
-                                                        onChange={(e) => updateById(item.id, { name: e.target.value })}
-                                                        placeholder="Opis transportu..."
-                                                        onClick={(e) => e.stopPropagation()}
-                                                    />
-                                                </td>
-                                                <td className={cellClass}>
-                                                    <span className="bg-zinc-100 text-zinc-600 border border-zinc-200 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase">
-                                                        Manual
-                                                    </span>
-                                                </td>
-                                                <td className={cellClass}>
-                                                    <input
-                                                        type="number"
-                                                        className={`${inputClass} text-center`}
-                                                        value={item.trucksCount}
-                                                        onChange={(e) => updateById(item.id, { trucksCount: parseFloat(e.target.value) || 0 })}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                    />
-                                                </td>
-                                                <td className={cellClass}>
-                                                    <SmartInput
-                                                        className={inputClass}
-                                                        value={item.pricePerTruck}
-                                                        onChange={(val) => updateById(item.id, { pricePerTruck: val })}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                    />
-                                                </td>
-                                                <td className={cellClass}>
-                                                    <select
-                                                        className={selectClass}
-                                                        value={item.currency}
-                                                        onChange={(e) => updateById(item.id, { currency: e.target.value as Currency })}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                    >
-                                                        <option value={Currency.PLN}>PLN</option>
-                                                        <option value={Currency.EUR}>EUR</option>
-                                                    </select>
-                                                </td>
-                                                <td className={`${cellClass} text-right pr-4 font-mono font-bold text-zinc-700 dark:text-zinc-200`}>
-                                                    {formatNumber(item.totalPrice)}
-                                                </td>
-                                                <td className={`${cellClass} text-center`}>
-                                                    <button onClick={(e) => { e.stopPropagation(); removeTransport(item.id); }} className="text-zinc-400 hover:text-red-500 p-1">
-                                                        <Trash2 size={14} />
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
                                     </tbody>
                                 </table>
+                            )}
+
+                            {!readOnly && (
+                                <div className="mt-4 flex justify-center">
+                                    <button
+                                        onClick={addManualTransport}
+                                        className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full text-xs font-bold text-zinc-600 dark:text-zinc-400 transition-colors"
+                                    >
+                                        <Plus size={14} />
+                                        Dodaj inną pozycję transportową
+                                    </button>
+                                </div>
+                            )}
+
+                            {manualItems.length > 0 && (
+                                <div className="mt-6 border-t border-zinc-200 dark:border-zinc-800 pt-4">
+                                    <h4 className="text-xs font-bold text-zinc-500 mb-3 uppercase tracking-wider">Dodatkowe pozycje transportowe</h4>
+                                    <div className="space-y-2">
+                                        {manualItems.map(item => {
+                                            const pricePLN = item.totalPrice * (item.currency === Currency.EUR ? exchangeRate : 1);
+                                            const finalPricePLN = pricePLN * (offerCurrency === Currency.EUR ? (1 / exchangeRate) : 1);
+
+                                            return (
+                                                <div key={item.id} className="bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 flex items-center gap-3">
+                                                    <div className="flex-1">
+                                                        <label className="text-[9px] text-zinc-400 block mb-0.5 uppercase">Opis</label>
+                                                        <input
+                                                            type="text"
+                                                            value={item.name || ''}
+                                                            onChange={(e) => updateById(item.id, { name: e.target.value })}
+                                                            className="w-full bg-transparent border-b border-zinc-200 dark:border-zinc-800 focus:border-amber-500 outline-none text-xs font-bold py-1"
+                                                            placeholder="Opis transportu..."
+                                                            readOnly={readOnly}
+                                                        />
+                                                    </div>
+                                                    <div className="w-24">
+                                                        <label className="text-[9px] text-zinc-400 block mb-0.5 uppercase">Cena</label>
+                                                        <SmartInput
+                                                            className="w-full bg-transparent border-b border-zinc-200 dark:border-zinc-800 focus:border-amber-500 outline-none text-xs font-bold py-1 text-right"
+                                                            value={item.totalPrice}
+                                                            onChange={(val) => updateById(item.id, { totalPrice: val })}
+                                                            readOnly={readOnly}
+                                                        />
+                                                    </div>
+                                                    <div className="w-20">
+                                                        <label className="text-[9px] text-zinc-400 block mb-0.5 uppercase">Waluta</label>
+                                                        <select
+                                                            value={item.currency}
+                                                            onChange={(e) => updateById(item.id, { currency: e.target.value as Currency })}
+                                                            className="w-full bg-transparent border-b border-zinc-200 dark:border-zinc-800 focus:border-amber-500 outline-none text-xs font-bold py-1 appearance-none"
+                                                            disabled={readOnly}
+                                                        >
+                                                            {Object.values(Currency).map(c => <option key={c} value={c}>{c}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    {!readOnly && (
+                                                        <button
+                                                            onClick={() => {
+                                                                const newTransport = transport.filter(t => t.id !== item.id);
+                                                                onChange(newTransport);
+                                                            }}
+                                                            className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
                             )}
                         </div>
                     </div>

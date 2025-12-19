@@ -1,11 +1,13 @@
 /// <reference types="vite/client" />
-import { createClient, SupabaseClient, User, Session } from '@supabase/supabase-js';
+import { SupabaseClient, User, Session } from '@supabase/supabase-js';
+import { supabase } from './supabaseClient';
 
 export interface UserProfile {
     id: string;
     email: string;
     full_name: string | null;
-    role: 'engineer' | 'specialist' | 'admin';
+    role: 'engineer' | 'specialist' | 'manager' | 'logistics';
+    pending_role: 'engineer' | 'specialist' | 'manager' | 'logistics' | null;
     approved: boolean;
     is_admin: boolean;
     created_at: string;
@@ -20,26 +22,17 @@ export interface AuthState {
 }
 
 export class AuthService {
-    private supabase: SupabaseClient | null = null;
+    private supabase: SupabaseClient = supabase;
 
     constructor() {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
-
-        if (supabaseUrl && supabaseKey) {
-            this.supabase = createClient(supabaseUrl, supabaseKey);
-        } else {
-            console.warn('Supabase credentials not found. Authentication will not work.');
-        }
+        // Client initialized via shared instance
     }
 
     /**
      * Rejestracja nowego użytkownika
      */
-    async signUp(email: string, password: string, fullName: string, role: 'engineer' | 'specialist' | 'admin'): Promise<{ user: User | null; error: Error | null }> {
-        if (!this.supabase) {
-            return { user: null, error: new Error('Supabase client not initialized') };
-        }
+    async signUp(email: string, password: string, fullName: string, role: 'engineer' | 'specialist' | 'manager'): Promise<{ user: User | null; error: Error | null }> {
+
 
         const { data, error } = await this.supabase.auth.signUp({
             email,
@@ -47,7 +40,7 @@ export class AuthService {
             options: {
                 data: {
                     full_name: fullName,
-                    role: role,
+                    role: role, // Default role
                 },
             },
         });
@@ -63,9 +56,7 @@ export class AuthService {
      * Logowanie użytkownika
      */
     async signIn(email: string, password: string): Promise<{ user: User | null; error: Error | null }> {
-        if (!this.supabase) {
-            return { user: null, error: new Error('Supabase client not initialized') };
-        }
+
 
         const { data, error } = await this.supabase.auth.signInWithPassword({
             email,
@@ -83,9 +74,7 @@ export class AuthService {
      * Wylogowanie użytkownika
      */
     async signOut(): Promise<{ error: Error | null }> {
-        if (!this.supabase) {
-            return { error: new Error('Supabase client not initialized') };
-        }
+
 
         const { error } = await this.supabase.auth.signOut();
         return { error };
@@ -95,7 +84,7 @@ export class AuthService {
      * Pobranie aktualnie zalogowanego użytkownika
      */
     async getCurrentUser(): Promise<User | null> {
-        if (!this.supabase) return null;
+
 
         const { data } = await this.supabase.auth.getUser();
         return data.user;
@@ -105,7 +94,7 @@ export class AuthService {
      * Pobranie sesji użytkownika
      */
     async getSession(): Promise<Session | null> {
-        if (!this.supabase) return null;
+
 
         const { data } = await this.supabase.auth.getSession();
         return data.session;
@@ -115,7 +104,7 @@ export class AuthService {
      * Pobranie profilu użytkownika z tabeli users
      */
     async getUserProfile(userId: string): Promise<UserProfile | null> {
-        if (!this.supabase) return null;
+
 
         const { data, error } = await this.supabase
             .from('users')
@@ -135,7 +124,7 @@ export class AuthService {
      * Nasłuchiwanie zmian w stanie uwierzytelniania
      */
     onAuthStateChange(callback: (event: string, session: Session | null) => void) {
-        if (!this.supabase) return () => { };
+
 
         const { data: { subscription } } = this.supabase.auth.onAuthStateChange(callback);
         return () => subscription.unsubscribe();
@@ -145,7 +134,7 @@ export class AuthService {
      * Pobranie wszystkich użytkowników (tylko dla adminów)
      */
     async getAllUsers(): Promise<UserProfile[]> {
-        if (!this.supabase) return [];
+
 
         const { data, error } = await this.supabase
             .from('users')
@@ -164,9 +153,7 @@ export class AuthService {
      * Zatwierdzenie użytkownika (tylko dla adminów)
      */
     async approveUser(userId: string): Promise<{ error: Error | null }> {
-        if (!this.supabase) {
-            return { error: new Error('Supabase client not initialized') };
-        }
+
 
         const { error } = await this.supabase
             .from('users')
@@ -185,9 +172,7 @@ export class AuthService {
      * Nadanie uprawnień admina (tylko dla adminów)
      */
     async makeAdmin(userId: string): Promise<{ error: Error | null }> {
-        if (!this.supabase) {
-            return { error: new Error('Supabase client not initialized') };
-        }
+
 
         const { error } = await this.supabase
             .from('users')
@@ -206,9 +191,7 @@ export class AuthService {
      * Cofnięcie zatwierdzenia użytkownika (tylko dla adminów)
      */
     async revokeApproval(userId: string): Promise<{ error: Error | null }> {
-        if (!this.supabase) {
-            return { error: new Error('Supabase client not initialized') };
-        }
+
 
         const { error } = await this.supabase
             .from('users')
@@ -225,15 +208,36 @@ export class AuthService {
 
     /**
      * Aktualizacja profilu użytkownika
+     * Jeśli zmieniana jest rola, ustawia ona pending_role zamiast bezpośredniej zmiany (chyba że robi to admin)
      */
-    async updateUserProfile(userId: string, updates: { full_name?: string; role?: 'engineer' | 'specialist' | 'admin' }): Promise<{ error: Error | null }> {
-        if (!this.supabase) {
-            return { error: new Error('Supabase client not initialized') };
+    async updateUserProfile(userId: string, updates: { full_name?: string; role?: 'engineer' | 'specialist' | 'manager' | 'logistics' }): Promise<{ error: Error | null }> {
+
+        // Jeśli użytkownik jest adminem, może zmienić rolę bezpośrednio
+        // Jeśli nie, zmiana roli ustawia pending_role
+
+        const payload: any = { updated_at: new Date().toISOString() };
+        if (updates.full_name) payload.full_name = updates.full_name;
+
+        // Sprawdź czy aktualnie zalogowany użytkownik jest adminem, aby pozwolić na bezpośrednią zmianę
+        const currentUser = await this.getCurrentUser();
+        const { data: requesterProfile } = await this.supabase
+            .from('users')
+            .select('is_admin')
+            .eq('id', currentUser?.id)
+            .single();
+
+        if (updates.role) {
+            if (requesterProfile?.is_admin) {
+                payload.role = updates.role;
+                payload.pending_role = null; // Clear pending if admin changes it
+            } else {
+                payload.pending_role = updates.role;
+            }
         }
 
         const { error } = await this.supabase
             .from('users')
-            .update({ ...updates, updated_at: new Date().toISOString() })
+            .update(payload)
             .eq('id', userId);
 
         if (error) {
@@ -242,6 +246,45 @@ export class AuthService {
         }
 
         return { error: null };
+    }
+
+    /**
+     * Zatwierdzenie zmiany roli (tylko dla adminów/menadżerów)
+     */
+    async approveRoleChange(userId: string): Promise<{ error: Error | null }> {
+
+        // Pobierz pending_role
+        const { data: user } = await this.supabase
+            .from('users')
+            .select('pending_role')
+            .eq('id', userId)
+            .single();
+
+        if (!user?.pending_role) {
+            return { error: new Error('Brak oczekującej zmiany roli') };
+        }
+
+        const { error } = await this.supabase
+            .from('users')
+            .update({
+                role: user.pending_role,
+                pending_role: null
+            })
+            .eq('id', userId);
+
+        return { error };
+    }
+
+    /**
+     * Odrzucenie zmiany roli
+     */
+    async rejectRoleChange(userId: string): Promise<{ error: Error | null }> {
+        const { error } = await this.supabase
+            .from('users')
+            .update({ pending_role: null })
+            .eq('id', userId);
+
+        return { error };
     }
 }
 

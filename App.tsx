@@ -47,10 +47,15 @@ import { ScenarioManagerModal } from './components/ScenarioManagerModal';
 import { ScrollSpy } from './components/ScrollSpy';
 import { AuthModal } from './components/AuthModal';
 import { AdminPanel } from './components/AdminPanel';
+import { DashboardView } from './components/DashboardView';
+import { ProfileEditModal } from './components/ProfileEditModal';
 import { fetchEurRate } from './services/currencyService';
 import { generateDiff } from './services/diffService';
+import { storageService } from './services/storage';
 import { useAuth } from './contexts/AuthContext';
-import { Moon, Sun, History, Download, Upload, FilePlus, HardDrive, MousePointer2, X, Plus, Check, Trash2, Settings, Shield, AlertCircle } from 'lucide-react';
+import { calculateProjectCosts } from './services/calculationService';
+import { toISODateString } from './services/dateUtils';
+import { Moon, Sun, History, Download, Upload, FilePlus, HardDrive, MousePointer2, X, Plus, Check, Trash2, Settings, Shield, AlertCircle, User, Keyboard, LogOut } from 'lucide-react';
 
 const STORAGE_KEY = 'procalc_data_v1';
 const THEME_KEY = 'procalc_theme';
@@ -173,7 +178,7 @@ const App: React.FC = () => {
         activeScenarioId: 'default',
         mode: CalculationMode.INITIAL,
         stage: 'DRAFT', // Initialize Stage
-        viewMode: ViewMode.CALCULATOR,
+        viewMode: ViewMode.DASHBOARD,
         exchangeRate: 4.30,
         offerCurrency: Currency.EUR,
         clientCurrency: Currency.PLN,
@@ -188,6 +193,7 @@ const App: React.FC = () => {
     const [showComparison, setShowComparison] = useState(false);
     const [showSupplierComparison, setShowSupplierComparison] = useState(false); // New State for Supplier Modal
     const [showHistory, setShowHistory] = useState(false);
+    const [showProfileEdit, setShowProfileEdit] = useState(false);
     const [showProjectManager, setShowProjectManager] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [showShortcuts, setShowShortcuts] = useState(false);
@@ -716,7 +722,7 @@ const App: React.FC = () => {
 
             const mode = appState.mode === CalculationMode.INITIAL ? 'initial' : 'final';
             const tasks = appState[mode].tasks || [];
-            const today = new Date().toISOString().split('T')[0];
+            const today = toISODateString(new Date());
             let updated = false;
 
             const newTasks = tasks.map(task => {
@@ -915,14 +921,86 @@ const App: React.FC = () => {
             return false;
         }
 
+        // --- PREPARE DATA FOR SAVE (Shared for both Local and Cloud) ---
+        // Update State with current stage
+        const newState = { ...appState, stage: stage };
+
+        // Don't set state immediately if we are just checking... actually we should update stage.
+        // But let's follow performSave pattern which updates state.
+
+        const projectNum = appState.initial.meta.projectNumber || 'BezNumeru';
+        const safeProject = sanitizeName(projectNum);
+
+        // Construct filename / data
+        const now = new Date();
+        const offset = now.getTimezoneOffset() * 60000;
+        const timestamp = new Date(now.getTime() - offset).toISOString().slice(0, 19).replace('T', '_').replace(/[:]/g, '-');
+        const filename = `PROCALC_${safeProject}_${stage}_${timestamp}.json`;
+
+        const fileData: ProjectFile = {
+            version: '1.0',
+            timestamp: Date.now(),
+            stage: stage,
+            appState: newState,
+            historyLog: [],
+            past: [],
+            future: []
+        };
+
+        // --- CLOUD SAVE LOGIC ---
+        const saveToCloud = async () => {
+            // Calculate summary stats for DB
+            const data = fileData.appState.mode === CalculationMode.FINAL ? fileData.appState.final : fileData.appState.initial;
+            const rate = fileData.appState.exchangeRate;
+            const currency = fileData.appState.offerCurrency;
+            const costs = calculateProjectCosts(data, rate, currency, fileData.appState.mode, fileData.appState.globalSettings.ormFeePercent, fileData.appState.targetMargin, fileData.appState.manualPrice);
+
+            let totalPrice = 0;
+            if (fileData.appState.manualPrice !== null) {
+                totalPrice = fileData.appState.manualPrice;
+            } else {
+                const marginDecimal = fileData.appState.targetMargin / 100;
+                totalPrice = costs.total / (1 - marginDecimal);
+            }
+
+            // Convert to PLN if needed, but storage expects number. 
+            // Ideally we save raw values. The DB has total_cost / total_price columns.
+            try {
+                const newId = await storageService.saveCalculation(fileData as any, {
+                    totalCost: costs.total,
+                    totalPrice: totalPrice
+                });
+
+                // Update state with the new cloud ID
+                setAppState(prev => ({ ...prev, activeCalculationId: newId }));
+                return true;
+            } catch (e) {
+                console.error("Cloud save failed", e);
+                return false;
+            }
+        };
+
+
+        // --- LOCAL SAVE CHECK ---
         if (!dirHandle) {
-            triggerConfirm(
-                "Wybierz folder projektów",
-                "Aby zapisać projekt i przejść dalej, musisz wskazać folder roboczy w Menedżerze Projektów.",
-                () => setShowProjectManager(true)
-            );
-            return false;
+            // [MODIFIED] Fallback to Cloud check instead of blocking
+            const cloudSuccess = await saveToCloud();
+            if (cloudSuccess) {
+                setAppState(newState); // Update state to reflect stage change
+                showSnackbar("Zapisano w chmurze (Brak folderu lokalnego)");
+                return true;
+            } else {
+                triggerConfirm(
+                    "Błąd Zapisu",
+                    "Nie udało się zapisać w chmurze, a folder lokalny nie jest wybrany.",
+                    () => setShowProjectManager(true)
+                );
+                return false;
+            }
         }
+
+        // If Local Folder IS selected -> Proceed with Local Save Logic (and we can double save to cloud if we want, but let's stick to Local primary + Cloud sync if desired)
+        // For now, keep original logic for local parsing which is robust (fuzzy matching folders)
 
         // Check for fuzzy match on client folder
         const clientName = appState.initial.orderingParty.name || 'Nieznany Klient';
@@ -939,8 +1017,10 @@ const App: React.FC = () => {
                 if (entry.kind === 'directory') {
                     const normalizedEntry = normalizeForComparison(entry.name);
 
-                    // Exact match - Just save without prompt (assuming user meant to save to existing)
+                    // Exact match
                     if (normalizedEntry === normalizedTarget) {
+                        // We need to pass fileData to performSave or let it recreate it? 
+                        // performSave recreates it. That's fine.
                         return await performSave(stage, entry.name);
                     }
 
@@ -950,26 +1030,25 @@ const App: React.FC = () => {
 
                     if (dist <= threshold) {
                         fuzzyMatch = { name: entry.name, distance: dist };
-                        break; // Found a close match
+                        break;
                     }
                 }
             }
 
             if (fuzzyMatch) {
-                // Trigger confirmation dialog with options
                 triggerConfirm(
                     "Weryfikacja Klienta",
                     `Znaleziono istniejący folder o podobnej nazwie: "${fuzzyMatch.name}"\n\nTwój wpis: "${clientName}" (${safeClient})\n\nCzy chcesz zapisać w ISTNIEJĄCYM folderze, czy utworzyć nowy dla innego klienta?`,
-                    () => performSave(stage, fuzzyMatch!.name), // Confirm -> Use Existing
+                    () => performSave(stage, fuzzyMatch!.name),
                     false,
                     {
                         confirmLabel: `Tak, użyj "${fuzzyMatch.name}"`,
                         neutralLabel: `Nie, utwórz "${safeClient}"`,
-                        onNeutral: () => performSave(stage, safeClient), // Neutral -> Create New
+                        onNeutral: () => performSave(stage, safeClient),
                         cancelLabel: "Anuluj"
                     }
                 );
-                return false; // Wait for user interaction
+                return false;
             }
 
             // No match found -> New Client
@@ -977,20 +1056,28 @@ const App: React.FC = () => {
 
         } catch (err) {
             console.error("Auto-save pre-check failed", err);
-            showSnackbar("Błąd sprawdzania folderów. Sprawdź uprawnienia.");
+            // If local check fails, try cloud?
+            const cloudSuccess = await saveToCloud();
+            if (cloudSuccess) {
+                setAppState(newState);
+                showSnackbar("Zapisano w chmurze (Błąd folderu lokalnego)");
+                return true;
+            }
+
+            showSnackbar("Błąd sprawdzania folderów i zapisu w chmurze.");
             return false;
         }
     };
 
+    // Kept for Internal Local Storage usage
     const performSave = async (stage: ProjectStage, targetClientFolderName: string): Promise<boolean> => {
-        // Update State with current stage
+        // Update State
         const newState = { ...appState, stage: stage };
         setAppState(newState);
 
         const projectNum = appState.initial.meta.projectNumber || 'BezNumeru';
         const safeProject = sanitizeName(projectNum);
 
-        // Construct filename
         const now = new Date();
         const offset = now.getTimezoneOffset() * 60000;
         const timestamp = new Date(now.getTime() - offset).toISOString().slice(0, 19).replace('T', '_').replace(/[:]/g, '-');
@@ -1009,22 +1096,40 @@ const App: React.FC = () => {
         try {
             // @ts-ignore
             const rootHandle = dirHandle;
-
-            // Get/Create Client Folder
             // @ts-ignore
             let targetHandle = await rootHandle.getDirectoryHandle(targetClientFolderName, { create: true });
-
-            // Get/Create Project Folder
             // @ts-ignore
             targetHandle = await targetHandle.getDirectoryHandle(safeProject, { create: true });
-
-            // Save File
             // @ts-ignore
             const fileHandle = await targetHandle.getFileHandle(filename, { create: true });
             // @ts-ignore
             const writable = await fileHandle.createWritable();
             await writable.write(JSON.stringify(fileData, null, 2));
             await writable.close();
+
+            // Also SYNC to Cloud silently if possible? 
+            // Yes, good practice to sync.
+            const data = newState.mode === CalculationMode.FINAL ? newState.final : newState.initial;
+            const rate = newState.exchangeRate;
+            const currency = newState.offerCurrency;
+            const costs = calculateProjectCosts(data, rate, currency, newState.mode, newState.globalSettings.ormFeePercent, newState.targetMargin, newState.manualPrice);
+
+            let totalPrice = 0;
+            if (newState.manualPrice !== null) {
+                totalPrice = newState.manualPrice;
+            } else {
+                const marginDecimal = newState.targetMargin / 100;
+                totalPrice = costs.total / (1 - marginDecimal);
+            }
+
+            try {
+                await storageService.saveCalculation(fileData as any, {
+                    totalCost: costs.total,
+                    totalPrice: totalPrice
+                });
+            } catch (e) {
+                console.warn("Silent cloud sync failed during local save", e);
+            }
 
             showSnackbar(`Zapisano w: ${targetClientFolderName}/${safeProject}`);
             return true;
@@ -1476,9 +1581,23 @@ const App: React.FC = () => {
                     parsed.appState.activeScenarioId = 'default';
                 }
 
+                // [NEW] Ownership Warning Check
+                if (profile?.full_name) {
+                    const sales = parsed.appState.initial?.meta?.salesPerson;
+                    const assistant = parsed.appState.initial?.meta?.assistantPerson;
+                    const isOwner = (sales && sales === profile.full_name) || (assistant && assistant === profile.full_name);
+
+                    // If user is NOT admin/logistics and NOT owner (sales/assistant), warn them.
+                    if (!profile.is_admin && profile.role !== 'logistics' && !isOwner && (sales || assistant)) {
+                        showSnackbar("UWAGA: Otwierasz kalkulację przypisaną do innego użytkownika.");
+                    }
+                }
+
                 setAppState({
                     ...parsed.appState,
-                    stage: loadedStage
+                    stage: loadedStage,
+                    isLocked: parsed.appState.isLocked || false, // Ensure lock state is applied
+                    activeCalculationId: parsed.id || parsed.appState.activeCalculationId // Restore cloud ID
                 });
 
                 if (parsed.historyLog) setHistoryLog(parsed.historyLog);
@@ -1579,6 +1698,18 @@ const App: React.FC = () => {
                     fin.meta.assistantPerson = appState.globalSettings.defaultSupportPerson;
                 }
 
+                // Auto-fill based on User Role (overrides defaults if match, or fills empty)
+                // Logic: Engineer -> Sales Person, Specialist -> Assistant Person
+                if (profile?.full_name) {
+                    if (profile.role === 'engineer' && !init.meta.salesPerson) {
+                        init.meta.salesPerson = profile.full_name;
+                        fin.meta.salesPerson = profile.full_name;
+                    } else if (profile.role === 'specialist' && !init.meta.assistantPerson) {
+                        init.meta.assistantPerson = profile.full_name;
+                        fin.meta.assistantPerson = profile.full_name;
+                    }
+                }
+
                 // Reset Scenarios
                 const defaultScenario = extractScenarioData(init, 'default', 'Wariant Główny');
 
@@ -1619,13 +1750,17 @@ const App: React.FC = () => {
     const isFinal = appState.mode === CalculationMode.FINAL;
 
     const menuItems = [
+        { label: 'Edytuj Profil', icon: <User size={16} />, onClick: () => setShowProfileEdit(true) },
         { label: 'Ustawienia', icon: <Settings size={16} />, onClick: () => setShowSettings(true) },
+        { label: 'Skróty Klawiszowe', icon: <Keyboard size={16} />, onClick: () => setShowShortcuts(true) },
         { label: 'Nowy Projekt', icon: <FilePlus size={16} />, onClick: handleNewProject, danger: true },
         { label: 'Otwórz Menedżer Projektów', icon: <HardDrive size={16} />, onClick: () => setShowProjectManager(true) },
+        ...(profile?.is_admin ? [{ label: 'Panel Administratora', icon: <Shield size={16} />, onClick: () => setShowAdminPanel(true) }] : []),
         { label: 'Pobierz Projekt (.json)', icon: <Download size={16} />, onClick: handleExport },
         { label: 'Wczytaj Projekt (.json)', icon: <Upload size={16} />, onClick: () => projectInputRef.current?.click() },
         { label: 'Historia Zmian', icon: <History size={16} />, onClick: () => setShowHistory(true) },
         { label: 'Zmień Motyw', icon: isDarkMode ? <Sun size={16} /> : <Moon size={16} />, onClick: toggleTheme },
+        { label: 'Wyloguj Się', icon: <LogOut size={16} />, onClick: () => signOut(), danger: true },
     ];
 
     if (!isLoaded) return <div className="min-h-screen bg-black flex items-center justify-center text-zinc-500 font-mono text-sm">Wczytywanie systemu...</div>;
@@ -1646,6 +1781,11 @@ const App: React.FC = () => {
         if (stage.isExcluded) return sum;
         return sum + (stage.palletSpots || 0);
     }, 0);
+
+    // CALCULATE READ-ONLY STATE
+    // CALCULATE READ-ONLY STATE
+    // [REVERTED] Admin/Manager/Logistics can bypass lock. Others respects lock.
+    const isReadOnly = appState.isLocked && (!profile?.is_admin && profile?.role !== 'logistics' && profile?.role !== 'manager');
 
     return (
         <div className="h-screen overflow-hidden bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 transition-colors font-sans flex flex-col">
@@ -1769,6 +1909,7 @@ const App: React.FC = () => {
                                                         onChange={(field, val) => updateCalculationData({ [field]: val })}
                                                         isOpen={isHeaderFormsOpen}
                                                         onToggle={() => setIsHeaderFormsOpen(!isHeaderFormsOpen)}
+                                                        readOnly={isReadOnly}
                                                     />
                                                 </div>
                                                 <div className="lg:col-span-1" id="section-meta">
@@ -1778,6 +1919,7 @@ const App: React.FC = () => {
                                                         onChange={(val) => updateCalculationData({ meta: val })}
                                                         isOpen={isHeaderFormsOpen}
                                                         onToggle={() => setIsHeaderFormsOpen(!isHeaderFormsOpen)}
+                                                        readOnly={isReadOnly}
                                                     />
                                                 </div>
                                             </div>
@@ -1789,6 +1931,7 @@ const App: React.FC = () => {
                                                 onSwitch={handleSwitchScenario}
                                                 onAdd={handleAddScenario}
                                                 onManage={() => setShowScenarioManager(true)}
+                                                readOnly={isReadOnly}
                                             />
 
                                             <div id="section-suppliers">
@@ -1806,6 +1949,7 @@ const App: React.FC = () => {
                                                     onConfirm={triggerConfirm}
                                                     isPickingMode={!!pickingVariantId}
                                                     onPick={handleVariantItemPick}
+                                                    readOnly={isReadOnly}
                                                 />
                                             </div>
 
@@ -1833,6 +1977,7 @@ const App: React.FC = () => {
                                                     onPick={handleVariantItemPick}
                                                     onEnterPickingMode={(id) => setPickingVariantId(id)}
                                                     onEditPackage={handleEditPackage}
+                                                    readOnly={isReadOnly}
                                                 />
                                             </div>
 
@@ -1847,6 +1992,7 @@ const App: React.FC = () => {
                                                     isPickingMode={!!pickingVariantId}
                                                     onPick={handleVariantItemPick}
                                                     totalPalletSpots={totalPalletSpots}
+                                                    readOnly={isReadOnly}
                                                 />
                                             </div>
 
@@ -1868,6 +2014,7 @@ const App: React.FC = () => {
                                                     appState={appState}
                                                     onUpdateState={(updates) => setAppState(prev => ({ ...prev, ...updates }))}
                                                     data={data}
+                                                    readOnly={isReadOnly}
                                                 />
                                             </div>
                                         </>
@@ -1937,6 +2084,21 @@ const App: React.FC = () => {
                                         appState={appState}
                                     />
                                 </div>
+                            </div>
+                        )}
+
+                        {appState.viewMode === ViewMode.DASHBOARD && (
+                            <div className="xl:col-span-12 animate-fadeIn bg-zinc-50 dark:bg-zinc-950 min-h-screen">
+                                <DashboardView
+                                    activeProject={data.meta.projectNumber || data.orderingParty.name ? data : null}
+                                    onNewProject={handleNewProject}
+                                    onShowProjectManager={() => setShowProjectManager(true)}
+                                    onShowComparison={() => setShowComparison(true)}
+                                    onBack={() => setAppState(prev => ({ ...prev, viewMode: ViewMode.CALCULATOR }))}
+                                    onOpenProject={(data, stage, mode) => {
+                                        loadProjectFromObject(data);
+                                    }}
+                                />
                             </div>
                         )}
 
@@ -2060,6 +2222,8 @@ const App: React.FC = () => {
                         onApply={handleQuickStartApply}
                         defaultSalesPerson={appState.globalSettings.defaultSalesPerson}
                         defaultSupportPerson={appState.globalSettings.defaultSupportPerson}
+                        currentUserRole={profile?.role}
+                        currentUserName={profile?.full_name}
                     />
 
                     {/* SCENARIO MANAGER MODAL */}
@@ -2180,13 +2344,17 @@ const App: React.FC = () => {
                         </div>
                     )}
 
-                    {/* Admin Panel Modal */}
                     {showAdminPanel && (
                         <AdminPanel
                             isOpen={showAdminPanel}
                             onClose={() => setShowAdminPanel(false)}
                         />
                     )}
+
+                    <ProfileEditModal
+                        isOpen={showProfileEdit}
+                        onClose={() => setShowProfileEdit(false)}
+                    />
                 </>
             )}
         </div>

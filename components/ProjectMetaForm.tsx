@@ -4,6 +4,7 @@ import { ProjectMeta, CalculationMode } from '../types';
 import { Briefcase, Calendar, User, ChevronDown, Hash, ScanLine, Search, Layers, FileText, UserCheck } from 'lucide-react';
 import { SALES_PEOPLE, SUPPORT_PEOPLE, ACTUAL_SALES_PEOPLE } from '../services/employeesDatabase';
 import { INSTALLATION_TYPES, INVOICE_TEXTS } from '../services/optionsDatabase';
+import { DatePickerInput } from './DatePickerInput';
 
 interface Props {
     data: ProjectMeta;
@@ -11,9 +12,10 @@ interface Props {
     onChange: (data: ProjectMeta) => void;
     isOpen?: boolean; // Controlled state
     onToggle?: () => void; // Toggle handler
+    readOnly?: boolean;
 }
 
-export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen = true, onToggle }) => {
+export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen = true, onToggle, readOnly }) => {
     const [internalOpen, setInternalOpen] = useState(true);
 
     // Use controlled state if provided, otherwise local
@@ -21,6 +23,7 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
     const toggleHandler = onToggle || (() => setInternalOpen(!internalOpen));
 
     const handleChange = (key: keyof ProjectMeta, value: string | number) => {
+        if (readOnly) return;
         onChange({ ...data, [key]: value });
     };
 
@@ -30,19 +33,21 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
         : data.sapProjectNumber;
 
     const handleSapChange = (val: string) => {
+        if (readOnly) return;
         // Only allow digits, max 5 digits (to form 10 total with prefix)
         const cleanVal = val.replace(/\D/g, '').slice(0, 5);
         handleChange('sapProjectNumber', sapPrefix + cleanVal);
     };
 
     const handleProjectNumberChange = (val: string) => {
+        if (readOnly) return;
         // Only allow digits, max 8 digits
         const cleanVal = val.replace(/\D/g, '').slice(0, 8);
         handleChange('projectNumber', cleanVal);
     };
 
     // UPDATED: Removed py-2, added h-[34px] to enforce exact height match across all inputs/selects
-    const inputClass = "w-full px-3 h-[34px] bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded text-xs text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all";
+    const inputClass = `w-full px-3 h-[34px] bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded text-xs text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all ${readOnly ? 'opacity-50 pointer-events-none' : ''}`;
     const labelClass = "block text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase mb-1 ml-1 tracking-wider";
 
     const renderPersonSelect = (label: string, value: string, onChange: (val: string) => void, options: string[]) => {
@@ -55,9 +60,10 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
                         list={`${label.replace(/\s+/g, '')}-list`}
                         type="text"
                         className={`${inputClass} pl-9`}
-                        placeholder="Wybierz z listy..."
+                        placeholder={readOnly ? "Zablokowane" : "Wybierz z listy..."}
                         value={value}
                         onChange={(e) => onChange(e.target.value)}
+                        disabled={readOnly}
                     />
                     <datalist id={`${label.replace(/\s+/g, '')}-list`}>
                         {options.map((name, i) => (
@@ -112,6 +118,7 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
                                 onChange={(e) => handleChange('orderNumber', e.target.value)}
                                 className={`${inputClass} font-bold text-zinc-900 dark:text-white`}
                                 placeholder="np. ZAM/2024/..."
+                                disabled={readOnly}
                             />
                         </div>
 
@@ -119,12 +126,12 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
                             <div>
                                 <label className={labelClass}>Data Zamówienia</label>
                                 <div className="relative group">
-                                    <Calendar className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600" size={14} />
-                                    <input
-                                        type="date"
+                                    <Calendar className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600 z-10" size={14} />
+                                    <DatePickerInput
                                         value={data.orderDate}
-                                        onChange={(e) => handleChange('orderDate', e.target.value)}
+                                        onChange={(val) => handleChange('orderDate', val)}
                                         className={`${inputClass} pl-9`}
+                                        disabled={readOnly}
                                     />
                                 </div>
                             </div>
@@ -134,12 +141,12 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
                             <div>
                                 <label className={labelClass}>Data Protokołu</label>
                                 <div className="relative group">
-                                    <Calendar className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600" size={14} />
-                                    <input
-                                        type="date"
+                                    <Calendar className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600 z-10" size={14} />
+                                    <DatePickerInput
                                         value={data.protocolDate}
-                                        onChange={(e) => handleChange('protocolDate', e.target.value)}
+                                        onChange={(val) => handleChange('protocolDate', val)}
                                         className={`${inputClass} pl-9`}
+                                        disabled={readOnly}
                                     />
                                 </div>
                             </div>
@@ -156,6 +163,7 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
                                     maxLength={5}
                                     className={`${inputClass} pl-14 font-mono tracking-widest`}
                                     placeholder="XXXXX"
+                                    disabled={readOnly}
                                 />
                             </div>
                         </div>
@@ -173,6 +181,7 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
                                     className={`${inputClass} pl-9 font-mono tracking-wide`}
                                     placeholder="8 cyfr (np. 12345678)"
                                     maxLength={8}
+                                    disabled={readOnly}
                                 />
                             </div>
                         </div>
@@ -186,6 +195,7 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
                                     value={data.installationType || ''}
                                     onChange={(e) => handleChange('installationType', e.target.value)}
                                     className={`${inputClass} pl-9 appearance-none cursor-pointer`}
+                                    disabled={readOnly}
                                 >
                                     <option value="">Wybierz...</option>
                                     {INSTALLATION_TYPES.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -204,6 +214,7 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
                                     value={data.invoiceText || ''}
                                     onChange={(e) => handleChange('invoiceText', e.target.value)}
                                     className={`${inputClass} pl-9 appearance-none cursor-pointer`}
+                                    disabled={readOnly}
                                 >
                                     <option value="">Wybierz...</option>
                                     {INVOICE_TEXTS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -236,6 +247,7 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
                                         className={`${inputClass} px-2 appearance-none cursor-pointer font-bold text-center`}
                                         value={data.actualSalesPersonPercentage ?? 100}
                                         onChange={(e) => handleChange('actualSalesPersonPercentage', parseInt(e.target.value))}
+                                        disabled={readOnly}
                                     >
                                         <option value={100}>100%</option>
                                         <option value={75}>75%</option>
@@ -262,6 +274,7 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
                                         className={`${inputClass} px-2 appearance-none cursor-pointer font-bold text-center`}
                                         value={data.actualSalesPerson2Percentage ?? 0}
                                         onChange={(e) => handleChange('actualSalesPerson2Percentage', parseInt(e.target.value))}
+                                        disabled={readOnly}
                                     >
                                         <option value={100}>100%</option>
                                         <option value={75}>75%</option>

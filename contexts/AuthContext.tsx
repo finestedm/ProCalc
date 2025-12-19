@@ -4,10 +4,12 @@ import { authService, UserProfile, AuthState } from '../services/authService';
 
 interface AuthContextType extends AuthState {
     signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-    signUp: (email: string, password: string, fullName: string, role: 'engineer' | 'specialist' | 'admin') => Promise<{ error: Error | null }>;
+    signUp: (email: string, password: string, fullName: string, role: 'engineer' | 'specialist' | 'manager') => Promise<{ error: Error | null }>;
     signOut: () => Promise<void>;
     refreshProfile: () => Promise<void>;
-    updateProfile: (updates: { full_name?: string; role?: 'engineer' | 'specialist' | 'admin' }) => Promise<{ error: Error | null }>;
+    updateProfile: (updates: { full_name?: string; role?: 'engineer' | 'specialist' | 'manager' }) => Promise<{ error: Error | null }>;
+    approveRoleChange: (userId: string) => Promise<{ error: Error | null }>;
+    rejectRoleChange: (userId: string) => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -56,7 +58,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return { error: null };
     };
 
-    const signUp = async (email: string, password: string, fullName: string, role: 'engineer' | 'specialist' | 'admin') => {
+    const signUp = async (email: string, password: string, fullName: string, role: 'engineer' | 'specialist' | 'manager') => {
         const { user, error } = await authService.signUp(email, password, fullName, role);
 
         if (error) {
@@ -68,19 +70,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return { error: null };
     };
 
-    const updateProfile = async (updates: { full_name?: string; role?: 'engineer' | 'specialist' | 'admin' }) => {
+    const updateProfile = async (updates: { full_name?: string; role?: 'engineer' | 'specialist' | 'manager' }) => {
         const user = await authService.getCurrentUser();
         if (!user) {
             return { error: new Error('User not authenticated') };
         }
 
-        const { error } = await authService.updateUserProfile(user.id, updates);
+        const result = await authService.updateUserProfile(user.id, updates);
 
-        if (!error) {
+        if (!result.error) {
             await refreshProfile();
         }
 
-        return { error };
+        return result;
+    };
+
+    const approveRoleChange = async (userId: string) => {
+        const result = await authService.approveRoleChange(userId);
+        if (!result.error && authState.user?.id === userId) {
+            await refreshProfile(); // Refresh profile if the current user's role was approved
+        }
+        return result;
+    };
+
+    const rejectRoleChange = async (userId: string) => {
+        const result = await authService.rejectRoleChange(userId);
+        if (!result.error && authState.user?.id === userId) {
+            await refreshProfile(); // Refresh profile if the current user's role was rejected
+        }
+        return result;
     };
 
     const signOut = async () => {

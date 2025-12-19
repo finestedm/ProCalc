@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { FolderOpen, FileJson, Save, X, RefreshCw, AlertTriangle, HardDrive, Search, User, Hash, PenLine, Filter, Trash2, ListFilter, BarChart3, TrendingUp, Users, PieChart, Layers, Calendar, Clock, Trophy, Target, Folder, ChevronRight, Home, ArrowUpLeft, Globe, ScanLine, Check, ArrowUpDown, ChevronUp, ChevronDown, Table as TableIcon, LayoutGrid } from 'lucide-react';
+import { FolderOpen, FileJson, Save, X, RefreshCw, AlertTriangle, HardDrive, Search, User, Hash, PenLine, Filter, Trash2, ListFilter, BarChart3, TrendingUp, Users, PieChart, Layers, Calendar, Clock, Trophy, Target, Folder, ChevronRight, Home, ArrowUpLeft, Globe, ScanLine, Check, ArrowUpDown, ChevronUp, ChevronDown, Table as TableIcon, LayoutGrid, Lock } from 'lucide-react';
 import { AppState, ProjectFile, Currency, CalculationMode } from '../types';
 import { SALES_PEOPLE, SUPPORT_PEOPLE } from '../services/employeesDatabase';
 import { calculateProjectCosts, convert, formatNumber } from '../services/calculationService';
@@ -57,6 +57,7 @@ interface ProjectMetadata {
     assistantPerson?: string;
     orderDate?: string;
     protocolDate?: string;
+    isLocked?: boolean;
 
     // Calculated fields for stats
     valueOriginal: number;
@@ -178,6 +179,7 @@ export const ProjectManagerModal: React.FC<Props> = ({
 
                 metaUpdate[displayName] = {
                     clientName: item.customer_name,
+                    isLocked: item.is_locked,
                     projectNumber: projNum,
                     scanned: true,
                     stage: stage,
@@ -595,7 +597,8 @@ export const ProjectManagerModal: React.FC<Props> = ({
                                 costPLN,
                                 timestamp: file.lastModified,
                                 orderDate,
-                                protocolDate
+                                protocolDate,
+                                isLocked: json.appState?.isLocked
                             }
                         }));
 
@@ -618,7 +621,8 @@ export const ProjectManagerModal: React.FC<Props> = ({
                                 costPLN: 0,
                                 timestamp: file.lastModified,
                                 orderDate,
-                                protocolDate
+                                protocolDate,
+                                isLocked: json.appState?.isLocked
                             }
                         }));
                     }
@@ -676,7 +680,7 @@ export const ProjectManagerModal: React.FC<Props> = ({
         const fileData: ProjectFile = {
             version: '1.0',
             timestamp: Date.now(),
-            stage: 'DRAFT',
+            stage: appState.stage || 'DRAFT',
             appState,
             historyLog: [],
             past: [],
@@ -801,7 +805,14 @@ export const ProjectManagerModal: React.FC<Props> = ({
                 const rawJson = cloudItem.calc as any;
 
                 if (rawJson.appState) {
-                    onLoadProject(rawJson);
+                    // Inject lock state from DB into the loaded app wrapper
+                    const projectData = rawJson as ProjectFile;
+                    if (projectData.appState) {
+                        projectData.appState.isLocked = cloudItem.is_locked || false;
+                    }
+                    // [NEW] Inject the database ID so that sub-components know which calculation to reference
+                    projectData.id = cloudItem.id;
+                    onLoadProject(projectData);
                 } else {
                     const wrapped: ProjectFile = {
                         version: '1.0',
@@ -821,7 +832,8 @@ export const ProjectManagerModal: React.FC<Props> = ({
                             targetMargin: 20,
                             manualPrice: null,
                             finalManualPrice: null,
-                            globalSettings: { ormFeePercent: 1.6, truckLoadCapacity: 22000 }
+                            globalSettings: { ormFeePercent: 1.6, truckLoadCapacity: 22000 },
+                            isLocked: cloudItem.is_locked || false // [NEW] Pass lock state
                         } as any,
                         historyLog: [],
                         past: [],
@@ -1023,6 +1035,7 @@ export const ProjectManagerModal: React.FC<Props> = ({
                     date: new Date(d.created_at),
                     open_date: d.order_date ? new Date(d.order_date) : null,
                     close_date: d.close_date ? new Date(d.close_date) : null,
+                    isLocked: d.is_locked,
                     raw: d
                 };
             });
@@ -1045,6 +1058,7 @@ export const ProjectManagerModal: React.FC<Props> = ({
                     date: i.date || new Date(),
                     open_date: meta?.orderDate ? new Date(meta.orderDate) : null,
                     close_date: meta?.protocolDate ? new Date(meta.protocolDate) : null,
+                    isLocked: meta?.isLocked,
                     handle: i.handle,
                     raw: i
                 };
@@ -1141,6 +1155,7 @@ export const ProjectManagerModal: React.FC<Props> = ({
             items.sort((a, b) => b.date.getTime() - a.date.getTime());
             return {
                 ...items[0], // Latest version as Master
+                isLocked: items.some(v => v.isLocked), // Master is locked if ANY version is locked (or you could just use items[0].isLocked)
                 versions: items.slice(0), // Keep all versions (including the latest one as the first)
                 isGroup: items.length > 1
             };
@@ -1752,6 +1767,7 @@ export const ProjectManagerModal: React.FC<Props> = ({
                                                     </div>
                                                 )}
                                                 {project.project_id}
+                                                {project.isLocked && <Lock size={12} className="text-red-500 shrink-0" title="Zablokowane" />}
                                                 {project.isGroup && !isExpanded && (
                                                     <span className="text-[10px] bg-zinc-100 dark:bg-zinc-800 px-1 rounded text-zinc-400">
                                                         {project.versions.length}
@@ -1813,7 +1829,10 @@ export const ProjectManagerModal: React.FC<Props> = ({
                                                     else handleLoad(version.handle);
                                                 }}
                                             >
-                                                <td className="p-2 pl-10 text-[10px] font-mono text-zinc-500 italic">Wersja {project.versions.length - vIdx}</td>
+                                                <td className="p-2 pl-10 text-[10px] font-mono text-zinc-500 italic flex items-center gap-1">
+                                                    Wersja {project.versions.length - vIdx}
+                                                    {version.isLocked && <Lock size={10} className="text-red-400 shrink-0" />}
+                                                </td>
                                                 <td className="p-2 text-xs text-zinc-400 italic">{version.customer}</td>
                                                 <td className="p-2">
                                                     <span className={`px-1 py-0.5 rounded text-[9px] opacity-70 border ${version.stage === 'FINAL' ? 'bg-purple-50 text-purple-600 border-purple-100' :

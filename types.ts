@@ -25,7 +25,8 @@ export enum ViewMode {
   LOGISTICS = 'LOGISTICS',
   COMPARISON = 'COMPARISON',
   NOTES = 'NOTES',
-  DOCUMENTS = 'DOCUMENTS'
+  DOCUMENTS = 'DOCUMENTS',
+  DASHBOARD = 'DASHBOARD'
 }
 
 export type ProjectStage = 'DRAFT' | 'OPENING' | 'FINAL';
@@ -35,7 +36,7 @@ export interface AddressData {
   street: string;
   city: string;
   zip: string;
-  nip: string; 
+  nip: string;
   clientId: string;
   projectId: string;
   email?: string;
@@ -55,8 +56,8 @@ export interface ProjectMeta {
   actualSalesPersonPercentage?: number; // % share
   actualSalesPerson2?: string; // "Handlowiec 2"
   actualSalesPerson2Percentage?: number; // % share
-  installationType?: string; 
-  invoiceText?: string;      
+  installationType?: string;
+  invoiceText?: string;
 }
 
 export interface SupplierItem {
@@ -64,7 +65,7 @@ export interface SupplierItem {
   itemDescription: string;
   componentNumber: string;
   quantity: number;
-  weight: number; 
+  weight: number;
   unitPrice: number; // This is List Price if ORM
   timeMinutes?: number; // ORM Time from Column M
   isExcluded?: boolean; // What-if exclusion
@@ -85,12 +86,12 @@ export interface Supplier {
   items: SupplierItem[];
   isOrm?: boolean;
   status: SupplierStatus;
-  isIncluded?: boolean; 
+  isIncluded?: boolean;
   notes?: string;
   finalCostOverride?: number; // For Final Calculation Mode
   finalVendorName?: string;   // Actual provider name on invoice
   isManualFinal?: boolean;    // Added manually in Final Calculation stage
-  
+
   // Address Data for Orders
   street?: string;
   zip?: string;
@@ -103,19 +104,19 @@ export interface Supplier {
 
 // --- SHEET TYPES ---
 export interface SheetCell {
-    value: string; // The raw input (e.g., "=A1*2" or "100")
-    result?: number | string; // The calculated result
+  value: string; // The raw input (e.g., "=A1*2" or "100")
+  result?: number | string; // The calculated result
 }
 
 export interface SheetRow {
-    id: string;
-    cells: Record<string, SheetCell>; // Key is column ID (A, B, C...)
+  id: string;
+  cells: Record<string, SheetCell>; // Key is column ID (A, B, C...)
 }
 
 export interface SheetData {
-    columns: string[]; // ['A', 'B', 'C'...]
-    rows: SheetRow[];
-    selectedCell?: { rowId: string, colId: string };
+  columns: string[]; // ['A', 'B', 'C'...]
+  rows: SheetRow[];
+  selectedCell?: { rowId: string, colId: string };
 }
 
 export interface OtherCostItem {
@@ -132,24 +133,24 @@ export interface OtherCostItem {
 
 // --- SCRATCHPAD TYPE (Legacy support or simple view) ---
 export interface ScratchpadRow {
-    id: string;
-    col1: string; // Description part 1
-    col2: string; // Description part 2 / Qty
-    col3: string; // Math / Notes
-    val: string;  // Value column (intended for numbers)
-    isChecked: boolean; // Visual marker
+  id: string;
+  col1: string; // Description part 1
+  col2: string; // Description part 2 / Qty
+  col3: string; // Math / Notes
+  val: string;  // Value column (intended for numbers)
+  isChecked: boolean; // Visual marker
 }
 
 export interface TransportItem {
   id: string;
-  supplierId?: string; 
+  supplierId?: string;
   linkedSupplierIds?: string[]; // IDs of suppliers merged into this transport
-  name?: string; 
+  name?: string;
   isOrmCalc: boolean;
-  isSupplierOrganized: boolean; 
+  isSupplierOrganized: boolean;
   isManualOverride?: boolean;
   trucksCount: number;
-  manualStoredTrucks?: number; 
+  manualStoredTrucks?: number;
   pricePerTruck: number;
   totalPrice: number;
   currency: Currency;
@@ -169,7 +170,7 @@ export interface CustomInstallationItem {
   description: string;
   quantity: number;
   unitPrice: number;
-  isExcluded?: boolean; 
+  isExcluded?: boolean;
   // Linking logic for auto-quantity
   linkedSources?: LinkedSource[]; // Array of linked sources
   isAutoQuantity?: boolean; // If true, quantity is strictly bound to source. If false, it was manually overridden.
@@ -194,11 +195,11 @@ export interface InstallationStage {
   name: string; // e.g. "Etap 1 - Regały", "Etap 2 - Antresola"
   linkedSupplierIds: string[]; // Suppliers included in this stage
   calcMethod: InstallationCalcMethod;
-  
+
   // Pallet Method Params
   palletSpots: number;
   palletSpotPrice: number;
-  palletSpotsPerDay: number; 
+  palletSpotsPerDay: number;
 
   // Time Method Params
   workDayHours: number;
@@ -211,13 +212,13 @@ export interface InstallationStage {
   hasForklift?: boolean;
   hasScissorLift?: boolean;
 
-  forkliftDailyRate: number; 
+  forkliftDailyRate: number;
   forkliftDays: number;
   forkliftStartOffset?: number; // Days after stage start
   forkliftTransportPrice: number;
   forkliftProvider?: string;
 
-  scissorLiftDailyRate: number; 
+  scissorLiftDailyRate: number;
   scissorLiftDays: number;
   scissorLiftStartOffset?: number; // Days after stage start
   scissorLiftTransportPrice: number;
@@ -238,29 +239,29 @@ export interface InstallationStage {
 }
 
 export interface CustomTimelineItem {
-    id: string;
-    name: string;
-    startDate: string;
-    endDate: string;
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
 }
 
 export interface Dependency {
-    id: string;
-    fromId: string;
-    toId: string;
-    type: 'finish-to-start'; // Extensible for later
+  id: string;
+  fromId: string;
+  toId: string;
+  type: 'finish-to-start'; // Extensible for later
 }
 
 export interface InstallationData {
   calcMethod?: InstallationCalcMethod; // Legacy/Global switch (kept for types compatibility if needed)
-  
-  stages: InstallationStage[]; 
+
+  stages: InstallationStage[];
   customTimelineItems: CustomTimelineItem[]; // Manual items on Gantt
   dependencies: Dependency[]; // Links between stages/items
 
   // Global fields (Legacy or General Ryczałt)
   otherInstallationCosts: number;
-  
+
   finalCostOverride?: number; // Legacy global override (backwards compatibility)
   finalInstallationCosts?: FinalInstallationItem[]; // Granular final costs
 
@@ -269,21 +270,21 @@ export interface InstallationData {
   plannedEnd?: string;
 
   // Legacy fields (kept for type safety during migration)
-  palletSpots: number; 
+  palletSpots: number;
   palletSpotPrice: number;
   palletSpotsPerDay: number;
   workDayHours: number;
   installersCount: number;
   manDayRate: number;
   manualLaborHours: number;
-  
+
   // Legacy global equipment fields (kept for type safety during migration)
-  forkliftDailyRate: number; 
+  forkliftDailyRate: number;
   forkliftDays: number;
-  forkliftTransportPrice: number; 
-  scissorLiftDailyRate: number; 
+  forkliftTransportPrice: number;
+  scissorLiftDailyRate: number;
   scissorLiftDays: number;
-  scissorLiftTransportPrice: number; 
+  scissorLiftTransportPrice: number;
   customItems: CustomInstallationItem[];
 }
 
@@ -303,19 +304,19 @@ export type VariantItemType = 'SUPPLIER_ITEM' | 'TRANSPORT' | 'OTHER' | 'INSTALL
 export type VariantStatus = 'NEUTRAL' | 'INCLUDED' | 'EXCLUDED';
 
 export interface VariantItem {
-    id: string; // The ID of the item in its respective list
-    type: VariantItemType;
-    originalDescription?: string; // Snapshot for display
+  id: string; // The ID of the item in its respective list
+  type: VariantItemType;
+  originalDescription?: string; // Snapshot for display
 }
 
 export interface ProjectVariant {
-    id: string;
-    name: string;
-    status: VariantStatus; // Logic State (Tri-state)
-    items: VariantItem[];
-    // Hierarchy Support
-    parentId?: string;
-    isCollapsed?: boolean;
+  id: string;
+  name: string;
+  status: VariantStatus; // Logic State (Tri-state)
+  items: VariantItem[];
+  // Hierarchy Support
+  parentId?: string;
+  isCollapsed?: boolean;
 }
 
 export interface PaymentTerms {
@@ -327,10 +328,10 @@ export interface PaymentTerms {
 }
 
 export interface GlobalSettings {
-    ormFeePercent: number; // e.g. 1.6
-    truckLoadCapacity: number; // e.g. 22000 kg
-    defaultSalesPerson?: string;
-    defaultSupportPerson?: string;
+  ormFeePercent: number; // e.g. 1.6
+  truckLoadCapacity: number; // e.g. 22000 kg
+  defaultSalesPerson?: string;
+  defaultSupportPerson?: string;
 }
 
 export interface CalculationData {
@@ -352,19 +353,19 @@ export interface CalculationData {
 
 // A subset of CalculationData that changes between scenarios/tabs
 export interface CalculationScenario {
-    id: string;
-    name: string;
-    // Specific Fields
-    suppliers: Supplier[];
-    transport: TransportItem[];
-    otherCosts: OtherCostItem[];
-    otherCostsScratchpad: ScratchpadRow[];
-    installation: InstallationData;
-    nameplateQty: number;
-    tasks: ProjectTask[];
-    projectNotes: string;
-    variants: ProjectVariant[];
-    paymentTerms: PaymentTerms;
+  id: string;
+  name: string;
+  // Specific Fields
+  suppliers: Supplier[];
+  transport: TransportItem[];
+  otherCosts: OtherCostItem[];
+  otherCostsScratchpad: ScratchpadRow[];
+  installation: InstallationData;
+  nameplateQty: number;
+  tasks: ProjectTask[];
+  projectNotes: string;
+  variants: ProjectVariant[];
+  paymentTerms: PaymentTerms;
 }
 
 export interface AppState {
@@ -376,12 +377,14 @@ export interface AppState {
   stage: ProjectStage; // Added Stage Tracking
   viewMode: ViewMode;
   exchangeRate: number;
-  offerCurrency: Currency; 
-  clientCurrency: Currency; 
+  offerCurrency: Currency;
+  clientCurrency: Currency;
   targetMargin: number;
   manualPrice: number | null; // For Initial Calculation override
   finalManualPrice: number | null; // For Final Calculation override
   globalSettings: GlobalSettings;
+  isLocked?: boolean; // [NEW] Controls editability of Initial Calculation
+  activeCalculationId?: string; // [NEW] ID of the cloud-saved calculation
 }
 
 export interface HistoryEntry {
@@ -392,6 +395,7 @@ export interface HistoryEntry {
 }
 
 export interface ProjectFile {
+  id?: string; // [NEW] Cloud ID for persistence
   version: string;
   timestamp: number;
   stage: ProjectStage;
@@ -403,14 +407,14 @@ export interface ProjectFile {
 
 // Cost Breakdown including new Financing field
 export interface CostBreakdown {
-    suppliers: number;
-    transport: number;
-    other: number;
-    installation: number;
-    ormFee: number;
-    financing: number; // New Field: Koszty finansowania
-    total: number;
-    excluded: number;
+  suppliers: number;
+  transport: number;
+  other: number;
+  installation: number;
+  ormFee: number;
+  financing: number; // New Field: Koszty finansowania
+  total: number;
+  excluded: number;
 }
 
 export const EMPTY_ADDRESS: AddressData = {
@@ -427,19 +431,19 @@ export const EMPTY_INSTALLATION: InstallationData = {
   stages: [], // Default empty stages
   customTimelineItems: [],
   dependencies: [],
-  palletSpots: 0, 
-  palletSpotPrice: 0, 
+  palletSpots: 0,
+  palletSpotPrice: 0,
   palletSpotsPerDay: 0,
   workDayHours: 10,
   installersCount: 2,
   manDayRate: 0,
   manualLaborHours: 0,
-  forkliftDailyRate: 0, 
+  forkliftDailyRate: 0,
   forkliftDays: 0,
-  forkliftTransportPrice: 0, 
-  scissorLiftDailyRate: 0, 
+  forkliftTransportPrice: 0,
+  scissorLiftDailyRate: 0,
   scissorLiftDays: 0,
-  scissorLiftTransportPrice: 0, 
+  scissorLiftTransportPrice: 0,
   otherInstallationCosts: 0,
   customItems: [],
   finalInstallationCosts: []
@@ -454,10 +458,10 @@ export const EMPTY_PAYMENT_TERMS: PaymentTerms = {
 };
 
 export const DEFAULT_SETTINGS: GlobalSettings = {
-    ormFeePercent: 1.6,
-    truckLoadCapacity: 22000,
-    defaultSalesPerson: '',
-    defaultSupportPerson: ''
+  ormFeePercent: 1.6,
+  truckLoadCapacity: 22000,
+  defaultSalesPerson: '',
+  defaultSupportPerson: ''
 };
 
 export const EMPTY_CALCULATION: CalculationData = {

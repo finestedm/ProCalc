@@ -184,6 +184,11 @@ export const AdminPanel: React.FC<Props> = ({ isOpen, onClose }) => {
                                                         Admin
                                                     </span>
                                                 )}
+                                                <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-bold rounded">
+                                                    {user.role === 'manager' ? 'Menadżer' :
+                                                        user.role === 'specialist' ? 'Specjalista' :
+                                                            user.role === 'logistics' ? 'Logistyka' : 'Inżynier'}
+                                                </span>
                                                 {user.approved ? (
                                                     <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs font-bold rounded flex items-center gap-1">
                                                         <UserCheck size={12} />
@@ -197,12 +202,53 @@ export const AdminPanel: React.FC<Props> = ({ isOpen, onClose }) => {
                                                 )}
                                             </div>
                                             <p className="text-sm text-zinc-600 dark:text-zinc-400">{user.email}</p>
+
+                                            {user.pending_role && (
+                                                <div className="mt-2 text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 p-2 rounded border border-amber-200 dark:border-amber-800 flex items-center justify-between">
+                                                    <span>
+                                                        Wnioskuje o zmianę na: <strong>
+                                                            {user.pending_role === 'manager' ? 'Menadżer' :
+                                                                user.pending_role === 'specialist' ? 'Specjalista' :
+                                                                    user.pending_role === 'logistics' ? 'Logistyka' : 'Inżynier'}
+                                                        </strong>
+                                                    </span>
+                                                    <div className="flex gap-1">
+                                                        <button
+                                                            onClick={async () => {
+                                                                setActionLoading(user.id);
+                                                                await authService.approveRoleChange(user.id);
+                                                                setSuccessMessage('Zmiana roli zatwierdzona');
+                                                                await loadUsers();
+                                                                setActionLoading(null);
+                                                            }}
+                                                            disabled={actionLoading === user.id}
+                                                            className="px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                                                        >
+                                                            <CheckCircle size={12} />
+                                                        </button>
+                                                        <button
+                                                            onClick={async () => {
+                                                                setActionLoading(user.id);
+                                                                await authService.rejectRoleChange(user.id);
+                                                                setSuccessMessage('Zmiana roli odrzucona');
+                                                                await loadUsers();
+                                                                setActionLoading(null);
+                                                            }}
+                                                            disabled={actionLoading === user.id}
+                                                            className="px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                                                        >
+                                                            <X size={12} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             <p className="text-xs text-zinc-400 mt-1">
                                                 Utworzono: {new Date(user.created_at).toLocaleDateString('pl-PL')}
                                             </p>
                                         </div>
 
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-2 items-start">
                                             {!user.approved && (
                                                 <button
                                                     onClick={() => handleApprove(user.id)}
@@ -266,7 +312,7 @@ export const AdminPanel: React.FC<Props> = ({ isOpen, onClose }) => {
                         Zamknij
                     </button>
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 };

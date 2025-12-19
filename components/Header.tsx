@@ -5,6 +5,7 @@ import { Calculator as CalcIcon, Scale, LayoutDashboard, Undo2, Redo2, Menu, Not
 import { DropdownMenu } from './DropdownMenu';
 import { useAuth } from '../contexts/AuthContext';
 import { ProfileEditModal } from './ProfileEditModal';
+import { RequestAccessModal } from './RequestAccessModal';
 
 interface Props {
     appState: AppState;
@@ -41,6 +42,7 @@ export const Header: React.FC<Props> = ({
 }) => {
     const { profile, signOut } = useAuth();
     const [showProfileEdit, setShowProfileEdit] = useState(false);
+    const [showAccessRequest, setShowAccessRequest] = useState(false);
 
     const handleLogout = async () => {
         await signOut();
@@ -102,25 +104,27 @@ export const Header: React.FC<Props> = ({
 
                 {/* 2. CENTER: Navigation Tabs (Underline Style) */}
                 <div className="flex-1 flex justify-center h-full overflow-x-auto no-scrollbar">
-                    <div className="flex h-full gap-4 md:gap-8 px-2">
-                        {navItems.map((item) => {
-                            const isActive = appState.viewMode === item.mode;
-                            return (
-                                <button
-                                    key={item.mode}
-                                    onClick={() => setAppState(prev => ({ ...prev, viewMode: item.mode }))}
-                                    className={`relative h-full flex items-center gap-2 text-xs font-bold uppercase tracking-wide transition-all duration-200 border-b-2 font-mono whitespace-nowrap ${isActive
-                                        ? 'text-zinc-900 dark:text-white border-zinc-900 dark:border-white'
-                                        : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300 border-transparent hover:border-zinc-200'
-                                        }`}
-                                    title={item.label}
-                                >
-                                    <span className="block md:hidden">{item.icon}</span>
-                                    <span className="hidden md:block">{item.label}</span>
-                                </button>
-                            );
-                        })}
-                    </div>
+                    {appState.viewMode !== ViewMode.DASHBOARD && (
+                        <div className="flex h-full gap-4 md:gap-8 px-2">
+                            {navItems.map((item) => {
+                                const isActive = appState.viewMode === item.mode;
+                                return (
+                                    <button
+                                        key={item.mode}
+                                        onClick={() => setAppState(prev => ({ ...prev, viewMode: item.mode }))}
+                                        className={`relative h-full flex items-center gap-2 text-xs font-bold uppercase tracking-wide transition-all duration-200 border-b-2 font-mono whitespace-nowrap ${isActive
+                                            ? 'text-zinc-900 dark:text-white border-zinc-900 dark:border-white'
+                                            : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300 border-transparent hover:border-zinc-200'
+                                            }`}
+                                        title={item.label}
+                                    >
+                                        <span className="block md:hidden">{item.icon}</span>
+                                        <span className="hidden md:block">{item.label}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
 
                 {/* 3. RIGHT: Actions & Mode Switcher */}
@@ -174,25 +178,31 @@ export const Header: React.FC<Props> = ({
                             </button>
                         )}
 
-                        <button
-                            onClick={onShowProjectManager}
-                            className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                            title="Menedżer Projektów (Ctrl+O)"
-                        >
-                            <HardDrive size={16} />
-                        </button>
-
-                        {appState.viewMode === ViewMode.CALCULATOR && (
-                            <button
-                                onClick={onShowComparison}
-                                className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                                title="Porównaj Wersje (Alt+C)"
-                            >
-                                <Scale size={16} />
-                            </button>
-                        )}
-
                         <div className="hidden sm:flex items-center gap-1">
+                            {/* [NEW] Lock/Unlock Button - Subtler, only for certain roles */}
+                            {(profile?.is_admin || profile?.role === 'logistics' || profile?.role === 'manager') && appState.viewMode !== ViewMode.DASHBOARD && (
+                                <button
+                                    onClick={() => setAppState(prev => ({ ...prev, isLocked: !prev.isLocked }))}
+                                    className={`w-8 h-8 flex items-center justify-center transition-colors rounded ${appState.isLocked
+                                        ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
+                                        : 'text-zinc-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20'}`}
+                                    title={appState.isLocked ? "Odkblokuj edycję" : "Zablokuj edycję"}
+                                >
+                                    {appState.isLocked ? <Lock size={16} /> : <Shield size={16} />}
+                                </button>
+                            )}
+
+                            {/* Visual Indicator for Read Only users */}
+                            {appState.isLocked && !profile?.is_admin && profile?.role !== 'logistics' && appState.viewMode !== ViewMode.DASHBOARD && (
+                                <button
+                                    onClick={() => setShowAccessRequest(true)}
+                                    className="flex items-center px-2 text-[10px] font-bold text-red-500 bg-red-50 dark:bg-red-900/20 rounded h-8 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer"
+                                    title="Kliknij aby poprosić o odblokowanie"
+                                >
+                                    <Lock size={12} className="mr-1" /> ZABLOKOWANE
+                                </button>
+                            )}
+
                             <button
                                 onClick={onUndo}
                                 disabled={!canUndo}
@@ -211,55 +221,28 @@ export const Header: React.FC<Props> = ({
                             </button>
                         </div>
 
-                        {/* Shortcuts Help */}
-                        <button
-                            onClick={onShowShortcuts}
-                            className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-amber-500 transition-colors hidden sm:flex"
-                            title="Skróty Klawiszowe (Alt+/)"
-                        >
-                            <Keyboard size={16} />
-                        </button>
-
-                        {/* User Info & Admin Panel */}
                         <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block"></div>
 
-                        {profile?.is_admin && (
-                            <button
-                                onClick={onShowAdminPanel}
-                                className="w-8 h-8 flex items-center justify-center text-purple-500 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
-                                title="Panel Administratora"
-                            >
-                                <Shield size={16} />
-                            </button>
-                        )}
-
-                        <div className="hidden md:flex items-center gap-2 px-2 py-1 bg-zinc-100 dark:bg-zinc-800 rounded">
-                            <User size={14} className="text-zinc-500" />
-                            <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                        <button
+                            onClick={() => setAppState(prev => ({ ...prev, viewMode: ViewMode.DASHBOARD }))}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${appState.viewMode === ViewMode.DASHBOARD
+                                ? 'bg-zinc-900 text-white dark:bg-white dark:text-black shadow-lg shadow-zinc-900/20'
+                                : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                                }`}
+                            title="Otwórz Pulpit"
+                        >
+                            <User size={14} className={appState.viewMode === ViewMode.DASHBOARD ? '' : 'text-zinc-500'} />
+                            <span className="text-xs font-bold uppercase tracking-tight">
                                 {profile?.full_name || profile?.email || 'User'}
                             </span>
-                        </div>
-
-                        <button
-                            onClick={() => setShowProfileEdit(true)}
-                            className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-blue-500 transition-colors"
-                            title="Edytuj profil"
-                        >
-                            <Edit size={16} />
                         </button>
 
-                        <button
-                            onClick={handleLogout}
-                            className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-red-500 transition-colors"
-                            title="Wyloguj się"
-                        >
-                            <LogOut size={16} />
-                        </button>
+                        <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block"></div>
 
                         <DropdownMenu
                             trigger={
-                                <div className="w-8 h-8 flex items-center justify-center text-zinc-900 dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors">
-                                    <Menu size={16} />
+                                <div className="w-8 h-8 flex items-center justify-center text-zinc-900 dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors cursor-pointer">
+                                    <Menu size={18} />
                                 </div>
                             }
                             items={menuItems}
@@ -269,10 +252,17 @@ export const Header: React.FC<Props> = ({
                 </div>
             </div>
 
-            <ProfileEditModal
-                isOpen={showProfileEdit}
-                onClose={() => setShowProfileEdit(false)}
-            />
+            {appState.activeCalculationId && (
+                <RequestAccessModal
+                    isOpen={showAccessRequest}
+                    onClose={() => setShowAccessRequest(false)}
+                    calculationId={appState.activeCalculationId}
+                    projectNumber={projectNumber || 'Bez Projektu'}
+                    onSuccess={() => {
+                        // Maybe show a global checkmark?
+                    }}
+                />
+            )}
         </header >
     );
 };
