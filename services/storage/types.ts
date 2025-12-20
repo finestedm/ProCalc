@@ -56,4 +56,14 @@ export interface ICalculationStorage {
     createAccessRequest(calculationId: string, message?: string): Promise<void>;
     getPendingAccessRequests(): Promise<AccessRequest[]>;
     updateAccessRequestStatus(requestId: string, status: 'approved' | 'rejected'): Promise<void>;
+
+    /**
+     * Partially updates the 'calc' JSONB column by merging new data.
+     * Useful for real-time logistics updates without full appState save.
+     */
+    updateCalculation(id: string, partialData: any): Promise<void>;
+
+    // Logistics Overrides
+    getLogisticsTransports(projectNumbers: string[]): Promise<any[]>;
+    saveLogisticsTransport(projectNumber: string, transportId: string, data: any): Promise<void>;
 }

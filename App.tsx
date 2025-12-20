@@ -1604,10 +1604,45 @@ const App: React.FC = () => {
         showSnackbar("Projekt został pobrany");
     };
 
-    const loadProjectFromObject = (parsed: any) => {
+    const loadProjectFromObject = async (parsed: any) => {
         try {
+            // [NEW] Fetch Logistics Overrides first if project has a number
+            let logisticsOverrides: any[] = [];
+            const pnum = parsed.appState?.initial?.meta?.projectNumber || parsed.initial?.meta?.projectNumber || parsed.project_id;
+
+            if (pnum && pnum !== 'BezNumeru') {
+                try {
+                    logisticsOverrides = await storageService.getLogisticsTransports([pnum]);
+                } catch (e) {
+                    console.error("Failed to fetch logistics overrides", e);
+                }
+            }
+
+            const mergeLogistics = (data: CalculationData) => {
+                if (!data || !data.transport) return data;
+                if (logisticsOverrides.length === 0) return data;
+
+                const updatedTransport = data.transport.map(t => {
+                    const override = logisticsOverrides.find(o => o.transport_id === t.id);
+                    return override ? { ...t, ...override.data } : t;
+                });
+                return { ...data, transport: updatedTransport };
+            };
+
             // If loading full ProjectFile struct with 'appState' key
             if (parsed.appState) {
+                // Apply overrides to both initial and final
+                if (parsed.appState.initial) parsed.appState.initial = mergeLogistics(parsed.appState.initial);
+                if (parsed.appState.final) parsed.appState.final = mergeLogistics(parsed.appState.final);
+
+                // Apply to scenarios too
+                if (parsed.appState.scenarios) {
+                    parsed.appState.scenarios = parsed.appState.scenarios.map((s: any) => ({
+                        ...s,
+                        transport: mergeLogistics({ transport: s.transport } as any).transport
+                    }));
+                }
+
                 if (parsed.appState.initial && !parsed.appState.initial.variants) parsed.appState.initial.variants = [];
                 if (parsed.appState.final && !parsed.appState.final.variants) parsed.appState.final.variants = [];
                 if (parsed.appState.initial && !parsed.appState.initial.otherCostsScratchpad) parsed.appState.initial.otherCostsScratchpad = [];
@@ -1649,6 +1684,10 @@ const App: React.FC = () => {
                 if (parsed.future) setFuture(parsed.future);
             } else {
                 // Legacy flat load or direct appState
+                // Handle merging here too if needed, but cloud saves usually use the ProjectFile struct above.
+                if (parsed.initial) parsed.initial = mergeLogistics(parsed.initial);
+                if (parsed.final) parsed.final = mergeLogistics(parsed.final);
+
                 const merged = { ...appState, ...parsed };
                 if (merged.initial && !merged.initial.variants) merged.initial.variants = [];
                 if (merged.initial && !merged.initial.otherCostsScratchpad) merged.initial.otherCostsScratchpad = [];
@@ -2121,6 +2160,32 @@ const App: React.FC = () => {
                                                 }
                                             }));
                                         }}
+                                        onUpdateTransport={async (tid, fields) => {
+                                            const key = appState.mode === CalculationMode.INITIAL ? 'initial' : 'final';
+                                            const currentData = appState[key];
+                                            const t = currentData.transport.find(x => x.id === tid);
+                                            if (!t) return;
+
+                                            // 1. Update local state
+                                            const updatedTransport = currentData.transport.map(x => x.id === tid ? { ...x, ...fields } : x);
+                                            setAppState(prev => ({
+                                                ...prev,
+                                                [key]: { ...prev[key], transport: updatedTransport }
+                                            }));
+
+                                            // 2. Persistent Save to Centralized Logistics Table
+                                            const pnum = currentData.meta.projectNumber;
+                                            if (pnum && pnum !== 'BezNumeru') {
+                                                try {
+                                                    // Merge with existing data from state to ensure full record persistence
+                                                    const fullData = { ...t, ...fields };
+                                                    await storageService.saveLogisticsTransport(pnum, tid, fullData);
+                                                } catch (err) {
+                                                    console.error("Failed to save logistics override from individual view:", err);
+                                                }
+                                            }
+                                        }}
+                                        readOnly={isReadOnly}
                                     />
                                 </div>
                             </div>

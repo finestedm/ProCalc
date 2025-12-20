@@ -162,6 +162,14 @@ export interface TransportItem {
   finalCostOverride?: number; // For Final Calculation Mode
   finalCurrency?: Currency;   // Currency of the final invoice
   finalVendorName?: string;
+
+  // Logistics Hub Fields
+  confirmedDeliveryDate?: string; // For Vendor-organized
+  pickupDate?: string;           // For Logistics-organized
+  weight?: number;               // Current total weight
+  ldm?: number;                  // Loading meters
+  carrier?: string;              // Carrier company name
+  transitTime?: string;          // e.g. "2 days"
 }
 
 export interface LinkedSource {

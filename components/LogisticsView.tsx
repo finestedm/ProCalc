@@ -8,6 +8,7 @@ import { OrderPreviewModal } from './OrderPreviewModal';
 interface Props {
     data: CalculationData;
     onChange: (data: Partial<CalculationData>) => void;
+    onUpdateTransport?: (transportId: string, updates: Partial<TransportItem>) => void;
     readOnly?: boolean;
 }
 
@@ -21,7 +22,7 @@ const isOrganizedBySupplier = (s: Supplier, transport: TransportItem[]) => {
     );
 };
 
-export const LogisticsView: React.FC<Props> = ({ data, onChange, readOnly }) => {
+export const LogisticsView: React.FC<Props> = ({ data, onChange, onUpdateTransport, readOnly }) => {
     const [previewSuppliers, setPreviewSuppliers] = useState<Supplier[] | null>(null);
 
     const onUpdateSupplier = (supplierId: string, updates: Partial<Supplier>) => {
@@ -66,7 +67,7 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange, readOnly }) => 
         setPreviewSuppliers(suppliersToPrint);
     };
 
-    const combinedTransports = data.transport.filter(t => t.linkedSupplierIds && t.linkedSupplierIds.length > 0);
+    const combinedTransports = data.transport.filter(t => t.linkedSupplierIds && t.linkedSupplierIds.length > 0 && !t.isExcluded);
     const combinedSupplierIds = combinedTransports.flatMap(t => t.linkedSupplierIds || []);
 
     const singleJHTransportSuppliers = activeSuppliers.filter(s => {
@@ -80,6 +81,37 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange, readOnly }) => 
         const isSupplierOrg = isOrganizedBySupplier(s, data.transport);
         return !isCombined && isSupplierOrg;
     });
+
+    // [NEW] STANDALONE / FLOATING TRANSPORTS (Not linked to any active supplier or combined)
+    const displayedTransportIds = new Set([
+        ...combinedTransports.map(t => t.id),
+        ...data.transport.filter(t => t.supplierId && activeSuppliers.some(s => s.id === t.supplierId)).map(t => t.id)
+    ]);
+
+    const standaloneTransports = data.transport.filter(t => !t.isExcluded && !displayedTransportIds.has(t.id));
+
+    const renderStandaloneTransportCard = (t: TransportItem) => {
+        return (
+            <div key={t.id} className="p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors border-b border-zinc-100 dark:border-zinc-800">
+                <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                        <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{t.name || 'Transport Dodatkowy'}</h4>
+                        <span className="text-[9px] font-bold bg-zinc-100 text-zinc-700 px-1.5 py-0.5 rounded border border-zinc-200">STANDALONE</span>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400 items-center">
+                        <span className="flex items-center gap-1">
+                            <Truck size={12} /> {t.trucksCount} aut ({t.totalPrice.toFixed(0)} {t.currency})
+                        </span>
+                        {t.carrier && (
+                            <span className="flex items-center gap-1 font-bold text-blue-500">
+                                <Flag size={12} /> {t.carrier}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     const renderSupplierRow = (supplier: Supplier, isSupplierTransport: boolean, isCombinedChild: boolean = false) => {
         const tItem = data.transport.find(t => t.supplierId === supplier.id);
@@ -291,6 +323,7 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange, readOnly }) => 
                     transport={data.transport}
                     onUpdateInstallation={updateInstallation}
                     onUpdateSupplier={onUpdateSupplier}
+                    onUpdateTransport={onUpdateTransport}
                     tasks={data.tasks}
                     onUpdateTasks={(tasks) => onChange({ tasks })}
                     readOnly={readOnly}
@@ -313,17 +346,18 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange, readOnly }) => 
                             </div>
                         </div>
                         <div className="text-[10px] font-mono font-bold text-zinc-400 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-2 py-1 rounded">
-                            {combinedTransports.length + singleJHTransportSuppliers.length} pozycji
+                            {combinedTransports.length + singleJHTransportSuppliers.length + standaloneTransports.length} pozycji
                         </div>
                     </div>
 
                     <div className="flex flex-col">
-                        {combinedTransports.length === 0 && singleJHTransportSuppliers.length === 0 && (
+                        {combinedTransports.length === 0 && singleJHTransportSuppliers.length === 0 && standaloneTransports.length === 0 && (
                             <div className="p-8 text-center text-zinc-400 italic text-xs">Brak pozycji w tej kategorii.</div>
                         )}
                         {combinedTransports.map(t => renderCombinedTransportCard(t))}
                         <div className="divide-y divide-zinc-100 dark:divide-zinc-800 bg-white dark:bg-zinc-950">
                             {singleJHTransportSuppliers.map(s => renderSupplierRow(s, false))}
+                            {standaloneTransports.map(t => renderStandaloneTransportCard(t))}
                         </div>
                     </div>
                 </div>

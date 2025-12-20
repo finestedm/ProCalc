@@ -13,6 +13,7 @@ interface Props {
     transport?: TransportItem[];
     onUpdateInstallation: (updates: Partial<InstallationData>) => void;
     onUpdateSupplier: (supplierId: string, updates: Partial<Supplier>) => void;
+    onUpdateTransport?: (transportId: string, updates: Partial<TransportItem>) => void;
     tasks?: ProjectTask[];
     onUpdateTasks?: (tasks: ProjectTask[]) => void;
     readOnly?: boolean;
@@ -59,7 +60,7 @@ const getWeekNumber = (d: Date) => {
     return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 };
 
-export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, transport = [], onUpdateInstallation, onUpdateSupplier, tasks = [], onUpdateTasks, readOnly }) => {
+export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, transport = [], onUpdateInstallation, onUpdateSupplier, onUpdateTransport, tasks = [], onUpdateTasks, readOnly }) => {
     const [viewMode, setViewMode] = useState<'GANTT' | 'CALENDAR'>('GANTT');
     const [zoom, setZoom] = useState(1); // 1 = 40px per day
     const [isCompact, setIsCompact] = useState(false);
@@ -179,7 +180,15 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                     // Aggregate dates for Group
                     let minStart = childrenItems[0].start;
                     let maxDelEnd = childrenItems[0].delEnd;
-                    let sharedDelStart = childrenItems[0].delStart; // Use first one, they should be synced
+
+                    // PREFER Transport Item Dates if available
+                    let sharedDelStart = t.isSupplierOrganized ? t.confirmedDeliveryDate : t.pickupDate;
+
+                    if (!sharedDelStart) {
+                        sharedDelStart = childrenItems[0].delStart; // Fallback
+                    } else {
+                        sharedDelStart = new Date(sharedDelStart); // Convert string to Date
+                    }
 
                     childrenItems.forEach(c => {
                         if (c.start < minStart) minStart = c.start;
@@ -213,6 +222,37 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
         suppliers.forEach(s => {
             if (!processedSupplierIds.has(s.id)) {
                 items.push(createSupplierData(s));
+            }
+        });
+
+        // 2b. STANDALONE TRANSPORTS (Not linked to any supplier)
+        const processedTransportIds = new Set(items.filter(i => i.type === 'TRANSPORT_GROUP').map(i => i.id));
+        transport.forEach(t => {
+            const isAssignedToSupplier = suppliers.some(s => s.id === t.supplierId);
+            if (!processedTransportIds.has(t.id) && !isAssignedToSupplier && !t.isExcluded) {
+                // Determine Date
+                let dStr = t.isSupplierOrganized ? t.confirmedDeliveryDate : t.pickupDate;
+                let start: Date;
+                if (dStr) {
+                    start = new Date(dStr);
+                } else {
+                    start = new Date(orderDate);
+                    start.setDate(start.getDate() + 14); // Fallback
+                }
+                if (!isValidDate(start)) start = new Date(orderDate);
+
+                items.push({
+                    id: t.id,
+                    type: 'TRANSPORT_GROUP', // Reuse type for styling/behavior or a new 'STANDALONE'
+                    name: t.name || 'Transport Dodatkowy',
+                    start: start,
+                    end: addBusinessDays(start, 1),
+                    delStart: start,
+                    delEnd: addBusinessDays(start, 1),
+                    prodStart: start,
+                    prodEnd: start,
+                    isDateEstimated: !dStr
+                });
             }
         });
 
@@ -700,8 +740,14 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                 } else if (item.type === 'SUPPLIER') {
                     supplierUpdates[id] = val.start;
                 } else if (item.type === 'TRANSPORT_GROUP') {
-                    // If Group moves, update all children suppliers
+                    // Update the Transport Item itself
                     const t = transport.find(tr => tr.id === id);
+                    if (t && onUpdateTransport) {
+                        const dateField = t.isSupplierOrganized ? 'confirmedDeliveryDate' : 'pickupDate';
+                        onUpdateTransport(id, { [dateField]: val.start });
+                    }
+
+                    // Also update all children suppliers for consistency
                     if (t && t.linkedSupplierIds) {
                         t.linkedSupplierIds.forEach(sid => {
                             supplierUpdates[sid] = val.start;

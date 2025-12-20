@@ -234,4 +234,67 @@ export class SupabaseStorage implements ICalculationStorage {
             }
         }
     }
+
+    async updateCalculation(id: string, partialData: any): Promise<void> {
+        // ... (existing content)
+        const { data: current, error: fetchError } = await this.supabase
+            .from(this.tableName)
+            .select('calc')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !current) {
+            throw new Error(`Failed to fetch calculation for update: ${fetchError?.message}`);
+        }
+
+        const merged = { ...current.calc, ...partialData };
+        if (partialData.appState && current.calc.appState) {
+            merged.appState = { ...current.calc.appState, ...partialData.appState };
+        }
+
+        const { error } = await this.supabase
+            .from(this.tableName)
+            .update({ calc: merged })
+            .eq('id', id);
+
+        if (error) {
+            throw new Error(`Failed to update calculation: ${error.message}`);
+        }
+    }
+
+    // LOGISTICS OVERRIDES
+    async getLogisticsTransports(projectNumbers: string[]): Promise<any[]> {
+        if (projectNumbers.length === 0) return [];
+        const { data, error } = await this.supabase
+            .from('logistics_transports')
+            .select('*')
+            .in('project_number', projectNumbers);
+
+        if (error) {
+            console.error('Fetch Logistics Transports Error:', error);
+            throw new Error(error.message);
+        }
+        return data;
+    }
+
+    async saveLogisticsTransport(projectNumber: string, transportId: string, data: any): Promise<void> {
+        const { data: { user } } = await this.supabase.auth.getUser();
+
+        const payload = {
+            project_number: projectNumber,
+            transport_id: transportId,
+            data: data,
+            updated_by: user?.id,
+            updated_at: new Date().toISOString()
+        };
+
+        const { error } = await this.supabase
+            .from('logistics_transports')
+            .upsert(payload, { onConflict: 'project_number, transport_id' });
+
+        if (error) {
+            console.error('Save Logistics Transport Error:', error);
+            throw new Error(error.message);
+        }
+    }
 }
