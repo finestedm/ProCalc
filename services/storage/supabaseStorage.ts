@@ -2,7 +2,8 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '../supabaseClient';
 import { CalculationData } from '../../types';
-import { ICalculationStorage, SavedCalculation } from './types';
+import { ICalculationStorage, SavedCalculation, SavedLogisticsTransport } from './types';
+import { ensureTransportData } from '../../services/calculationService';
 
 export class SupabaseStorage implements ICalculationStorage {
     private supabase: SupabaseClient = supabase;
@@ -42,6 +43,21 @@ export class SupabaseStorage implements ICalculationStorage {
             // Optional: could check DB here, but might be slow. We trust appState for now.
         }
 
+        // [NEW] AUTO-SYNC LOGISTICS DATA
+        // We modify 'data' (and 'activeData') in-place if needed so the JSON saved to DB includes any generated transports
+        if (mode === 'FINAL' || mode === 'INITIAL') { // Usually checking stage is better, but appState mode is reliable proxy for structure
+            // Check stage
+            const currentStage = appState?.stage || (data as any).stage;
+            if (currentStage === 'OPENING') {
+                const processed = ensureTransportData(activeData);
+                // Apply changes back to activeData (reference)
+                if (processed.transport.length > (activeData.transport?.length || 0)) {
+                    activeData.transport = processed.transport;
+                    // Note: activeData is a reference to inside 'data' or 'appState', so 'data' is updated
+                }
+            }
+        }
+
         // Mapping to User's specific table columns
         const payload = {
             user_id: user.id, // Associate with current user
@@ -79,6 +95,30 @@ export class SupabaseStorage implements ICalculationStorage {
             this.lockProject(payload.project_id, true).catch(err =>
                 console.error("Failed to propagate project lock", err)
             );
+        }
+
+        // [NEW] SYNC RELATIONAL TRANSPORTS
+        // We do this AFTER insert to ensure we have the ID, and we use the 'data' we just prepared (with guaranteed transports)
+        try {
+            const currentStage = appState?.stage || (data as any).stage;
+            if (currentStage === 'OPENING' && activeData.transport && activeData.transport.length > 0) {
+                const tasks = activeData.transport.map((t: any) => {
+                    return this.saveLogisticsTransport({
+                        project_number: payload.project_id,
+                        transport_id: t.id,
+                        calc_id: insertedData.id,
+                        data: t,
+                        delivery_date: t.isSupplierOrganized ? t.confirmedDeliveryDate : t.pickupDate,
+                        pickup_date: t.pickupDate,
+                        carrier: t.carrier,
+                        supplier_id: t.supplierId
+                    });
+                });
+                // Fire and forget or await? Safer to await basic sync to avoid race conditions if user immediately opens hub
+                await Promise.all(tasks);
+            }
+        } catch (syncError) {
+            console.error("Sync logistics error", syncError);
         }
 
         return insertedData.id;
@@ -263,27 +303,32 @@ export class SupabaseStorage implements ICalculationStorage {
     }
 
     // LOGISTICS OVERRIDES
-    async getLogisticsTransports(projectNumbers: string[]): Promise<any[]> {
-        if (projectNumbers.length === 0) return [];
-        const { data, error } = await this.supabase
-            .from('logistics_transports')
-            .select('*')
-            .in('project_number', projectNumbers);
+    // LOGISTICS RELATIONAL STORAGE
+    async getLogisticsTransports(projectNumbers?: string[]): Promise<SavedLogisticsTransport[]> {
+        let query = this.supabase.from('logistics_transports').select('*');
+
+        if (projectNumbers && projectNumbers.length > 0) {
+            query = query.in('project_number', projectNumbers);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('Fetch Logistics Transports Error:', error);
             throw new Error(error.message);
         }
-        return data;
+        return data as SavedLogisticsTransport[];
     }
 
-    async saveLogisticsTransport(projectNumber: string, transportId: string, data: any): Promise<void> {
+    async saveLogisticsTransport(transport: Partial<SavedLogisticsTransport>): Promise<void> {
         const { data: { user } } = await this.supabase.auth.getUser();
 
+        if (!transport.project_number || !transport.transport_id) {
+            throw new Error("Missing PK fields for transport save");
+        }
+
         const payload = {
-            project_number: projectNumber,
-            transport_id: transportId,
-            data: data,
+            ...transport,
             updated_by: user?.id,
             updated_at: new Date().toISOString()
         };

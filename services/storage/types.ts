@@ -1,4 +1,4 @@
-import { CalculationData } from '../../types';
+import { CalculationData, TransportItem } from '../../types';
 
 // Matches the user's Supabase table structure
 export interface SavedCalculation {
@@ -57,13 +57,27 @@ export interface ICalculationStorage {
     getPendingAccessRequests(): Promise<AccessRequest[]>;
     updateAccessRequestStatus(requestId: string, status: 'approved' | 'rejected'): Promise<void>;
 
+
     /**
      * Partially updates the 'calc' JSONB column by merging new data.
      * Useful for real-time logistics updates without full appState save.
      */
     updateCalculation(id: string, partialData: any): Promise<void>;
 
-    // Logistics Overrides
-    getLogisticsTransports(projectNumbers: string[]): Promise<any[]>;
-    saveLogisticsTransport(projectNumber: string, transportId: string, data: any): Promise<void>;
+    // Logistics Transports (Relational)
+    getLogisticsTransports(projectNumbers?: string[]): Promise<SavedLogisticsTransport[]>; // Nullable projectNumbers -> fetch all
+    saveLogisticsTransport(transport: Partial<SavedLogisticsTransport>): Promise<void>;
+}
+
+export interface SavedLogisticsTransport {
+    id?: string;
+    project_number: string;
+    transport_id: string;
+    calc_id?: string;
+    supplier_id?: string;
+    carrier?: string;
+    delivery_date?: string; // YYYY-MM-DD
+    pickup_date?: string;   // YYYY-MM-DD
+    data: TransportItem;
+    updated_at?: string;
 }

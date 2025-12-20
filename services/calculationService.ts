@@ -27,8 +27,8 @@ export const convert = (amount: number, from: Currency, to: Currency, rate: numb
 // Helper to calculate cost of a single stage (without converting currency yet)
 // Now returns Total Stage Cost including Equipment and Custom Items
 export const calculateStageCost = (
-    stage: InstallationStage, 
-    data: { suppliers: Supplier[] }, 
+    stage: InstallationStage,
+    data: { suppliers: Supplier[] },
     options: { ignoreExclusions?: boolean } = {}
 ): number => {
     const { ignoreExclusions = false } = options;
@@ -43,7 +43,7 @@ export const calculateStageCost = (
     // Time Calculation part
     if (stage.calcMethod === 'TIME' || stage.calcMethod === 'BOTH') {
         let totalMinutes = 0;
-        
+
         // Sum ORM minutes from linked suppliers
         if (stage.linkedSupplierIds && stage.linkedSupplierIds.length > 0) {
             stage.linkedSupplierIds.forEach(suppId => {
@@ -51,10 +51,10 @@ export const calculateStageCost = (
                 // Check if supplier is active OR if we are ignoring exclusions
                 if (supplier && (ignoreExclusions || supplier.isIncluded !== false)) {
                     supplier.items.forEach(i => {
-                         // Check if item is active OR if we are ignoring exclusions
-                         if (ignoreExclusions || !i.isExcluded) {
-                             totalMinutes += (i.quantity * (i.timeMinutes || 0));
-                         }
+                        // Check if item is active OR if we are ignoring exclusions
+                        if (ignoreExclusions || !i.isExcluded) {
+                            totalMinutes += (i.quantity * (i.timeMinutes || 0));
+                        }
                     });
                 }
             });
@@ -63,7 +63,7 @@ export const calculateStageCost = (
         const totalHours = (totalMinutes / 60) + (stage.manualLaborHours || 0);
         const dailyCap = (stage.workDayHours || 10) * (stage.installersCount || 1);
         const days = dailyCap > 0 ? Math.ceil(totalHours / dailyCap) : 0;
-        
+
         // Cost = Days * People * RatePerPersonPerDay
         laborCost += days * (stage.installersCount || 1) * (stage.manDayRate || 0);
     }
@@ -82,8 +82,8 @@ export const calculateStageCost = (
 };
 
 export const calculateProjectCosts = (
-    data: CalculationData, 
-    rate: number, 
+    data: CalculationData,
+    rate: number,
     targetCurrency: Currency,
     mode: CalculationMode = CalculationMode.INITIAL,
     ormFeePercent: number = 1.6,
@@ -98,16 +98,16 @@ export const calculateProjectCosts = (
     // --- SUPPLIERS ---
     const suppliersTotal = data.suppliers.reduce((total, s) => {
         if (s.isIncluded === false) return total;
-        
+
         let cost = 0;
         let supplierOrmFee = 0;
 
         if (isFinal && s.finalCostOverride !== undefined && s.finalCostOverride !== null) {
-             cost = s.finalCostOverride;
-             // Even in final mode, if it was an ORM supplier, we assume the fee applies to the final invoice amount
-             if (s.isOrm) {
-                 supplierOrmFee = cost * ormFeeRate;
-             }
+            cost = s.finalCostOverride;
+            // Even in final mode, if it was an ORM supplier, we assume the fee applies to the final invoice amount
+            if (s.isOrm) {
+                supplierOrmFee = cost * ormFeeRate;
+            }
         } else {
             // Standard Calculation
             const sTotal = s.items.reduce((sum, i) => {
@@ -117,27 +117,27 @@ export const calculateProjectCosts = (
                 // Check exclusion (Explicit flag only)
                 if (i.isExcluded) {
                     const discountedValue = value * (1 - s.discount / 100);
-                    
+
                     // If excluded, we save the Material Cost + The Fee that would have been applied
                     let itemExcludedValue = discountedValue;
                     if (s.isOrm) {
                         itemExcludedValue += discountedValue * ormFeeRate;
                     }
-                    
+
                     // Apply extra markup to excluded value for consistency
                     const markupFactor = 1 + (s.extraMarkupPercent || 0) / 100;
                     itemExcludedValue *= markupFactor;
-                    
+
                     excludedTotal += convert(itemExcludedValue, s.currency, targetCurrency, rate);
                     return sum; // Skip adding to current total
                 }
 
                 return sum + value;
             }, 0);
-            
+
             // 1. Apply Discount
             const discountedCost = sTotal * (1 - s.discount / 100);
-            
+
             // 2. Apply Extra Adjustment (Markup/Markdown)
             const markupFactor = 1 + (s.extraMarkupPercent || 0) / 100;
             cost = discountedCost * markupFactor;
@@ -157,7 +157,7 @@ export const calculateProjectCosts = (
 
     // Nameplate (19 PLN fixed)
     const nameplateCost = convert((data.nameplateQty || 0) * 19, Currency.PLN, targetCurrency, rate);
-    
+
     // --- TRANSPORT ---
     const transportTotal = data.transport.reduce((sum, item) => {
         // Exclude if linked single supplier is excluded
@@ -165,7 +165,7 @@ export const calculateProjectCosts = (
             const supplier = data.suppliers.find(s => s.id === item.supplierId);
             if (supplier && supplier.isIncluded === false) return sum;
         }
-        
+
         // Exclude Consolidated if all linked suppliers are excluded
         if (item.linkedSupplierIds && item.linkedSupplierIds.length > 0) {
             // Check if at least ONE linked supplier is included
@@ -185,7 +185,7 @@ export const calculateProjectCosts = (
         } else {
             cost = item.totalPrice;
         }
-        
+
         const value = convert(cost, currency, targetCurrency, rate);
 
         if (item.isExcluded) {
@@ -207,7 +207,7 @@ export const calculateProjectCosts = (
         } else {
             cost = c.price;
         }
-        
+
         const value = convert(cost, currency, targetCurrency, rate);
 
         if (c.isExcluded) {
@@ -220,54 +220,54 @@ export const calculateProjectCosts = (
 
     // --- INSTALLATION ---
     let installationTotal = 0;
-    
+
     if (isFinal && data.installation.finalInstallationCosts && data.installation.finalInstallationCosts.length > 0) {
         installationTotal = data.installation.finalInstallationCosts.reduce((sum, item) => {
             return sum + convert(item.price, item.currency, targetCurrency, rate);
         }, 0);
-    } 
+    }
     else if (isFinal && data.installation.finalCostOverride !== undefined && data.installation.finalCostOverride !== null) {
         installationTotal = convert(data.installation.finalCostOverride, Currency.PLN, targetCurrency, rate);
-    } 
+    }
     else {
         const inst = data.installation;
-        
+
         // Sum Stages (which now include Equipment and Custom Items per stage)
         let stagesCost = 0;
 
         if (inst.stages && inst.stages.length > 0) {
             stagesCost = inst.stages.reduce((sum, stage) => {
-                 // Active Cost: Respects exclusions (If supplier is gone, we don't pay to install it)
-                 const sCost = calculateStageCost(stage, data, { ignoreExclusions: false });
-                 
-                 if (stage.isExcluded) {
-                     const excludedCost = calculateStageCost(stage, data, { ignoreExclusions: true });
-                     excludedTotal += convert(excludedCost, Currency.PLN, targetCurrency, rate);
-                     return sum;
-                 }
-                 return sum + sCost;
+                // Active Cost: Respects exclusions (If supplier is gone, we don't pay to install it)
+                const sCost = calculateStageCost(stage, data, { ignoreExclusions: false });
+
+                if (stage.isExcluded) {
+                    const excludedCost = calculateStageCost(stage, data, { ignoreExclusions: true });
+                    excludedTotal += convert(excludedCost, Currency.PLN, targetCurrency, rate);
+                    return sum;
+                }
+                return sum + sCost;
             }, 0);
         } else {
             // FALLBACK FOR LEGACY DATA (If somehow stages is empty but legacy fields exist)
-            const labor = inst.calcMethod === 'PALLETS' 
-                ? inst.palletSpots * inst.palletSpotPrice 
-                : 0; 
-             
-            const equipment = 
+            const labor = inst.calcMethod === 'PALLETS'
+                ? inst.palletSpots * inst.palletSpotPrice
+                : 0;
+
+            const equipment =
                 (inst.forkliftDailyRate * inst.forkliftDays) + inst.forkliftTransportPrice +
                 (inst.scissorLiftDailyRate * inst.scissorLiftDays) + inst.scissorLiftTransportPrice;
-            
+
             // Note: in Legacy mode, customItems were typically here
             stagesCost = labor + equipment;
         }
 
         // Sum Global Custom Items (Outside stages)
         const globalCustomCost = inst.customItems.reduce((sum, i) => {
-             if (i.isExcluded) {
-                 excludedTotal += convert(i.quantity * i.unitPrice, Currency.PLN, targetCurrency, rate);
-                 return sum;
-             }
-             return sum + (i.quantity * i.unitPrice);
+            if (i.isExcluded) {
+                excludedTotal += convert(i.quantity * i.unitPrice, Currency.PLN, targetCurrency, rate);
+                return sum;
+            }
+            return sum + (i.quantity * i.unitPrice);
         }, 0);
 
         const installationPLN = stagesCost + globalCustomCost + inst.otherInstallationCosts;
@@ -278,11 +278,11 @@ export const calculateProjectCosts = (
     // Only calculate if targetMargin is provided (avoids breaking simple usage)
     let financingCost = 0;
     const paymentTerms = data.paymentTerms || EMPTY_PAYMENT_TERMS;
-    
+
     // Threshold: 14 days
     // Rate: 7.5% per annum
     const extraDays = Math.max(0, paymentTerms.finalPaymentDays - 14);
-    
+
     if (extraDays > 0 && targetMargin !== undefined) {
         const baseCost = suppliersTotal + nameplateCost + transportTotal + otherTotal + installationTotal + ormFeeTotal;
         const interestAnnualRate = 0.075;
@@ -300,10 +300,10 @@ export const calculateProjectCosts = (
             // Where C = BaseCost, M = TargetMargin, R = UnpaidRatio, I = InterestFactor
             // Financing Cost F = P * R * I
             // Or simpler: F = P - C - (P * M) ... but we need P first.
-            
+
             const marginDecimal = targetMargin / 100;
             const divisor = 1 - marginDecimal - (unpaidRatio * interestFactor);
-            
+
             if (divisor > 0) {
                 const projectedPrice = baseCost / divisor;
                 financingCost = projectedPrice * unpaidRatio * interestFactor;
@@ -324,4 +324,59 @@ export const calculateProjectCosts = (
         total: suppliersTotal + nameplateCost + transportTotal + otherTotal + installationTotal + ormFeeTotal + financingCost,
         excluded: excludedTotal
     };
+};
+
+// [NEW] Helper to ensure every included Supplier has a corresponding Transport Item
+export const ensureTransportData = (data: CalculationData, truckCapacity: number = 22000): CalculationData => {
+    const newData = { ...data };
+
+    // 1. Identify suppliers that are INCLUDED but don't have a transport item
+    const suppliers = newData.suppliers.filter(s => s.isIncluded !== false);
+
+    // Get all supplier IDs that are already covered by existing transport items
+    const coveredSupplierIds = new Set<string>();
+    newData.transport.forEach(t => {
+        if (t.supplierId) coveredSupplierIds.add(t.supplierId);
+        if (t.linkedSupplierIds) t.linkedSupplierIds.forEach(id => coveredSupplierIds.add(id));
+    });
+
+    const missingSuppliers = suppliers.filter(s => !coveredSupplierIds.has(s.id));
+
+    // Update existing transports' weight if they are single-supplier and not manually overridden?
+    // Actually, let's just focus on generating defaults for now.
+
+    if (missingSuppliers.length === 0) return newData;
+
+    // 2. Create default transport items for them
+    const newTransports = missingSuppliers.map(s => {
+        const totalWeight = s.items.reduce((sum, i) => sum + ((i.weight || 0) * (i.quantity || 0)), 0);
+        const estimatedTrucks = Math.max(1, Math.ceil(totalWeight / (truckCapacity || 22000)));
+
+        const tItem: import('../types').TransportItem = {
+            id: Math.random().toString(36).substr(2, 9),
+            supplierId: s.id,
+            isOrmCalc: false,
+            isSupplierOrganized: true, // Default to Supplier Organized
+            trucksCount: estimatedTrucks,
+            pricePerTruck: 0,
+            totalPrice: 0,
+            currency: s.currency,
+            confirmedDeliveryDate: s.deliveryDate, // Mirror the date
+            pickupDate: '',
+            carrier: s.name, // Default carrier name as Supplier Name
+            weight: totalWeight,
+            ldm: 0,
+            trucks: Array.from({ length: estimatedTrucks }).map((_, idx) => ({
+                id: Math.random().toString(36).substr(2, 7),
+                loadingDates: '',
+                deliveryDate: s.deliveryDate || '',
+                driverInfo: '',
+                registrationNumbers: ''
+            }))
+        };
+        return tItem;
+    });
+
+    newData.transport = [...newData.transport, ...newTransports];
+    return newData;
 };

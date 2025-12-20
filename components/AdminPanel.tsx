@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Shield, X, UserCheck, UserX, Crown, Loader, AlertCircle, CheckCircle } from 'lucide-react';
+import { Shield, X, UserCheck, UserX, Crown, Loader, AlertCircle, CheckCircle, HardDrive } from 'lucide-react';
 import { authService, UserProfile } from '../services/authService';
 import { useAuth } from '../contexts/AuthContext';
+import { storageService } from '../services/storage';
+import { ensureTransportData } from '../services/calculationService';
 
 interface Props {
     isOpen: boolean;
@@ -81,6 +83,69 @@ export const AdminPanel: React.FC<Props> = ({ isOpen, onClose }) => {
         setActionLoading(null);
     };
 
+    const handleBackfillTransports = async () => {
+        if (!confirm("Czy na pewno chcesz uruchomić MIGRACJĘ transportów do bazy SQL?")) return;
+
+        setActionLoading('BACKFILL');
+        setError(null);
+        setSuccessMessage(null);
+
+        try {
+            const allCalcs = await storageService.getCalculations();
+            let updatedCount = 0;
+            let transportsCount = 0;
+
+            for (const saved of allCalcs) {
+                // Check if it's a Project ProjectFile structure
+                const data: any = saved.calc;
+
+                // We target projects in OPENING stage
+                let isOpening = false;
+                if (data.stage === 'OPENING') isOpening = true;
+                if (data.appState?.stage === 'OPENING') isOpening = true;
+
+                if (isOpening) {
+                    // Determine which data is active (Final > Initial > Root)
+                    let activeData: any = data;
+                    if (data.appState) {
+                        activeData = data.appState.mode === 'FINAL' ? data.appState.final : data.appState.initial;
+                    }
+
+                    // 1. Ensure clean transport list (merges orphans)
+                    const processed = ensureTransportData(activeData);
+
+                    if (processed.transport && processed.transport.length > 0) {
+                        const pnum = saved.project_id || 'BezNumeru';
+                        if (pnum === 'BezNumeru') continue; // Skip bad data
+
+                        for (const t of processed.transport) {
+                            // 2. Insert into Table
+                            await storageService.saveLogisticsTransport({
+                                project_number: pnum,
+                                transport_id: t.id,
+                                calc_id: saved.id,
+                                data: t,
+                                delivery_date: t.isSupplierOrganized ? t.confirmedDeliveryDate : t.pickupDate,
+                                pickup_date: t.pickupDate,
+                                carrier: t.carrier,
+                                supplier_id: t.supplierId
+                            });
+                            transportsCount++;
+                        }
+                        updatedCount++;
+                    }
+                }
+            }
+
+            setSuccessMessage(`Migracja zakończona. Zaktualizowano ${updatedCount} projektów (Transports: ${transportsCount}).`);
+        } catch (err: any) {
+            console.error("Backfill error", err);
+            setError(`Błąd migracji: ${err.message}`);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
     if (!isOpen) return null;
 
     // Sprawdź czy aktualny użytkownik jest adminem
@@ -129,6 +194,17 @@ export const AdminPanel: React.FC<Props> = ({ isOpen, onClose }) => {
                                 Panel Administratora
                             </h2>
                             <p className="text-purple-100 text-sm mt-1">Zarządzanie użytkownikami</p>
+                        </div>
+                        <div className="flex bg-white/10 rounded-lg p-1">
+                            <button
+                                onClick={handleBackfillTransports}
+                                disabled={!!actionLoading}
+                                className="px-3 py-1.5 text-xs font-bold text-white hover:bg-white/10 rounded transition-colors flex items-center gap-2"
+                                title="Napraw brakujące transporty w projektach w realizacji"
+                            >
+                                {actionLoading === 'BACKFILL' ? <Loader size={14} className="animate-spin" /> : <HardDrive size={14} />}
+                                Backfill Transportów
+                            </button>
                         </div>
                         <button
                             onClick={onClose}

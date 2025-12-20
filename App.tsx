@@ -54,7 +54,7 @@ import { fetchEurRate } from './services/currencyService';
 import { generateDiff } from './services/diffService';
 import { storageService } from './services/storage';
 import { useAuth } from './contexts/AuthContext';
-import { calculateProjectCosts } from './services/calculationService';
+import { calculateProjectCosts, ensureTransportData } from './services/calculationService';
 import { toISODateString } from './services/dateUtils';
 import { Moon, Sun, History, Download, Upload, FilePlus, HardDrive, MousePointer2, X, Plus, Check, Trash2, Settings, Shield, AlertCircle, User, Keyboard, LogOut } from 'lucide-react';
 
@@ -912,7 +912,7 @@ const App: React.FC = () => {
         return name.replace(/[^a-zA-Z0-9 \-_ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, '').trim() || 'Nieznany';
     };
 
-    const handleSmartSave = async (stage: ProjectStage, reasonArg?: string | any, isLogistics?: boolean): Promise<boolean> => {
+    const handleSmartSave = async (stage: ProjectStage, reasonArg?: string | any, isLogistics?: boolean, stateOverride?: AppState): Promise<boolean> => {
         // VALIDATION: Installation Type is required for ANY save
         if (!appState.initial.meta.installationType) {
             triggerConfirm(
@@ -955,7 +955,9 @@ const App: React.FC = () => {
 
         // --- PREPARE DATA FOR SAVE (Shared for both Local and Cloud) ---
         // Update State with current stage
-        const newState = { ...appState, stage: stage };
+        // Use override if provided, otherwise current appState
+        const sourceState = stateOverride || appState;
+        const newState = { ...sourceState, stage: stage };
 
         // If Logistics Handover, set status AND lock
         if (isLogistics) {
@@ -1191,7 +1193,26 @@ const App: React.FC = () => {
             return false;
         }
 
-        const saved = await handleSmartSave('OPENING', undefined, true);
+        // [NEW] Automation: Ensure Transport Data Exists BEFORE saving
+        let stateToSave = appState;
+        const mode = appState.mode === CalculationMode.INITIAL ? 'initial' : 'final';
+        const currentData = appState[mode];
+        const updatedData = ensureTransportData(currentData);
+
+        // Check if transport was actually modified (simple length check or deep compare)
+        // ensureTransportData only adds new items, so comparison is easier
+        if (updatedData.transport.length > currentData.transport.length) {
+            stateToSave = {
+                ...appState,
+                [mode]: updatedData
+            };
+            // Also update UI state immediately
+            setAppState(stateToSave);
+            showSnackbar("Automatycznie utworzono karty transportowe dla dostawców.");
+        }
+
+        // Pass the updated state to save function
+        const saved = await handleSmartSave('OPENING', undefined, true, stateToSave);
         return saved;
     };
 
@@ -1398,24 +1419,24 @@ const App: React.FC = () => {
         const suppliers = activeData.suppliers;
 
         const itemsForModal: VariantItem[] = item.linkedSources.map(src => {
-            let label = `Element ${src.id}`;
+            let label = `Element ${src.id} `;
 
             if (src.type === 'GROUP') {
                 const s = suppliers.find(sup => sup.id === src.id);
-                if (s) label = `DOSTAWCA: ${s.customTabName || s.name}`;
+                if (s) label = `DOSTAWCA: ${s.customTabName || s.name} `;
             } else {
                 // Item
                 for (const s of suppliers) {
                     const i = s.items.find(it => it.id === src.id);
                     if (i) {
-                        label = `[Mat] ${i.itemDescription}`;
+                        label = `[Mat] ${i.itemDescription} `;
                         break;
                     }
                 }
             }
 
             return {
-                id: src.type === 'GROUP' ? `group_supp_${src.id}` : src.id,
+                id: src.type === 'GROUP' ? `group_supp_${src.id} ` : src.id,
                 type: src.type === 'GROUP' ? 'SUPPLIER_ITEM' : 'SUPPLIER_ITEM', // Modal expects VariantType
                 originalDescription: label
             };
@@ -1520,7 +1541,7 @@ const App: React.FC = () => {
         setAppState(previousState);
 
         setHistoryLog(prev => prev.slice(1));
-        showSnackbar(`Cofnięto: ${changesText}`);
+        showSnackbar(`Cofnięto: ${changesText} `);
     };
 
     const handleRedo = () => {
@@ -1549,7 +1570,7 @@ const App: React.FC = () => {
         setPast(prev => [...prev, appState]);
         setFuture([]);
         setAppState(entry.state);
-        showSnackbar(`Przywrócono stan z: ${new Date(entry.timestamp).toLocaleTimeString()}`);
+        showSnackbar(`Przywrócono stan z: ${new Date(entry.timestamp).toLocaleTimeString()} `);
     };
 
     const toggleTheme = () => {
@@ -1900,11 +1921,13 @@ const App: React.FC = () => {
         <div className="h-screen overflow-hidden bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 transition-colors font-sans flex flex-col">
             <style>{`
         @keyframes flyToBasket {
-          0% { transform: translate(0, 0) scale(1); opacity: 1; }
-          60% { opacity: 1; transform: translate(calc(var(--tx) * 0.5), calc(var(--ty) * 0.8)) scale(0.8); }
-          100% { transform: translate(var(--tx), var(--ty)) scale(0.1); opacity: 0; }
+            0 % { transform: translate(0, 0) scale(1); opacity: 1; }
+            60 % { opacity: 1; transform: translate(calc(var(--tx) * 0.5), calc(var(--ty) * 0.8)) scale(0.8);
         }
-      `}</style>
+        100 % { transform: translate(var(--tx), var(--ty)) scale(0.1); opacity: 0;
+    }
+}
+`}</style>
 
             {/* Authentication Loading State */}
             {authLoading && (
@@ -2295,7 +2318,7 @@ const App: React.FC = () => {
                     {pickingVariantId && (
                         <div className="fixed bottom-0 left-0 right-0 bg-zinc-900 text-white p-4 z-[999] animate-slideUp flex flex-col md:flex-row items-center justify-between shadow-2xl border-t-2 border-amber-500 gap-4">
                             <div className="flex items-center gap-4 flex-1 overflow-hidden">
-                                <div className={`bg-amber-500 p-2 rounded-full text-black transition-transform duration-200 shrink-0 ${basketPulse ? 'scale-150' : ''}`}>
+                                <div className={`bg - amber - 500 p - 2 rounded - full text - black transition - transform duration - 200 shrink - 0 ${basketPulse ? 'scale-150' : ''} `}>
                                     <MousePointer2 size={24} />
                                 </div>
                                 <div className="overflow-hidden flex-1">

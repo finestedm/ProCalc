@@ -145,6 +145,15 @@ export interface ScratchpadRow {
   isChecked: boolean; // Visual marker
 }
 
+export interface TruckDetail {
+  id: string;
+  loadingDates?: string;       // Can be "YYYY-MM-DD" or "YYYY-MM-DD - YYYY-MM-DD"
+  deliveryDate?: string;
+  driverInfo?: string;         // Name, Phone
+  registrationNumbers?: string; // Car, Trailer
+  notes?: string;
+}
+
 export interface TransportItem {
   id: string;
   supplierId?: string;
@@ -170,6 +179,9 @@ export interface TransportItem {
   ldm?: number;                  // Loading meters
   carrier?: string;              // Carrier company name
   transitTime?: string;          // e.g. "2 days"
+
+  // Multi-truck support
+  trucks?: TruckDetail[];
 }
 
 export interface LinkedSource {
