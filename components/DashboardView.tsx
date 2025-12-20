@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, StickyNote, ArrowRight, Clock, User, Briefcase, RefreshCw, Filter, Bell, MapPin, Truck, ChevronRight, ChevronDown, Shield, Scale, HardDrive, AlertCircle } from 'lucide-react';
+import { Calendar, StickyNote, ArrowRight, Clock, User, Briefcase, RefreshCw, Filter, Bell, MapPin, Truck, ChevronRight, ChevronDown, Shield, Scale, HardDrive, AlertCircle, Check } from 'lucide-react';
 import { storageService } from '../services/storage';
 import { SavedCalculation } from '../services/storage/types';
 import { useAuth } from '../contexts/AuthContext';
@@ -99,6 +99,7 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
     const [managerInsights, setManagerInsights] = useState<ManagerInsights | null>(null);
     const [accessRequests, setAccessRequests] = useState<any[]>([]);
     const [requestActionError, setRequestActionError] = useState<string | null>(null);
+    const [logisticsViewMode, setLogisticsViewMode] = useState<'PENDING' | 'PROCESSED'>('PENDING');
 
     // Gantt State
     const [showDrafts, setShowDrafts] = useState(false);
@@ -118,25 +119,38 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
             // Show projects where user is Engineer or Specialist, OR if user is Manager (Admin)
             // Also normalize names for better matching
             const myProjects = allProjects.filter(p => {
+                const currentUserId = profile?.id;
                 const userName = profile?.full_name || '';
                 const userRole = profile?.role || 'specialist';
 
-                if (!userName) return false;
+                if (!userName || !currentUserId) return false;
 
-                // Manager sees everything
-                if (userRole === 'manager') return true;
+                // Manager and Logistics see everything
+                if (userRole === 'manager' || userRole === 'logistics') return true;
 
+                // [NEW] ID-based matching (Preferred)
+                if (p.engineer_id === currentUserId || p.specialist_id === currentUserId ||
+                    p.sales_person_1_id === currentUserId || p.sales_person_2_id === currentUserId) {
+                    return true;
+                }
+
+                // Fallback: Name-based matching (Classic)
                 const normalizedUser = userName.trim().toLowerCase();
                 const pEngineer = (p.engineer || '').trim().toLowerCase();
                 const pSpecialist = (p.specialist || '').trim().toLowerCase();
 
-                // Check classic columns
                 if (pEngineer === normalizedUser || pSpecialist === normalizedUser) return true;
 
-                // Also check inside JSON metadata
+                // Also check inside JSON metadata for deep fallbacks
                 const fullFile = p.calc as any;
                 const data = fullFile.appState?.initial || fullFile.appState?.final || fullFile;
                 const meta = data.meta || {};
+
+                // Use IDs from meta if available
+                if (meta.salesPersonId === currentUserId || meta.assistantPersonId === currentUserId ||
+                    meta.actualSalesPersonId === currentUserId || meta.actualSalesPerson2Id === currentUserId) {
+                    return true;
+                }
 
                 const mSales = (meta.salesPerson || '').trim().toLowerCase();
                 const mAssist = (meta.assistantPerson || '').trim().toLowerCase();
@@ -553,6 +567,30 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
         }
     };
 
+    const handleLogisticsStatusToggle = async (id: string, newStatus: 'PENDING' | 'PROCESSED' | null) => {
+        try {
+            await storageService.updateLogisticsStatus(id, newStatus);
+            loadData(); // Reload to refresh list
+        } catch (e) {
+            console.error("Logistics update failed", e);
+            alert("Błąd aktualizacji statusu logistyki.");
+        }
+    };
+
+    // Filter for Logistics Queue
+    const logisticsQueue = useMemo(() => {
+        if (profile?.role !== 'logistics') return [];
+        // Flatten all versions, get meaningful ones (e.g. latest of each project that needs action)
+        // Or show ALL items that are PENDING?
+        // Usually we want the Latest version to be the one we act on.
+        const allLatest = getLatestVersions(rawExperiments); // Assuming rawExperiments has filtered data?
+        // Wait, rawExperiments is filtered by "My Projects". Logistics sees ALL PENDING usually.
+        // We need to ensure `rawExperiments` for Logistics includes EVERYTHING or we fetch separately.
+        // In loadData, I changed "Manager sees everything". Logistics should also see everything likely.
+
+        return allLatest.filter(p => p.logistics_status === logisticsViewMode);
+    }, [rawExperiments, logisticsViewMode, profile]);
+
     if (loading) {
         return (
             <div className="flex h-screen items-center justify-center">
@@ -725,6 +763,94 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
                             </div>
                         ))}
                     </div>
+                </div>
+            )}
+
+            {/* LOGISTICS QUEUE */}
+            {profile?.role === 'logistics' && (
+                <div className="mb-8 p-6 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-200 dark:border-blue-800">
+                    <div className="flex justify-between items-center mb-6">
+                        <div className="flex items-center gap-3">
+                            <Truck className="text-blue-600 dark:text-blue-400" size={28} />
+                            <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Kolejka Logistyczna</h2>
+                        </div>
+                        <div className="flex bg-white dark:bg-zinc-800 rounded-lg p-1 border border-zinc-200 dark:border-zinc-700">
+                            <button
+                                onClick={() => setLogisticsViewMode('PENDING')}
+                                className={`px-4 py-1.5 rounded text-sm font-bold transition-all ${logisticsViewMode === 'PENDING' ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'text-zinc-500 hover:text-zinc-900'}`}
+                            >
+                                Do Przetworzenia ({getLatestVersions(rawExperiments).filter(p => p.logistics_status === 'PENDING').length})
+                            </button>
+                            <button
+                                onClick={() => setLogisticsViewMode('PROCESSED')}
+                                className={`px-4 py-1.5 rounded text-sm font-bold transition-all ${logisticsViewMode === 'PROCESSED' ? 'bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300' : 'text-zinc-500 hover:text-zinc-900'}`}
+                            >
+                                Przetworzone
+                            </button>
+                        </div>
+                    </div>
+
+                    {logisticsQueue.length === 0 ? (
+                        <div className="text-center py-12 text-zinc-400">
+                            <Truck size={48} className="mx-auto mb-3 opacity-20" />
+                            <p>Brak projektów w tej kategorii.</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {logisticsQueue.map(p => (
+                                <div key={p.id} className="bg-white dark:bg-zinc-800 rounded-lg p-5 border border-blue-100 dark:border-blue-900/30 shadow-sm hover:shadow-md transition-all group">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div>
+                                            <span className="text-[10px] uppercase font-bold text-blue-500 tracking-wider">
+                                                {p.project_id || 'Nowy'}
+                                            </span>
+                                            <h3 className="font-bold text-zinc-900 dark:text-white text-lg leading-tight">
+                                                {p.customer_name || 'Nieznany klient'}
+                                            </h3>
+                                            <p className="text-xs text-zinc-500 mt-1">
+                                                Handlowiec: {p.engineer}
+                                            </p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-xs font-mono text-zinc-400 block mb-1">
+                                                {new Date(p.created_at).toLocaleDateString()}
+                                            </span>
+                                            {(p.calc as any).stage && (
+                                                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-100 dark:bg-zinc-700">
+                                                    {(p.calc as any).stage}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="border-t border-zinc-100 dark:border-zinc-700 my-3 pt-3 flex justify-between items-center">
+                                        <button
+                                            onClick={() => handleProjectClick(p)}
+                                            className="text-sm font-bold text-zinc-600 hover:text-blue-500 flex items-center gap-1"
+                                        >
+                                            Podgląd <ArrowRight size={14} />
+                                        </button>
+
+                                        {logisticsViewMode === 'PENDING' ? (
+                                            <button
+                                                onClick={() => handleLogisticsStatusToggle(p.id, 'PROCESSED')}
+                                                className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-bold transition-colors flex items-center gap-2"
+                                            >
+                                                <Check size={14} /> Oznacz jako Przetworzone
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleLogisticsStatusToggle(p.id, 'PENDING')}
+                                                className="px-3 py-1.5 bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 text-zinc-700 dark:text-zinc-300 rounded text-xs font-bold transition-colors flex items-center gap-2"
+                                            >
+                                                Przywróć do Kolejki
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
 

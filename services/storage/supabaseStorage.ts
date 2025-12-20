@@ -36,18 +36,29 @@ export class SupabaseStorage implements ICalculationStorage {
         const meta = activeData?.meta || {};
         const orderingParty = activeData?.orderingParty || {};
 
+        // Auto-detect project-wide lock if not explicitly set in appState (safety net)
+        let isLocked = appState?.isLocked || false;
+        if (!isLocked && meta.projectNumber && meta.projectNumber !== 'BezNumeru') {
+            // Optional: could check DB here, but might be slow. We trust appState for now.
+        }
+
         // Mapping to User's specific table columns
         const payload = {
             user_id: user.id, // Associate with current user
             specialist: meta.assistantPerson || '',
+            specialist_id: meta.assistantPersonId || null,
             engineer: meta.salesPerson || '',
+            engineer_id: meta.salesPersonId || null,
             customer_name: orderingParty.name || 'Unknown',
             project_id: meta.projectNumber || 'BezNumeru', // [NEW] Supporting the new column
             order_date: meta.orderDate || null,
             close_date: meta.protocolDate || null,
+            sales_person_1_id: meta.actualSalesPersonId || null,
+            sales_person_2_id: meta.actualSalesPerson2Id || null,
             total_cost: summary.totalCost,
             total_price: summary.totalPrice,
-            is_locked: appState?.isLocked || false, // [NEW] Persist lock state
+            is_locked: isLocked, // [NEW] Persist lock state
+            logistics_status: appState?.logisticsStatus || null, // [NEW] Logistics Status
             calc: data // We still save the full object (ProjectFile or CalculationData) in the JSON column
         };
 
@@ -60,6 +71,14 @@ export class SupabaseStorage implements ICalculationStorage {
         if (error) {
             console.error('Supabase Error:', error);
             throw new Error(error.message);
+        }
+
+        // [NEW] Enforce Project-Wide Lock Consistency
+        if (isLocked && payload.project_id && payload.project_id !== 'BezNumeru') {
+            // We don't await this to keep UI snappy, or we can catch errors silently
+            this.lockProject(payload.project_id, true).catch(err =>
+                console.error("Failed to propagate project lock", err)
+            );
         }
 
         return insertedData.id;
@@ -82,8 +101,6 @@ export class SupabaseStorage implements ICalculationStorage {
     }
 
     async deleteCalculation(id: string): Promise<void> {
-
-
         console.log('Attempting to delete calculation with ID:', id);
 
         const { error, count } = await this.supabase
@@ -97,47 +114,65 @@ export class SupabaseStorage implements ICalculationStorage {
         }
 
         console.log('Supabase Delete Result - Count:', count);
-
-        if (count === 0) {
-            console.warn('No rows were deleted. This might be due to RLS policies or an incorrect ID.');
-        }
     }
 
+    // Lock a single calculation (Legacy - kept for compatibility)
     async setLockState(id: string, isLocked: boolean): Promise<void> {
-        // 1. Fetch the current calculation to get the JSON blob
+        // 1. Fetch to get details
         const { data: calcRow, error: fetchError } = await this.supabase
             .from(this.tableName)
-            .select('calc')
+            .select('project_id')
             .eq('id', id)
             .single();
 
-        if (fetchError) {
-            console.error('Supabase Fetch for Lock Error:', fetchError);
-            throw new Error(fetchError.message);
-        }
+        if (fetchError || !calcRow) return; // Fail silently or log
 
-        // 2. Update the JSON blob's lock state
-        const updatedCalc = { ...calcRow.calc };
-        if (updatedCalc.appState) {
-            updatedCalc.appState.isLocked = isLocked;
-        } else {
-            // If it's a flat CalculationData, it might not have appState.
-            // But usually we save ProjectFile which has appState.
-            updatedCalc.isLocked = isLocked;
-        }
+        // Redirect to project lock
+        await this.lockProject(calcRow.project_id, isLocked);
+    }
 
-        // 3. Update both the column and the JSON blob
-        const { error: updateError } = await this.supabase
+    // PROJECT-WIDE LOCKING
+    async lockProject(projectId: string, isLocked: boolean): Promise<void> {
+        if (!projectId || projectId === 'BezNumeru') return;
+
+        // Update ALL rows with this project_id
+        const { error } = await this.supabase
             .from(this.tableName)
-            .update({
-                is_locked: isLocked,
-                calc: updatedCalc
-            })
+            .update({ is_locked: isLocked })
+            .eq('project_id', projectId);
+
+        if (error) {
+            console.error('Lock Project Error:', error);
+            throw new Error(error.message);
+        }
+    }
+
+    async isProjectLocked(projectId: string): Promise<boolean> {
+        if (!projectId || projectId === 'BezNumeru') return false;
+
+        const { data, error } = await this.supabase
+            .from(this.tableName)
+            .select('is_locked')
+            .eq('project_id', projectId)
+            .eq('is_locked', true)
+            .limit(1);
+
+        if (error) {
+            console.error("Check Lock Error", error);
+            return false;
+        }
+
+        return data && data.length > 0;
+    }
+
+    async updateLogisticsStatus(id: string, status: 'PENDING' | 'PROCESSED' | null): Promise<void> {
+        const { error } = await this.supabase
+            .from(this.tableName)
+            .update({ logistics_status: status })
             .eq('id', id);
 
-        if (updateError) {
-            console.error('Supabase Lock Error:', updateError);
-            throw new Error(updateError.message);
+        if (error) {
+            throw new Error(error.message);
         }
     }
 
@@ -190,9 +225,13 @@ export class SupabaseStorage implements ICalculationStorage {
             throw new Error(requestError.message);
         }
 
-        // 2. If approved, unlock the calculation
+        // 2. If approved, unlock the PROJECT
         if (status === 'approved' && request) {
-            await this.setLockState(request.calculation_id, false);
+            // Need to fetch calculation to get project_id
+            const { data: calc } = await this.supabase.from(this.tableName).select('project_id').eq('id', request.calculation_id).single();
+            if (calc && calc.project_id) {
+                await this.lockProject(calc.project_id, false);
+            }
         }
     }
 }

@@ -1,10 +1,10 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ProjectMeta, CalculationMode } from '../types';
-import { Briefcase, Calendar, User, ChevronDown, Hash, ScanLine, Search, Layers, FileText, UserCheck } from 'lucide-react';
+import { Briefcase, Calendar, User, ChevronDown, Hash, ScanLine, Search, Layers, FileText, UserCheck, ShieldCheck } from 'lucide-react';
 import { SALES_PEOPLE, SUPPORT_PEOPLE, ACTUAL_SALES_PEOPLE } from '../services/employeesDatabase';
 import { INSTALLATION_TYPES, INVOICE_TEXTS } from '../services/optionsDatabase';
 import { DatePickerInput } from './DatePickerInput';
+import { authService, UserProfile } from '../services/authService';
 
 interface Props {
     data: ProjectMeta;
@@ -15,8 +15,86 @@ interface Props {
     readOnly?: boolean;
 }
 
+const PersonSelect: React.FC<{
+    label: string;
+    value: string;
+    idValue?: string;
+    onSelect: (name: string, id: string) => void;
+    registeredUsers: UserProfile[];
+    staticOptions: string[];
+    readOnly?: boolean;
+    inputClass: string;
+    labelClass: string;
+}> = ({ label, value, idValue, onSelect, registeredUsers, staticOptions, readOnly, inputClass, labelClass }) => {
+    // Local state for immediate responsiveness and resolving stale closure issues
+    const [localValue, setLocalValue] = useState(value);
+
+    // Sync with prop value when it changes from above
+    useEffect(() => {
+        setLocalValue(value);
+    }, [value]);
+
+    const isRegistered = registeredUsers.some(u => u.id === idValue);
+
+    // Build comprehensive suggestions list
+    const registeredSuggestions: string[] = [];
+    registeredUsers.forEach(u => {
+        if (u.full_name) registeredSuggestions.push(u.full_name);
+        if (u.email && u.email !== u.full_name) registeredSuggestions.push(u.email);
+    });
+
+    const allSuggestions = Array.from(new Set([...staticOptions, ...registeredSuggestions]));
+
+    const handleChange = (val: string) => {
+        setLocalValue(val);
+        const found = registeredUsers.find(u =>
+            (u.full_name?.toLowerCase() === val.toLowerCase()) ||
+            (u.email.toLowerCase() === val.toLowerCase())
+        );
+        onSelect(val, found?.id || '');
+    };
+
+    return (
+        <div className="w-full">
+            <label className={labelClass}>{label}</label>
+            <div className="relative group">
+                <div className="absolute left-2.5 top-2.5 pointer-events-none flex items-center gap-1">
+                    <User className={`${isRegistered ? 'text-amber-600' : 'text-zinc-400'} group-focus-within:text-amber-600`} size={14} />
+                    {isRegistered && <ShieldCheck size={10} className="text-amber-500" title="Użytkownik zarejestrowany" />}
+                </div>
+                <input
+                    list={`${label.replace(/\s+/g, '')}-list`}
+                    type="text"
+                    className={`${inputClass} pl-10`}
+                    placeholder={readOnly ? "Zablokowane" : "Wybierz z listy..."}
+                    value={localValue}
+                    onChange={(e) => handleChange(e.target.value)}
+                    disabled={readOnly}
+                />
+                <datalist id={`${label.replace(/\s+/g, '')}-list`}>
+                    {allSuggestions.map((name, i) => (
+                        <option key={i} value={name} />
+                    ))}
+                </datalist>
+                <div className="absolute right-2 top-2.5 text-zinc-300 pointer-events-none">
+                    <ChevronDown size={14} />
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen = true, onToggle, readOnly }) => {
     const [internalOpen, setInternalOpen] = useState(true);
+    const [registeredUsers, setRegisteredUsers] = useState<UserProfile[]>([]);
+
+    useEffect(() => {
+        authService.getAllUsers().then(users => {
+            // Include all users for now to help with debugging/testing 
+            // even if they are not fully approved, or if the user fetching is blocked by RLS
+            setRegisteredUsers(users);
+        });
+    }, []);
 
     // Use controlled state if provided, otherwise local
     const showContent = onToggle ? isOpen : internalOpen;
@@ -49,34 +127,6 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
     // UPDATED: Removed py-2, added h-[34px] to enforce exact height match across all inputs/selects
     const inputClass = `w-full px-3 h-[34px] bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded text-xs text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all ${readOnly ? 'opacity-50 pointer-events-none' : ''}`;
     const labelClass = "block text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase mb-1 ml-1 tracking-wider";
-
-    const renderPersonSelect = (label: string, value: string, onChange: (val: string) => void, options: string[]) => {
-        return (
-            <div className="w-full">
-                <label className={labelClass}>{label}</label>
-                <div className="relative group">
-                    <User className="absolute left-2.5 top-2.5 text-zinc-400 group-focus-within:text-amber-600 pointer-events-none" size={14} />
-                    <input
-                        list={`${label.replace(/\s+/g, '')}-list`}
-                        type="text"
-                        className={`${inputClass} pl-9`}
-                        placeholder={readOnly ? "Zablokowane" : "Wybierz z listy..."}
-                        value={value}
-                        onChange={(e) => onChange(e.target.value)}
-                        disabled={readOnly}
-                    />
-                    <datalist id={`${label.replace(/\s+/g, '')}-list`}>
-                        {options.map((name, i) => (
-                            <option key={i} value={name} />
-                        ))}
-                    </datalist>
-                    <div className="absolute right-2 top-2.5 text-zinc-300 pointer-events-none">
-                        <ChevronDown size={14} />
-                    </div>
-                </div>
-            </div>
-        );
-    };
 
     return (
         <div className="bg-white dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 mb-6 overflow-hidden transition-all duration-300 h-full flex flex-col">
@@ -231,14 +281,50 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
                         {/* PERSONEL SECTION - REORGANIZED */}
                         {/* Row 1: Engineer & Specialist */}
                         <div className="md:col-span-2 grid grid-cols-2 gap-4">
-                            {renderPersonSelect("Inżynier", data.salesPerson, (v) => handleChange('salesPerson', v), SALES_PEOPLE)}
-                            {renderPersonSelect("Specjalista", data.assistantPerson, (v) => handleChange('assistantPerson', v), SUPPORT_PEOPLE)}
+                            <PersonSelect
+                                label="Inżynier"
+                                value={data.salesPerson}
+                                idValue={data.salesPersonId}
+                                onSelect={(name, id) => {
+                                    onChange({ ...data, salesPerson: name, salesPersonId: id });
+                                }}
+                                registeredUsers={registeredUsers}
+                                staticOptions={SALES_PEOPLE}
+                                readOnly={readOnly}
+                                inputClass={inputClass}
+                                labelClass={labelClass}
+                            />
+                            <PersonSelect
+                                label="Specjalista"
+                                value={data.assistantPerson}
+                                idValue={data.assistantPersonId}
+                                onSelect={(name, id) => {
+                                    onChange({ ...data, assistantPerson: name, assistantPersonId: id });
+                                }}
+                                registeredUsers={registeredUsers}
+                                staticOptions={SUPPORT_PEOPLE}
+                                readOnly={readOnly}
+                                inputClass={inputClass}
+                                labelClass={labelClass}
+                            />
                         </div>
 
                         {/* Row 2: Sales Person 1 (Handlowiec 1) */}
                         <div className="md:col-span-2 flex gap-2 items-end">
                             <div className="flex-1">
-                                {renderPersonSelect("Handlowiec 1", data.actualSalesPerson || '', (v) => handleChange('actualSalesPerson', v), ACTUAL_SALES_PEOPLE)}
+                                <PersonSelect
+                                    label="Handlowiec 1"
+                                    value={data.actualSalesPerson || ''}
+                                    idValue={data.actualSalesPersonId}
+                                    onSelect={(name, id) => {
+                                        onChange({ ...data, actualSalesPerson: name, actualSalesPersonId: id });
+                                    }}
+                                    registeredUsers={registeredUsers}
+                                    staticOptions={ACTUAL_SALES_PEOPLE}
+                                    readOnly={readOnly}
+                                    inputClass={inputClass}
+                                    labelClass={labelClass}
+                                />
                             </div>
                             <div className="w-20">
                                 <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1 ml-1 tracking-wider">%</label>
@@ -265,7 +351,19 @@ export const ProjectMetaForm: React.FC<Props> = ({ data, mode, onChange, isOpen 
                         {/* Row 3: Sales Person 2 (Handlowiec 2) */}
                         <div className="md:col-span-2 flex gap-2 items-end">
                             <div className="flex-1">
-                                {renderPersonSelect("Handlowiec 2", data.actualSalesPerson2 || '', (v) => handleChange('actualSalesPerson2', v), ACTUAL_SALES_PEOPLE)}
+                                <PersonSelect
+                                    label="Handlowiec 2"
+                                    value={data.actualSalesPerson2 || ''}
+                                    idValue={data.actualSalesPerson2Id}
+                                    onSelect={(name, id) => {
+                                        onChange({ ...data, actualSalesPerson2: name, actualSalesPerson2Id: id });
+                                    }}
+                                    registeredUsers={registeredUsers}
+                                    staticOptions={ACTUAL_SALES_PEOPLE}
+                                    readOnly={readOnly}
+                                    inputClass={inputClass}
+                                    labelClass={labelClass}
+                                />
                             </div>
                             <div className="w-20">
                                 <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1 ml-1 tracking-wider">%</label>

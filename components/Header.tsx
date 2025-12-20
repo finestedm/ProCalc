@@ -22,6 +22,8 @@ interface Props {
     projectInputRef: React.RefObject<HTMLInputElement>;
     handleImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onToggleSidebar?: () => void;
+    showUndoRedo?: boolean;
+    onToggleLock?: () => void; // [NEW]
 }
 
 export const Header: React.FC<Props> = ({
@@ -38,7 +40,9 @@ export const Header: React.FC<Props> = ({
     menuItems,
     projectInputRef,
     handleImport,
-    onToggleSidebar
+    onToggleSidebar,
+    showUndoRedo = true,
+    onToggleLock
 }) => {
     const { profile, signOut } = useAuth();
     const [showProfileEdit, setShowProfileEdit] = useState(false);
@@ -182,11 +186,11 @@ export const Header: React.FC<Props> = ({
                             {/* [NEW] Lock/Unlock Button - Subtler, only for certain roles */}
                             {(profile?.is_admin || profile?.role === 'logistics' || profile?.role === 'manager') && appState.viewMode !== ViewMode.DASHBOARD && (
                                 <button
-                                    onClick={() => setAppState(prev => ({ ...prev, isLocked: !prev.isLocked }))}
+                                    onClick={onToggleLock}
                                     className={`w-8 h-8 flex items-center justify-center transition-colors rounded ${appState.isLocked
                                         ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
                                         : 'text-zinc-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20'}`}
-                                    title={appState.isLocked ? "Odkblokuj edycję" : "Zablokuj edycję"}
+                                    title={appState.isLocked ? "Odkblokuj edycję (Globalnie)" : "Zablokuj edycję (Globalnie)"}
                                 >
                                     {appState.isLocked ? <Lock size={16} /> : <Shield size={16} />}
                                 </button>
@@ -194,31 +198,34 @@ export const Header: React.FC<Props> = ({
 
                             {/* Visual Indicator for Read Only users */}
                             {appState.isLocked && !profile?.is_admin && profile?.role !== 'logistics' && appState.viewMode !== ViewMode.DASHBOARD && (
-                                <button
-                                    onClick={() => setShowAccessRequest(true)}
-                                    className="flex items-center px-2 text-[10px] font-bold text-red-500 bg-red-50 dark:bg-red-900/20 rounded h-8 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer"
-                                    title="Kliknij aby poprosić o odblokowanie"
+                                <div
+                                    className="flex items-center px-2 text-[10px] font-bold text-red-500 bg-red-50 dark:bg-red-900/20 rounded h-8 border border-red-200 dark:border-red-800 transition-colors cursor-default select-none"
+                                    title="Edycja zablokowana. Zapisanie zmian będzie wymagało podania powodu."
                                 >
                                     <Lock size={12} className="mr-1" /> ZABLOKOWANE
-                                </button>
+                                </div>
                             )}
 
-                            <button
-                                onClick={onUndo}
-                                disabled={!canUndo}
-                                className="w-8 h-8 flex items-center justify-center text-zinc-500 disabled:opacity-20 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                                title="Cofnij (Ctrl+Z)"
-                            >
-                                <Undo2 size={16} />
-                            </button>
-                            <button
-                                onClick={onRedo}
-                                disabled={!canRedo}
-                                className="w-8 h-8 flex items-center justify-center text-zinc-500 disabled:opacity-20 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                                title="Ponów (Ctrl+Y)"
-                            >
-                                <Redo2 size={16} />
-                            </button>
+                            {showUndoRedo && (
+                                <>
+                                    <button
+                                        onClick={onUndo}
+                                        disabled={!canUndo}
+                                        className="w-8 h-8 flex items-center justify-center text-zinc-500 disabled:opacity-20 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                                        title="Cofnij (Ctrl+Z)"
+                                    >
+                                        <Undo2 size={16} />
+                                    </button>
+                                    <button
+                                        onClick={onRedo}
+                                        disabled={!canRedo}
+                                        className="w-8 h-8 flex items-center justify-center text-zinc-500 disabled:opacity-20 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                                        title="Ponów (Ctrl+Y)"
+                                    >
+                                        <Redo2 size={16} />
+                                    </button>
+                                </>
+                            )}
                         </div>
 
                         <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block"></div>

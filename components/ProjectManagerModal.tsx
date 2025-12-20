@@ -6,6 +6,8 @@ import { calculateProjectCosts, convert, formatNumber } from '../services/calcul
 import { storageService } from '../services/storage';
 import { SavedCalculation } from '../services/storage/types';
 import { Cloud, Database } from 'lucide-react';
+import { UnlockRequestModal } from './UnlockRequestModal';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Props {
     isOpen: boolean;
@@ -123,6 +125,11 @@ export const ProjectManagerModal: React.FC<Props> = ({
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
     const [activeFilterPop, setActiveFilterPop] = useState<string | null>(null);
 
+    // Lock & Reason State
+    const [showUnlockModal, setShowUnlockModal] = useState(false);
+    const [pendingSaveParams, setPendingSaveParams] = useState<{ reason?: string } | null>(null);
+
+    const { profile } = useAuth();
     const abortControllerRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
@@ -656,7 +663,44 @@ export const ProjectManagerModal: React.FC<Props> = ({
         return name.replace(/[^a-zA-Z0-9 \-_ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, '').trim() || 'Nieznany';
     };
 
-    const handleSave = async () => {
+    const handleSave = async (reasonArg?: string | any) => {
+        const projectNum = appState.initial.meta.projectNumber || 'BezNumeru';
+        console.log(`[ProjectManagerModal] handleSave triggered for project: ${projectNum}`);
+
+        // Ensure we only treat a STRING as a valid reason.
+        // React onClick passes an 'event' object which we must ignore.
+        const reason = typeof reasonArg === 'string' ? reasonArg : undefined;
+
+        console.log(`[ProjectManagerModal] Resolved reason string length: ${reason?.length || 0}`);
+        console.log(`[ProjectManagerModal] Local appState.isLocked: ${appState.isLocked}`);
+
+        // [NEW] Robust Lock Check: Check local state AND remote status
+        let isRemoteLocked = false;
+        try {
+            if (!appState.isLocked && projectNum !== 'BezNumeru') {
+                isRemoteLocked = await storageService.isProjectLocked(projectNum);
+                console.log(`[ProjectManagerModal] Remote lock status for ${projectNum}: ${isRemoteLocked}`);
+            }
+        } catch (e) {
+            console.warn("[ProjectManagerModal] Failed to check remote lock", e);
+        }
+
+        const effectiveLocked = appState.isLocked || isRemoteLocked;
+        console.log(`[ProjectManagerModal] Effective lock status: ${effectiveLocked}`);
+
+        // [NEW] Logic to enforce Reason on Locked Projects
+        if (!reason && effectiveLocked) {
+            console.log("[ProjectManagerModal] Project is locked and no valid reason string provided. Showing prompt.");
+            // We require a reason. Show modal.
+            setShowUnlockModal(true);
+            return;
+        }
+
+        console.log(`[ProjectManagerModal] Proceeding to performSave. Reason: ${reason || 'none'}`);
+        performSave(reason);
+    };
+
+    const performSave = async (reason?: string) => {
         const mode = appState.mode;
         const activeData = mode === CalculationMode.FINAL ? appState.final : appState.initial;
 
@@ -686,6 +730,16 @@ export const ProjectManagerModal: React.FC<Props> = ({
             past: [],
             future: []
         };
+
+        // If reason provided, append to notes (LOGGING)
+        if (reason) {
+            const noteEntry = `[${new Date().toLocaleString()}] Aktualizacja ZABLOKOWANEJ kalkulacji przez ${profile?.full_name || 'Użytkownika'}: ${reason}\n`;
+            if (appState.mode === CalculationMode.INITIAL) {
+                fileData.appState.initial.projectNotes = (fileData.appState.initial.projectNotes || '') + noteEntry;
+            } else {
+                // Or final logic if needed, usually we note on initial or both logic
+            }
+        }
 
         if (source === 'cloud') {
             setIsLoading(true);
@@ -2048,7 +2102,7 @@ export const ProjectManagerModal: React.FC<Props> = ({
                                 </div>
                             )}
                             <button
-                                onClick={handleSave}
+                                onClick={() => handleSave()}
                                 disabled={(!currentDirHandle && source === 'local')}
                                 className="text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-bold transition-all flex items-center gap-2 shadow-lg shadow-green-600/20 active:scale-95"
                             >
@@ -2210,6 +2264,15 @@ export const ProjectManagerModal: React.FC<Props> = ({
                     </div>
                 )}
             </div>
+            {/* Unlock Request Modal for Saving Locked Projects */}
+            <UnlockRequestModal
+                isOpen={showUnlockModal}
+                onClose={() => setShowUnlockModal(false)}
+                onConfirm={(reason) => {
+                    setShowUnlockModal(false);
+                    performSave(reason);
+                }}
+            />
         </div>
     );
 };

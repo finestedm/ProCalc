@@ -51,10 +51,14 @@ export interface ProjectMeta {
   projectNumber: string;
   sapProjectNumber: string;
   salesPerson: string; // Now "Inżynier"
+  salesPersonId?: string; // [NEW] DB ID
   assistantPerson: string; // Now "Specjalista"
+  assistantPersonId?: string; // [NEW] DB ID
   actualSalesPerson?: string; // "Handlowiec 1"
+  actualSalesPersonId?: string; // [NEW] DB ID
   actualSalesPersonPercentage?: number; // % share
   actualSalesPerson2?: string; // "Handlowiec 2"
+  actualSalesPerson2Id?: string; // [NEW] DB ID
   actualSalesPerson2Percentage?: number; // % share
   installationType?: string;
   invoiceText?: string;
@@ -385,6 +389,7 @@ export interface AppState {
   globalSettings: GlobalSettings;
   isLocked?: boolean; // [NEW] Controls editability of Initial Calculation
   activeCalculationId?: string; // [NEW] ID of the cloud-saved calculation
+  logisticsStatus?: 'PENDING' | 'PROCESSED' | null; // [NEW] Status for logistics
 }
 
 export interface HistoryEntry {

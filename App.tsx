@@ -49,6 +49,7 @@ import { AuthModal } from './components/AuthModal';
 import { AdminPanel } from './components/AdminPanel';
 import { DashboardView } from './components/DashboardView';
 import { ProfileEditModal } from './components/ProfileEditModal';
+import { UnlockRequestModal } from './components/UnlockRequestModal';
 import { fetchEurRate } from './services/currencyService';
 import { generateDiff } from './services/diffService';
 import { storageService } from './services/storage';
@@ -201,6 +202,8 @@ const App: React.FC = () => {
     const [showPackageModal, setShowPackageModal] = useState(false);
     const [showAdminPanel, setShowAdminPanel] = useState(false);
     const [showScenarioManager, setShowScenarioManager] = useState(false);
+    const [showUnlockModal, setShowUnlockModal] = useState(false);
+    const [pendingSave, setPendingSave] = useState<{ stage: ProjectStage, reason?: string, isLogistics?: boolean } | null>(null);
 
     // Package Editing State
     const [editingPackageItem, setEditingPackageItem] = useState<CustomInstallationItem | null>(null);
@@ -909,7 +912,7 @@ const App: React.FC = () => {
         return name.replace(/[^a-zA-Z0-9 \-_ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, '').trim() || 'Nieznany';
     };
 
-    const handleSmartSave = async (stage: ProjectStage): Promise<boolean> => {
+    const handleSmartSave = async (stage: ProjectStage, reasonArg?: string | any, isLogistics?: boolean): Promise<boolean> => {
         // VALIDATION: Installation Type is required for ANY save
         if (!appState.initial.meta.installationType) {
             triggerConfirm(
@@ -921,9 +924,50 @@ const App: React.FC = () => {
             return false;
         }
 
+        // --- LOCK CHECK (Project Wide) ---
+        // Only check if we are not already providing a reason
+        const canBypass = profile?.is_admin || profile?.role === 'manager' || profile?.role === 'logistics';
+        const projectNumForLog = appState.initial.meta.projectNumber || 'BezNumeru';
+
+        // Ensure we only treat a STRING as a valid reason.
+        const reason = typeof reasonArg === 'string' ? reasonArg : undefined;
+
+        if (!reason) {
+            // CHECK LOCAL STATE FIRST (Faster/Safer) or REMOTE
+            const isLocalLocked = appState.isLocked === true;
+            let isRemoteLocked = false;
+
+            console.log(`[App] handleSmartSave check for ${projectNumForLog}. Local: ${isLocalLocked}, BypassAuth: ${canBypass}`);
+
+            if (!isLocalLocked) {
+                isRemoteLocked = await storageService.isProjectLocked(projectNumForLog);
+                console.log(`[App] Remote lock check: ${isRemoteLocked}`);
+            }
+
+            if (isLocalLocked || isRemoteLocked) {
+                console.log("[App] Project is locked. Showing prompt.");
+                // If locked, we MUST ask for reason.
+                setPendingSave({ stage, isLogistics });
+                setShowUnlockModal(true);
+                return false;
+            }
+        }
+
         // --- PREPARE DATA FOR SAVE (Shared for both Local and Cloud) ---
         // Update State with current stage
         const newState = { ...appState, stage: stage };
+
+        // If Logistics Handover, set status AND lock
+        if (isLogistics) {
+            newState.logisticsStatus = 'PENDING';
+            newState.isLocked = true; // [NEW] Auto-lock on send
+        }
+
+        // If we have a reason, maybe append to notes?
+        if (reason) {
+            const noteEntry = `[${new Date().toLocaleString()}] Aktualizacja ZABLOKOWANEJ kalkulacji przez ${profile?.full_name || 'Użytkownika'}: ${reason}\n`;
+            newState.initial.projectNotes = (newState.initial.projectNotes || '') + noteEntry;
+        }
 
         // Don't set state immediately if we are just checking... actually we should update stage.
         // But let's follow performSave pattern which updates state.
@@ -1147,7 +1191,7 @@ const App: React.FC = () => {
             return false;
         }
 
-        const saved = await handleSmartSave('OPENING');
+        const saved = await handleSmartSave('OPENING', undefined, true);
         return saved;
     };
 
@@ -1158,7 +1202,7 @@ const App: React.FC = () => {
             return false;
         }
 
-        const saved = await handleSmartSave('FINAL');
+        const saved = await handleSmartSave('FINAL', undefined, true);
         return saved;
     };
 
@@ -1785,7 +1829,33 @@ const App: React.FC = () => {
     // CALCULATE READ-ONLY STATE
     // CALCULATE READ-ONLY STATE
     // [REVERTED] Admin/Manager/Logistics can bypass lock. Others respects lock.
-    const isReadOnly = appState.isLocked && (!profile?.is_admin && profile?.role !== 'logistics' && profile?.role !== 'manager');
+    // --- LOCKING LOGIC ---
+    const handleToggleLock = async () => {
+        const currentProjectNum = appState.initial.meta.projectNumber;
+        if (!currentProjectNum) {
+            showSnackbar("Nie można zablokować projektu bez numeru.");
+            return;
+        }
+
+        const newLockState = !appState.isLocked;
+
+        try {
+            // Update DB immediately
+            await storageService.lockProject(currentProjectNum, newLockState);
+
+            // Update Local State
+            setAppState(prev => ({ ...prev, isLocked: newLockState }));
+
+            showSnackbar(newLockState ? "Projekt został ZABLOKOWANY (Globalnie)" : "Projekt został ODBLOKOWANY");
+        } catch (e) {
+            console.error("Lock toggle failed", e);
+            showSnackbar("Błąd zmiany statusu blokady.");
+        }
+    };
+
+
+
+    const isReadOnly = false; // [MODIFIED] User explicitly requested to allow editing even if locked. Lock is handled on Save.
 
     return (
         <div className="h-screen overflow-hidden bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 transition-colors font-sans flex flex-col">
@@ -1866,8 +1936,9 @@ const App: React.FC = () => {
                         setAppState={setAppState}
                         onUndo={handleUndo}
                         onRedo={handleRedo}
-                        canUndo={past.length > 0}
-                        canRedo={future.length > 0}
+                        canUndo={past.length > 0 && appState.viewMode !== ViewMode.DASHBOARD}
+                        canRedo={future.length > 0 && appState.viewMode !== ViewMode.DASHBOARD}
+                        showUndoRedo={appState.viewMode !== ViewMode.DASHBOARD} // Pass prop if Header supports it, otherwise rely on conditional rendering/logic inside Header
                         onShowComparison={() => setShowComparison(true)}
                         onShowProjectManager={() => setShowProjectManager(true)}
                         onShowShortcuts={() => setShowShortcuts(true)}
@@ -1876,6 +1947,7 @@ const App: React.FC = () => {
                         projectInputRef={projectInputRef}
                         handleImport={handleImport}
                         onToggleSidebar={() => setShowMobileSidebar(!showMobileSidebar)}
+                        onToggleLock={handleToggleLock}
                     />
 
                     {/* Main Layout - Modified to support Bottom Summary */}
@@ -2354,6 +2426,21 @@ const App: React.FC = () => {
                     <ProfileEditModal
                         isOpen={showProfileEdit}
                         onClose={() => setShowProfileEdit(false)}
+                    />
+
+                    <UnlockRequestModal
+                        isOpen={showUnlockModal}
+                        onClose={() => {
+                            setShowUnlockModal(false);
+                            setPendingSave(null);
+                        }}
+                        onConfirm={(reason) => {
+                            if (pendingSave) {
+                                handleSmartSave(pendingSave.stage, reason, pendingSave.isLogistics);
+                                setShowUnlockModal(false);
+                                setPendingSave(null);
+                            }
+                        }}
                     />
                 </>
             )}

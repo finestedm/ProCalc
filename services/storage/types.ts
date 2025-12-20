@@ -6,13 +6,18 @@ export interface SavedCalculation {
     created_at: string;
     specialist: string;
     engineer: string;
+    engineer_id: string | null; // [NEW] Link to users.id
     customer_name: string;
     project_id: string; // [NEW] Added for project grouping
     order_date: string | null; // ISO Timestamp or YYYY-MM-DD
     close_date: string | null; // ISO Timestamp or YYYY-MM-DD
     total_cost: number;
     total_price: number;
+    specialist_id: string | null; // [NEW] Link to users.id
+    sales_person_1_id: string | null;
+    sales_person_2_id: string | null;
     is_locked: boolean; // [NEW] Locking mechanism
+    logistics_status: 'PENDING' | 'PROCESSED' | null; // [NEW] Logistics processing status
     calc: CalculationData; // The JSON blob
     user_id: string; // [NEW] ID of the user who saved it
     user?: {
@@ -43,6 +48,9 @@ export interface ICalculationStorage {
     getCalculations(): Promise<SavedCalculation[]>;
     deleteCalculation(id: string): Promise<void>;
     setLockState(id: string, isLocked: boolean): Promise<void>;
+    lockProject(projectId: string, isLocked: boolean): Promise<void>;
+    isProjectLocked(projectId: string): Promise<boolean>;
+    updateLogisticsStatus(id: string, status: 'PENDING' | 'PROCESSED' | null): Promise<void>;
 
     // Access Requests
     createAccessRequest(calculationId: string, message?: string): Promise<void>;
