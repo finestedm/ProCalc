@@ -18,6 +18,8 @@ export interface SavedCalculation {
     sales_person_2_id: string | null;
     is_locked: boolean; // [NEW] Locking mechanism
     logistics_status: 'PENDING' | 'PROCESSED' | null; // [NEW] Logistics processing status
+    project_stage: string; // [NEW] For fast metadata listing
+    project_notes: string; // [NEW] Dedicated column for fast notes access
     calc: CalculationData; // The JSON blob
     user_id: string; // [NEW] ID of the user who saved it
     user?: {
@@ -41,16 +43,22 @@ export interface AccessRequest {
     };
 }
 
+// Metadata-only version of the calculation (no heavy JSON)
+export interface SavedCalculationMetadata extends Omit<SavedCalculation, 'calc'> { }
+
 export interface ICalculationStorage {
     // We pass calculated values solely for the "search columns" in the DB.
     // The full state is in 'data'.
-    saveCalculation(data: CalculationData, summary: { totalCost: number, totalPrice: number }): Promise<string>;
+    saveCalculation(data: any, summary: { totalCost: number, totalPrice: number }): Promise<string>;
     getCalculations(): Promise<SavedCalculation[]>;
+    getCalculationsMetadata(): Promise<SavedCalculationMetadata[]>;
+    getCalculationById(id: string): Promise<SavedCalculation | null>;
     deleteCalculation(id: string): Promise<void>;
     setLockState(id: string, isLocked: boolean): Promise<void>;
     lockProject(projectId: string, isLocked: boolean): Promise<void>;
     isProjectLocked(projectId: string): Promise<boolean>;
     updateLogisticsStatus(id: string, status: 'PENDING' | 'PROCESSED' | null): Promise<void>;
+    getInstallationStages(calculationIds: string[]): Promise<any[]>;
 
     // Access Requests
     createAccessRequest(calculationId: string, message?: string): Promise<void>;

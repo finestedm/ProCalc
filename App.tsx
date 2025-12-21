@@ -50,6 +50,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { DashboardView } from './components/DashboardView';
 import { ProfileEditModal } from './components/ProfileEditModal';
 import { UnlockRequestModal } from './components/UnlockRequestModal';
+import { RestoreSessionModal } from './components/RestoreSessionModal';
 import { fetchEurRate } from './services/currencyService';
 import { generateDiff } from './services/diffService';
 import { storageService } from './services/storage';
@@ -203,6 +204,8 @@ const App: React.FC = () => {
     const [showAdminPanel, setShowAdminPanel] = useState(false);
     const [showScenarioManager, setShowScenarioManager] = useState(false);
     const [showUnlockModal, setShowUnlockModal] = useState(false);
+    const [showRestoreModal, setShowRestoreModal] = useState(false);
+    const [lastSessionData, setLastSessionData] = useState<any>(null);
     const [pendingSave, setPendingSave] = useState<{ stage: ProjectStage, reason?: string, isLogistics?: boolean } | null>(null);
 
     // Package Editing State
@@ -304,58 +307,38 @@ const App: React.FC = () => {
         return `${getDataHash(state.initial)}#${getDataHash(state.final)}`;
     };
 
-    useEffect(() => {
-        const savedTheme = localStorage.getItem(THEME_KEY);
-        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const initialDark = savedTheme === 'dark' || (!savedTheme && systemDark);
-
-        setIsDarkMode(initialDark);
-        if (initialDark) document.documentElement.classList.add('dark');
-        else document.documentElement.classList.remove('dark');
-
-        const savedData = localStorage.getItem(STORAGE_KEY);
+    const applyLoadedData = (parsed: any) => {
         let shouldUpdateRate = true;
+        if (parsed) {
+            // Determine if we should lock the rate (OPENING or FINAL stage/mode)
+            const currentStage = parsed.stage || (parsed.appState ? parsed.appState.stage : 'DRAFT');
+            const currentMode = parsed.mode || (parsed.appState ? parsed.appState.mode : CalculationMode.INITIAL);
 
-        if (savedData) {
-            try {
-                const parsed = JSON.parse(savedData);
-                // Determine if we should lock the rate (OPENING or FINAL stage/mode)
-                const currentStage = parsed.stage || (parsed.appState ? parsed.appState.stage : 'DRAFT');
-                const currentMode = parsed.mode || (parsed.appState ? parsed.appState.mode : CalculationMode.INITIAL);
-
-                if (currentStage === 'OPENING' || currentStage === 'FINAL' || currentMode === CalculationMode.FINAL) {
-                    shouldUpdateRate = false;
-                }
-
-                if (parsed.initial && typeof parsed.initial.nameplateQty === 'undefined') parsed.initial.nameplateQty = 0;
-                if (parsed.final && typeof parsed.final.nameplateQty === 'undefined') parsed.final.nameplateQty = 0;
-                if (parsed.initial && typeof parsed.initial.installation.finalInstallationCosts === 'undefined') parsed.initial.installation.finalInstallationCosts = [];
-                if (parsed.final && typeof parsed.final.installation.finalInstallationCosts === 'undefined') parsed.final.installation.finalInstallationCosts = [];
-                if (parsed.initial && !parsed.initial.variants) parsed.initial.variants = [];
-                if (parsed.final && !parsed.final.variants) parsed.final.variants = [];
-                if (parsed.initial && !parsed.initial.otherCostsScratchpad) parsed.initial.otherCostsScratchpad = [];
-                if (parsed.final && !parsed.final.otherCostsScratchpad) parsed.final.otherCostsScratchpad = [];
-                if (parsed.finalManualPrice === undefined) parsed.finalManualPrice = null;
-                if (parsed.stage === undefined) parsed.stage = 'DRAFT'; // Default stage for legacy
-
-                // Scenario backward compatibility
-                if (!parsed.scenarios || parsed.scenarios.length === 0) {
-                    const defaultScenario = extractScenarioData(parsed.initial || EMPTY_CALCULATION, 'default', 'Wariant Główny');
-                    parsed.scenarios = [defaultScenario];
-                    parsed.activeScenarioId = 'default';
-                }
-
-                // Init global settings if missing
-                if (!parsed.appState?.globalSettings && !parsed.globalSettings) {
-                    // Handle migration if needed
-                }
-
-                const mergedState = { ...appState, ...parsed };
-                setAppState(mergedState);
-                lastSnapshot.current = mergedState;
-            } catch (e) {
-                console.error("Failed to load save state", e);
+            if (currentStage === 'OPENING' || currentStage === 'FINAL' || currentMode === CalculationMode.FINAL) {
+                shouldUpdateRate = false;
             }
+
+            if (parsed.initial && typeof parsed.initial.nameplateQty === 'undefined') parsed.initial.nameplateQty = 0;
+            if (parsed.final && typeof parsed.final.nameplateQty === 'undefined') parsed.final.nameplateQty = 0;
+            if (parsed.initial && typeof parsed.initial.installation.finalInstallationCosts === 'undefined') parsed.initial.installation.finalInstallationCosts = [];
+            if (parsed.final && typeof parsed.final.installation.finalInstallationCosts === 'undefined') parsed.final.installation.finalInstallationCosts = [];
+            if (parsed.initial && !parsed.initial.variants) parsed.initial.variants = [];
+            if (parsed.final && !parsed.final.variants) parsed.final.variants = [];
+            if (parsed.initial && !parsed.initial.otherCostsScratchpad) parsed.initial.otherCostsScratchpad = [];
+            if (parsed.final && !parsed.final.otherCostsScratchpad) parsed.final.otherCostsScratchpad = [];
+            if (parsed.finalManualPrice === undefined) parsed.finalManualPrice = null;
+            if (parsed.stage === undefined) parsed.stage = 'DRAFT'; // Default stage for legacy
+
+            // Scenario backward compatibility
+            if (!parsed.scenarios || parsed.scenarios.length === 0) {
+                const defaultScenario = extractScenarioData(parsed.initial || EMPTY_CALCULATION, 'default', 'Wariant Główny');
+                parsed.scenarios = [defaultScenario];
+                parsed.activeScenarioId = 'default';
+            }
+
+            const mergedState = { ...appState, ...parsed };
+            setAppState(mergedState);
+            lastSnapshot.current = mergedState;
         } else {
             // First load defaults if no storage
             const defaultSettings = { ...DEFAULT_SETTINGS };
@@ -374,7 +357,7 @@ const App: React.FC = () => {
                 activeScenarioId: 'default'
             }));
 
-            // No saved data -> Suggest Quick Start via Snackbar (10 seconds timeout)
+            // No saved data -> Suggest Quick Start via Snackbar
             setSnackbar({
                 message: "Witaj! Czy chcesz skonfigurować nowy projekt?",
                 action: () => setShowQuickStart(true),
@@ -383,24 +366,76 @@ const App: React.FC = () => {
             setTimeout(() => setSnackbar(null), 10000);
         }
 
-        setIsLoaded(true);
-
         // Only auto-update exchange rate if NOT locked (DRAFT stage)
         if (shouldUpdateRate) {
             fetchEurRate().then(rate => {
                 if (rate) setAppState(prev => {
-                    // Safety check: if user switched to final mode or stage during fetch, abort update
                     if (prev.mode === CalculationMode.FINAL || prev.stage === 'OPENING' || prev.stage === 'FINAL') return prev;
                     return ({ ...prev, exchangeRate: rate });
                 });
             });
         }
+    };
+
+    useEffect(() => {
+        const savedTheme = localStorage.getItem(THEME_KEY);
+        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const initialDark = savedTheme === 'dark' || (!savedTheme && systemDark);
+
+        setIsDarkMode(initialDark);
+        if (initialDark) document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+
+        const savedData = localStorage.getItem(STORAGE_KEY);
+
+        if (savedData) {
+            try {
+                const parsed = JSON.parse(savedData);
+
+                // [NEW] Intelligent Session Detection
+                // We check if the saved data has any actual content (customer name or items)
+                const hasContent =
+                    (parsed.initial?.orderingParty?.name && parsed.initial.orderingParty.name !== '') ||
+                    (parsed.initial?.suppliers?.length > 0) ||
+                    (parsed.initial?.meta?.projectNumber && parsed.initial.meta.projectNumber !== '');
+
+                if (hasContent) {
+                    setLastSessionData(parsed);
+                    setShowRestoreModal(true);
+                } else {
+                    // It's empty-ish, just load it silenty
+                    applyLoadedData(parsed);
+                }
+            } catch (e) {
+                console.error("Failed to load save state", e);
+            }
+        } else {
+            applyLoadedData(null);
+        }
+
+        setIsLoaded(true);
 
         // Request Notification Permission
         if ("Notification" in window && Notification.permission === "default") {
             Notification.requestPermission();
         }
     }, []);
+
+    // --- SESSION RESTORATION HANDLERS ---
+    const handleRestoreSession = () => {
+        if (lastSessionData) {
+            applyLoadedData(lastSessionData);
+        }
+        setShowRestoreModal(false);
+        setLastSessionData(null);
+    };
+
+    const handleDiscardSession = () => {
+        // Just start fresh (already handled by applyLoadedData(null))
+        applyLoadedData(null);
+        setShowRestoreModal(false);
+        setLastSessionData(null);
+    };
 
     // --- SCENARIO MANAGEMENT LOGIC ---
     const handleAddScenario = () => {
@@ -836,9 +871,13 @@ const App: React.FC = () => {
             return { ...prev, scenarios: updatedScenarios };
         });
 
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+        // [NEW] DEBOUNCED LOCAL STORAGE SAVE
+        const saveTimer = setTimeout(() => {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+        }, 1000); // 1s debounce
 
         return () => {
+            clearTimeout(saveTimer);
             if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
         };
     }, [appState, isLoaded]);
@@ -1020,8 +1059,9 @@ const App: React.FC = () => {
                 // Update state with the new cloud ID
                 setAppState(prev => ({ ...prev, activeCalculationId: newId }));
                 return true;
-            } catch (e) {
+            } catch (e: any) {
                 console.error("Cloud save failed", e);
+                showSnackbar(`Błąd zapisu w chmurze: ${e.message || e}`);
                 return false;
             }
         };
@@ -1032,15 +1072,11 @@ const App: React.FC = () => {
             // [MODIFIED] Fallback to Cloud check instead of blocking
             const cloudSuccess = await saveToCloud();
             if (cloudSuccess) {
-                setAppState(newState); // Update state to reflect stage change
-                showSnackbar("Zapisano w chmurze (Brak folderu lokalnego)");
+                setAppState(newState); // Update saved stage
+                // showSnackbar("Zapisano w chmurze (Brak dostępu do dysku).");
                 return true;
             } else {
-                triggerConfirm(
-                    "Błąd Zapisu",
-                    "Nie udało się zapisać w chmurze, a folder lokalny nie jest wybrany.",
-                    () => setShowProjectManager(true)
-                );
+                triggerConfirm("Błąd Zapisu", "Nie udał się zapis w chmurze. Sprawdź konsolę lub spróbuj ponownie.", () => { }, true);
                 return false;
             }
         }
@@ -2561,6 +2597,13 @@ const App: React.FC = () => {
                             onClose={() => setShowAdminPanel(false)}
                         />
                     )}
+
+                    <RestoreSessionModal
+                        isOpen={showRestoreModal}
+                        onRestore={handleRestoreSession}
+                        onDiscard={handleDiscardSession}
+                        projectName={lastSessionData?.initial?.orderingParty?.name || lastSessionData?.initial?.meta?.projectNumber}
+                    />
 
                     <ProfileEditModal
                         isOpen={showProfileEdit}

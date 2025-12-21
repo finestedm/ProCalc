@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import { extractDataFromOffer } from '../services/aiService';
 import { SupplierDetailModal } from './SupplierDetailModal';
 import { DataGrid } from './DataGrid';
+import { DatePickerInput } from './DatePickerInput';
 import { convert, formatCurrency, formatNumber } from '../services/calculationService';
 import { PREDEFINED_SUPPLIERS } from '../services/supplierDatabase';
 
@@ -770,13 +771,14 @@ export const SuppliersSection: React.FC<Props> = ({
                                             </label>
                                             <div className="flex gap-1 items-center flex-nowrap h-9">
                                                 <div className="relative flex-1 min-w-0 h-full">
-                                                    <Calendar className="absolute left-2 top-2.5 text-zinc-400" size={12} />
-                                                    <input
-                                                        type="date"
-                                                        className="w-full pl-6 h-full border border-zinc-200 dark:border-zinc-700 rounded text-xs focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none bg-white dark:bg-zinc-950 disabled:bg-zinc-100 dark:disabled:bg-zinc-800 disabled:text-zinc-400 transition-all"
+                                                    <Calendar className="absolute left-2 top-2.5 text-zinc-400 z-10" size={12} />
+                                                    <DatePickerInput
+                                                        className="w-full pl-6 h-full border border-zinc-200 dark:border-zinc-700 rounded text-xs focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none bg-white dark:bg-zinc-950 disabled:bg-zinc-100 dark:disabled:bg-zinc-800 disabled:text-zinc-400 transition-all font-mono"
                                                         value={currentSupplier.deliveryDate === 'ASAP' ? '' : currentSupplier.deliveryDate}
-                                                        onChange={(e) => updateSupplier(activeTab, 'deliveryDate', e.target.value)}
+                                                        onChange={(val) => updateSupplier(activeTab, 'deliveryDate', val)}
+                                                        placeholder="DD.MM.RRRR"
                                                         disabled={currentSupplier.deliveryDate === 'ASAP' || readOnly}
+                                                        readOnly={readOnly}
                                                     />
                                                 </div>
                                                 {!readOnly && (

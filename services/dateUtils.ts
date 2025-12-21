@@ -43,6 +43,19 @@ export const parseEuropeanDate = (str: string): Date | null => {
     return isNaN(d.getTime()) ? null : d;
 };
 
+export const parseLocalISODate = (str: string): Date | null => {
+    if (!str) return null;
+    const parts = str.split('-');
+    if (parts.length !== 3) return null;
+
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+
+    const d = new Date(year, month, day);
+    return isNaN(d.getTime()) ? null : d;
+};
+
 export const formatDisplayDate = (date: Date | string | null | undefined): string => {
     if (!date) return '';
     const d = new Date(date);

@@ -217,7 +217,7 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
     const [events, setEvents] = useState<DashboardEvent[]>([]);
     const [notes, setNotes] = useState<ProjectNote[]>([]);
     const [activities, setActivities] = useState<ActivityEvent[]>([]);
-    const [recentProjects, setRecentProjects] = useState<SavedCalculation[]>([]);
+    const [recentProjects, setRecentProjects] = useState<any[]>([]);
     const [managerInsights, setManagerInsights] = useState<ManagerInsights | null>(null);
     const [accessRequests, setAccessRequests] = useState<any[]>([]);
     const [lockedEdits, setLockedEdits] = useState<LockedEdit[]>([]);
@@ -237,55 +237,43 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
     const loadData = async () => {
         setLoading(true);
         try {
-            const allProjects = await storageService.getCalculations();
+            // [NEW] Use metadata fetch instead of heavy getCalculations()
+            const allMetadata = await storageService.getCalculationsMetadata();
 
-            // FILTERING LOGIC:
-            // Show projects where user is Engineer or Specialist, OR if user is Manager (Admin)
-            // Also normalize names for better matching
-            const myProjects = allProjects.filter(p => {
+            // FILTERING LOGIC (Metadata-based)
+            const myMetadata = allMetadata.filter(p => {
                 const currentUserId = profile?.id;
                 const userName = profile?.full_name || '';
                 const userRole = profile?.role || 'specialist';
 
-                if (!userName || !currentUserId) return false;
+                if (!currentUserId) return false;
 
                 // Manager and Logistics see everything
                 if (userRole === 'manager' || userRole === 'logistics') return true;
 
-                // [NEW] ID-based matching (Preferred)
+                // ID-based matching (Cleaned up, no calc fallback needed for modern saves)
                 if (p.engineer_id === currentUserId || p.specialist_id === currentUserId ||
-                    p.sales_person_1_id === currentUserId || p.sales_person_2_id === currentUserId) {
+                    p.sales_person_1_id === currentUserId || p.sales_person_2_id === currentUserId ||
+                    p.user_id === currentUserId) {
                     return true;
                 }
 
-                // Fallback: Name-based matching (Classic)
+                // Fallback: Name-based matching
                 const normalizedUser = userName.trim().toLowerCase();
                 const pEngineer = (p.engineer || '').trim().toLowerCase();
                 const pSpecialist = (p.specialist || '').trim().toLowerCase();
 
-                if (pEngineer === normalizedUser || pSpecialist === normalizedUser) return true;
-
-                // Also check inside JSON metadata for deep fallbacks
-                const fullFile = p.calc as any;
-                const data = fullFile.appState?.initial || fullFile.appState?.final || fullFile;
-                const meta = data.meta || {};
-
-                // Use IDs from meta if available
-                if (meta.salesPersonId === currentUserId || meta.assistantPersonId === currentUserId ||
-                    meta.actualSalesPersonId === currentUserId || meta.actualSalesPerson2Id === currentUserId) {
-                    return true;
-                }
-
-                const mSales = (meta.salesPerson || '').trim().toLowerCase();
-                const mAssist = (meta.assistantPerson || '').trim().toLowerCase();
-
-                return (mSales === normalizedUser || mAssist === normalizedUser);
+                return pEngineer === normalizedUser || pSpecialist === normalizedUser;
             });
 
-            setRawExperiments(myProjects);
-            setRecentProjects(myProjects.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5));
+            setRecentProjects(myMetadata.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5));
 
-            parseAggregatedData(myProjects, allProjects);
+            // [NEW] Fetch relational stages for Gantt/Events
+            const metaIds = myMetadata.map(m => m.id);
+            const stages = metaIds.length > 0 ? await storageService.getInstallationStages(metaIds) : [];
+
+            parseAggregatedData(myMetadata, allMetadata, stages);
+            buildGanttData(myMetadata, stages);
 
             if (profile?.role === 'manager' || profile?.role === 'logistics') {
                 const requests = await storageService.getPendingAccessRequests();
@@ -299,134 +287,66 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
         }
     };
 
-    // Re-calculate Gantt when toggle changes or data loads
-    useEffect(() => {
-        if (rawExperiments.length > 0) {
-            buildGanttData(rawExperiments);
-        }
-    }, [rawExperiments, showDrafts]);
+    // Build Gantt effect removed - now handled in loadData sequentially
 
-    const getLatestVersions = (projects: SavedCalculation[]): SavedCalculation[] => {
-        const groups: Record<string, SavedCalculation> = {};
+    const getLatestVersions = (projects: any[]): any[] => {
+        const groups: Record<string, any> = {};
 
         projects.forEach(p => {
-            // Group Key: Use project_id from DB column if available, else try metadata
-            let key = p.project_id;
-            const fullFile = p.calc as any;
-            if (!key || key === 'BezNumeru') {
-                const data = fullFile.appState?.initial || fullFile.appState?.final || fullFile;
-                key = data.meta?.projectNumber || 'UNKNOWN';
-            }
+            let key = p.project_id || `ID_${p.id}`;
+            if (key === 'BezNumeru') key = `ID_${p.id}`;
 
-            // If still unknown, use customer + created_at approximation or just unique ID (fallback)
-            if (key === 'UNKNOWN' || key === 'Bez Projektu') {
-                key = `ID_${p.id}`;
-            }
-
-            if (!groups[key]) {
+            if (!groups[key] || new Date(p.created_at).getTime() > new Date(groups[key].created_at).getTime()) {
                 groups[key] = p;
-            } else {
-                // Determine newer
-                if (new Date(p.created_at).getTime() > new Date(groups[key].created_at).getTime()) {
-                    groups[key] = p;
-                }
             }
         });
 
         return Object.values(groups);
     };
 
-    const buildGanttData = (projects: SavedCalculation[]) => {
-        const uniqueLatest = getLatestVersions(projects);
-
+    const buildGanttData = (metadata: any[], allStages: any[]) => {
+        const uniqueLatest = getLatestVersions(metadata);
         const ganttRows: GanttProject[] = [];
 
         uniqueLatest.forEach(p => {
-            const fullFile = p.calc as any;
-            const stage = fullFile.stage || 'DRAFT';
-
-            // Filter Drafts
+            const stage = p.project_stage || 'DRAFT';
             if (!showDrafts && stage === 'DRAFT') return;
 
-            const mode = fullFile.appState?.mode || CalculationMode.INITIAL;
-            const data = fullFile.appState ? (mode === CalculationMode.FINAL ? fullFile.appState.final : fullFile.appState.initial) : fullFile;
+            const projectNumber = p.project_id || '???';
+            const customer = p.customer_name || 'Klient';
 
-            // Safe extraction
-            if (!data) return;
+            // Extract stages for THIS project from the flat global array
+            const myStages = allStages.filter(s => s.calculation_id === p.id);
+            const tasks: GanttTask[] = myStages.map(s => ({
+                id: s.stage_id,
+                name: s.name,
+                startDate: new Date(s.start_date),
+                endDate: new Date(s.end_date),
+                type: s.stage_type === 'CUSTOM' ? 'CUSTOM' : 'STAGE',
+                progress: s.progress || 0
+            }));
 
-            const projectNumber = p.project_id || data.meta?.projectNumber || '???';
-            const customer = p.customer_name || data.orderingParty?.name || 'Klient';
-
-            const tasks: GanttTask[] = [];
-
-            // 1. Installation Stages
-            const stages = data.installation?.stages || [];
-            stages.forEach((s: InstallationStage) => {
-                if (s.startDate && s.endDate) {
+            // Protocol Deadline (from metadata!)
+            if (p.close_date) {
+                const d = new Date(p.close_date);
+                if (!isNaN(d.getTime())) {
                     tasks.push({
-                        id: s.id,
-                        name: s.name,
-                        startDate: new Date(s.startDate),
-                        endDate: new Date(s.endDate),
-                        type: 'STAGE',
+                        id: 'protocol',
+                        name: 'Odbiór Końcowy',
+                        startDate: d,
+                        endDate: d,
+                        type: 'DEADLINE',
                         progress: 0
                     });
                 }
-            });
-
-            // 2. Custom Timeline Items
-            const customTimeline = data.installation?.customTimelineItems || [];
-            customTimeline.forEach((c: any) => {
-                if (c.startDate && c.endDate) {
-                    tasks.push({
-                        id: c.id,
-                        name: c.name,
-                        startDate: new Date(c.startDate),
-                        endDate: new Date(c.endDate),
-                        type: 'CUSTOM',
-                        progress: 0
-                    });
-                }
-            });
-
-            // 3. Protocol / Deadline
-            if (data.meta?.protocolDate) {
-                try {
-                    const d = new Date(data.meta.protocolDate);
-                    // Verify valid date
-                    if (!isNaN(d.getTime())) {
-                        tasks.push({
-                            id: 'protocol',
-                            name: 'Odbiór Końcowy',
-                            startDate: d,
-                            endDate: d,
-                            type: 'DEADLINE',
-                            progress: 0
-                        });
-                    }
-                } catch (e) { }
             }
 
-            // Determine min/max for the project row
-            // Default to today if no tasks
-            let min = new Date();
-            let max = new Date();
-            max.setDate(max.getDate() + 30); // Default 30 day view?
+            if (tasks.length === 0) return;
 
-            if (tasks.length > 0) {
-                // Calc min/max for zoom (per project, but we render properly later)
-                min = new Date(Math.min(...tasks.map(t => t.startDate.getTime())));
-                max = new Date(Math.max(...tasks.map(t => t.endDate.getTime())));
-
-                // Add buffer
-                min.setDate(min.getDate() - 2);
-                max.setDate(max.getDate() + 2);
-            } else {
-                // For empty projects, maybe use CreatedAt -> +1 month?
-                min = new Date(p.created_at);
-                max = new Date(p.created_at);
-                max.setDate(max.getDate() + 30);
-            }
+            const min = new Date(Math.min(...tasks.map(t => t.startDate.getTime())));
+            const max = new Date(Math.max(...tasks.map(t => t.endDate.getTime())));
+            min.setDate(min.getDate() - 2);
+            max.setDate(max.getDate() + 2);
 
             ganttRows.push({
                 projectId: p.id,
@@ -436,51 +356,31 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
                 tasks: tasks.sort((a, b) => a.startDate.getTime() - b.startDate.getTime()),
                 minDate: min,
                 maxDate: max,
-                handle: p
+                handle: p as any // We use metadata as handle, but opening logic handles it
             });
         });
-
-        // initial expand all
-        const initialExpand: Record<string, boolean> = {};
-        ganttRows.forEach(r => initialExpand[r.projectId] = true);
-        setExpandedGanttProjects(initialExpand);
 
         setGanttData(ganttRows);
     };
 
-    const parseAggregatedData = (rawProjects: SavedCalculation[], allProjects: SavedCalculation[]) => {
+    const parseAggregatedData = (rawMetadata: any[], allMetadata: any[], stages: any[]) => {
         const newEvents: DashboardEvent[] = [];
         const newNotes: ProjectNote[] = [];
         const newActivities: ActivityEvent[] = [];
 
         const isManager = profile?.role === 'manager';
         const currentUserId = profile?.id;
-        const currentUserName = (profile?.full_name || '').trim().toLowerCase();
 
-        // 1. Parse Activities
-        allProjects.forEach(p => {
-            // Is it saved by someone else? (For workers)
-            // For managers, we show EVERYTHING except their own saves as "activity"
+        // 1. Parse Activities (Metadata-based)
+        allMetadata.forEach(p => {
             if (p.user_id === currentUserId) return;
 
-            let isRelevant = isManager; // Managers see all activities
-
+            let isRelevant = isManager;
             if (!isRelevant) {
-                // Workers only see their projects
+                const userName = (profile?.full_name || '').trim().toLowerCase();
                 const pEngineer = (p.engineer || '').trim().toLowerCase();
                 const pSpecialist = (p.specialist || '').trim().toLowerCase();
-                isRelevant = pEngineer === currentUserName || pSpecialist === currentUserName;
-
-                if (!isRelevant) {
-                    const fullFile = p.calc as any;
-                    const data = fullFile.appState?.initial || fullFile.appState?.final || fullFile;
-                    if (data) {
-                        const meta = data.meta || {};
-                        const mSales = (meta.salesPerson || '').trim().toLowerCase();
-                        const mAssist = (meta.assistantPerson || '').trim().toLowerCase();
-                        isRelevant = mSales === currentUserName || mAssist === currentUserName;
-                    }
-                }
+                isRelevant = pEngineer === userName || pSpecialist === userName;
             }
 
             if (isRelevant) {
@@ -497,16 +397,14 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
             }
         });
 
-        // 1.5 Parse Locked Edits (For Managers)
+        // 1.5 Locked Edits (Using project_notes metadata column)
         if (isManager) {
             const newLockedEdits: LockedEdit[] = [];
-            allProjects.forEach(p => {
-                const notes = p.calc.projectNotes || '';
-                const marker = "Aktualizacja ZABLOKOWANEJ kalkulacji";
+            const marker = "Aktualizacja ZABLOKOWANEJ kalkulacji";
 
+            allMetadata.forEach(p => {
+                const notes = p.project_notes || '';
                 if (notes.includes(marker)) {
-                    // Extract reason. Format: "[User] Aktualizacja ZABLOKOWANEJ kalkulacji: [Reason]"
-                    // Or if localized/different: search for marker and get text after it.
                     const lines = notes.split('\n');
                     lines.forEach(line => {
                         if (line.includes(marker)) {
@@ -521,42 +419,31 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
                                 userName: p.user?.full_name || 'Użytkownik',
                                 reason: cleanReason || 'Brak uzasadnienia',
                                 timestamp: new Date(p.created_at),
-                                handle: p
+                                handle: p as any
                             });
                         }
                     });
                 }
             });
-            // Sort by latest
             newLockedEdits.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-            setLockedEdits(newLockedEdits.slice(0, 10)); // Top 10 recent
+            setLockedEdits(newLockedEdits.slice(0, 10));
         }
 
-        // 2. Manager-Specific Insights
+        // 2. Manager-Specific Insights (Metadata-based)
         if (isManager) {
             const userMap: Record<string, UserPerformance> = {};
             const pipeline: PipelineStats = { draft: 0, opening: 0, final: 0 };
             const marginProjects: { number: string; customer: string; margin: number }[] = [];
 
-            // Use only Latest Versions for stats to avoid inflation
-            const latestAll = getLatestVersions(allProjects);
+            const latestAll = getLatestVersions(allMetadata);
 
             latestAll.forEach(p => {
-                const fullFile = p.calc as any;
-                const stage = fullFile.stage || 'DRAFT';
-                const isFinalMode = fullFile.appState?.mode === 'FINAL';
-                const data = isFinalMode ? fullFile.appState?.final : fullFile.appState?.initial;
-
-                // Pipeline update
+                const stage = p.project_stage || 'DRAFT';
                 if (stage === 'DRAFT') pipeline.draft++;
                 else if (stage === 'OPENING') pipeline.opening++;
                 else if (stage === 'FINAL') pipeline.final++;
 
-                // User Performance update
                 const engineer = (p.engineer || 'Nieprzypisany').trim();
-                const specialist = (p.specialist || '').trim();
-
-                // Track engineer mainly for performance
                 if (!userMap[engineer]) {
                     userMap[engineer] = { userName: engineer, projectCount: 0, totalValue: 0, avgMargin: 0, activeProjects: 0 };
                 }
@@ -565,28 +452,22 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
                 stats.projectCount++;
                 if (stage !== 'FINAL') stats.activeProjects++;
 
-                // Value and Margin
-                if (data) {
-                    const val = p.total_price || 0;
-                    const cost = p.total_cost || 0;
-                    const margin = val > 0 ? ((val - cost) / val) * 100 : 0;
+                const val = p.total_price || 0;
+                const cost = p.total_cost || 0;
+                const margin = val > 0 ? ((val - cost) / val) * 100 : 0;
 
-                    stats.totalValue += val;
-                    // Exponential average or simple sum for later division
-                    stats.avgMargin += margin;
+                stats.totalValue += val;
+                stats.avgMargin += margin;
 
-                    // High margin tracker
-                    if (margin > 30 && stage !== 'FINAL') {
-                        marginProjects.push({
-                            number: p.project_id || '???',
-                            customer: p.customer_name || 'Klient',
-                            margin: Math.round(margin)
-                        });
-                    }
+                if (margin > 30 && stage !== 'FINAL') {
+                    marginProjects.push({
+                        number: p.project_id || '???',
+                        customer: p.customer_name || 'Klient',
+                        margin: Math.round(margin)
+                    });
                 }
             });
 
-            // Finalize averages
             Object.values(userMap).forEach(s => {
                 if (s.projectCount > 0) s.avgMargin = s.avgMargin / s.projectCount;
             });
@@ -598,21 +479,13 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
             });
         }
 
-        // For events/notes we iterate ALL known projects or just latest?
-        // Usually dashboard shows aggregated info from everything, but duplication is bad.
-        // Let's use Latest Unique logic for Events too to avoid 5 reminders for same project versions.
-        const uniqueParams = getLatestVersions(rawProjects);
-
-        uniqueParams.forEach(p => {
-            const fullFile = p.calc as any;
-            const data = fullFile.appState?.initial || fullFile.appState?.final || fullFile;
-            if (!data) return;
-
-            const meta = data.meta || {};
-            const projectNumber = p.project_id || meta.projectNumber || '???';
+        // 3. Events & Upcoming notes (Metadata and Relational Stages)
+        const latestMetadata = getLatestVersions(rawMetadata);
+        latestMetadata.forEach(p => {
+            const projectNumber = p.project_id || '???';
             const customer = p.customer_name || 'Klient';
 
-            // 1. Protocol Date (Deadline)
+            // Protocol Date
             if (p.close_date) {
                 newEvents.push({
                     id: `proto-${p.id}`,
@@ -625,79 +498,87 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
                 });
             }
 
-            // 2. Installation Stages Dates
-            const install = data.installation;
-            if (install && install.stages) {
-                install.stages.forEach((stage: any, idx: number) => {
-                    if (stage.startDate) {
-                        newEvents.push({
-                            id: `inst-start-${p.id}-${idx}`,
-                            date: new Date(stage.startDate),
-                            title: `Start: ${stage.name}`,
-                            type: 'INSTALLATION',
-                            projectId: p.id,
-                            projectNumber,
-                            customer
-                        });
-                    }
-                    if (stage.endDate) {
-                        newEvents.push({
-                            id: `inst-end-${p.id}-${idx}`,
-                            date: new Date(stage.endDate),
-                            title: `Koniec: ${stage.name}`,
-                            type: 'INSTALLATION',
-                            projectId: p.id,
-                            projectNumber,
-                            customer
-                        });
-                    }
-                });
-            }
+            // Installation Stages (from the relational flat array)
+            const myStages = stages.filter(s => s.calculation_id === p.id);
+            myStages.forEach((stage: any, idx: number) => {
+                if (stage.start_date) {
+                    newEvents.push({
+                        id: `inst-start-${p.id}-${idx}`,
+                        date: new Date(stage.start_date),
+                        title: `Start: ${stage.name}`,
+                        type: 'INSTALLATION',
+                        projectId: p.id,
+                        projectNumber,
+                        customer
+                    });
+                }
+                if (stage.end_date) {
+                    newEvents.push({
+                        id: `inst-end-${p.id}-${idx}`,
+                        date: new Date(stage.end_date),
+                        title: `Koniec: ${stage.name}`,
+                        type: 'INSTALLATION',
+                        projectId: p.id,
+                        projectNumber,
+                        customer
+                    });
+                }
+            });
 
-            // 4. Notes
-            const noteText = data.projectNotes;
-            if (noteText && noteText.trim().length > 0) {
+            // Project Notes
+            if (p.project_notes && p.project_notes.trim().length > 0) {
                 newNotes.push({
                     id: `note-${p.id}`,
                     projectId: p.id,
                     projectNumber,
                     customer,
-                    text: noteText,
+                    text: p.project_notes,
                     date: new Date(p.created_at)
                 });
             }
         });
 
-        // Filter out past events (optional, but usually dashboard shows upcoming)
-        // const now = new Date();
-        // now.setHours(0,0,0,0);
-        // const upcoming = newEvents.filter(e => e.date >= now);
-
-        // Sort events by date
         newEvents.sort((a, b) => a.date.getTime() - b.date.getTime());
         setEvents(newEvents);
         setNotes(newNotes);
-
-        // Sort activities by timestamp desc
-        newActivities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-        setActivities(newActivities.slice(0, 10)); // Keep top 10
+        setActivities(newActivities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, 10));
     };
 
-    const handleProjectClick = (saved: SavedCalculation) => {
-        // cast to any to access appState
-        const fullFile = saved.calc as any;
+    const handleProjectClick = async (saved: any) => {
+        setLoading(true);
+        try {
+            const fullProject = await storageService.getCalculationById(saved.id);
+            if (!fullProject) throw new Error("Could not find project data");
 
-        if (fullFile.appState) {
-            // [NEW] Inject the database ID so that sub-components (like RequestAccessModal) 
-            // know which calculation to reference.
-            const dataToLoad = {
-                ...fullFile,
-                id: saved.id
-            };
-            onOpenProject(dataToLoad, fullFile.stage || 'DRAFT', fullFile.appState.mode || CalculationMode.INITIAL);
-        } else {
-            // Fallback for flat files
-            onOpenProject(fullFile, 'DRAFT', CalculationMode.INITIAL);
+            let fullFile = fullProject.calc as any;
+            if (!fullFile && (fullProject as any).details?.calc) {
+                fullFile = (fullProject as any).details.calc;
+            }
+
+            console.log('[DashboardView] Loading project:', saved.id);
+            console.log('[DashboardView] FullProject from DB:', fullProject);
+            console.log('[DashboardView] Extracted calc data:', fullFile);
+
+            if (!fullFile || Object.keys(fullFile).length === 0) {
+                console.error('[DashboardView] Critical: Calc data is empty/null');
+                alert("Błąd: Dane kalkulacji są niekompletne (pusty obiekt JSON).");
+                return;
+            }
+
+            if (fullFile.appState) {
+                const dataToLoad = {
+                    ...fullFile,
+                    id: fullProject.id
+                };
+                onOpenProject(dataToLoad, fullFile.stage || 'DRAFT', fullFile.appState.mode || CalculationMode.INITIAL);
+            } else {
+                onOpenProject(fullFile, 'DRAFT', CalculationMode.INITIAL);
+            }
+        } catch (e) {
+            console.error("Failed to open project", e);
+            alert("Błąd podczas otwierania projektu.");
+        } finally {
+            setLoading(false);
         }
     };
 

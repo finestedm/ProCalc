@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Truck, ExternalLink, ChevronDown, ChevronRight, RefreshCw, Save, Undo, Redo, Search, Calendar as CalendarIcon } from 'lucide-react';
+import { Truck, ExternalLink, ChevronDown, ChevronRight, RefreshCw, Save, Undo, Redo, Search, Calendar as CalendarIcon, Mail } from 'lucide-react';
+import { DatePickerInput } from './DatePickerInput';
 import { storageService } from '../services/storage';
 import { SavedCalculation, SavedLogisticsTransport } from '../services/storage/types';
 import { useAuth } from '../contexts/AuthContext';
 import { CalculationData, CalculationMode, TransportItem, TruckDetail, Supplier, Language } from '../types';
 import { GanttChart } from './GanttChart';
+
+import { toISODateString, toEuropeanDateString } from '../services/dateUtils';
 
 interface Props {
     onOpenProject: (data: any, stage: string, mode: CalculationMode) => void;
@@ -74,6 +77,27 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
     // We Map: Key = `${projectNumber}|${transportId}` -> TransportItem
     const [localState, setLocalState] = useState<Record<string, TransportItem>>({});
 
+    const handleSendMail = (row: HubRow) => {
+        const tItem = row.transportData;
+        const calcData = row.originalProject.calc as CalculationData;
+        const recipient = calcData?.recipient;
+        if (!recipient?.email) {
+            alert("Brak adresu email osoby kontaktowej klienta.");
+            return;
+        }
+        const subject = encodeURIComponent(`Informacja o dostawie - ${row.projectNumber}`);
+        const body = encodeURIComponent(
+            `Dzień dobry ${recipient.contactPerson || ''},\n\n` +
+            `Informujemy o zbliżającej się dostawie:\n` +
+            `- Ilość naczep: ${tItem.trucksCount || 0}\n` +
+            `- Łączna waga: ${calculateSuggestedWeight(calcData, tItem)} kg\n` +
+            `- Spodziewana data dostawy: ${toEuropeanDateString(tItem.confirmedDeliveryDate || tItem.pickupDate)}\n\n` +
+            `Pozdrawiamy,\n` +
+            `Zespół Logistyki`
+        );
+        window.location.href = `mailto:${recipient.email}?subject=${subject}&body=${body}`;
+    };
+
     // History for Undo/Redo
     const [history, setHistory] = useState<Record<string, TransportItem>[]>([]);
     const [historyIndex, setHistoryIndex] = useState(-1);
@@ -94,10 +118,20 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
             // Filter detailed: Group by project_id, pick latest OPENING
             const latestProjectsMap: Record<string, SavedCalculation> = {};
             allProjects.forEach(p => {
-                const pid = p.project_id || 'BezNumeru';
-                const fullFile = p.calc as any; // We know p.calc can be CalculationData or ProjectFile
-                // We only care about OPENING stage for logistics planning usually
-                const stage = fullFile.stage || fullFile.appState?.stage;
+                // [MODIFIED] Use ID fallback to avoid collapsing "BezNumeru" projects together
+                const pid = p.project_id || p.id;
+
+                let fullFile = p.calc as any;
+                if (!fullFile && (p as any).details?.calc) {
+                    fullFile = (p as any).details.calc;
+                }
+
+                if (!fullFile) {
+                    return;
+                }
+
+                // [MODIFIED] Prefer DB column for stage source of truth
+                const stage = p.project_stage || fullFile.stage || fullFile.appState?.stage;
                 if (stage !== 'OPENING') return;
 
                 if (!latestProjectsMap[pid] || new Date(p.created_at) > new Date(latestProjectsMap[pid].created_at)) {
@@ -353,9 +387,11 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
             const projectSuppliers = activeData.suppliers || [];
 
             // Apply override logic for Gantt too
-            const linkedIds = tItem.isSupplierOrganized && tItem.supplierId
-                ? [tItem.supplierId]
-                : (tItem.linkedSupplierIds || []);
+            // [MODIFIED] Always include the direct supplierId for single transports
+            const linkedIds = tItem.linkedSupplierIds || [];
+            if (tItem.supplierId) {
+                linkedIds.push(tItem.supplierId);
+            }
 
             const targetDate = tItem.isSupplierOrganized ? tItem.confirmedDeliveryDate : tItem.pickupDate;
 
@@ -367,11 +403,14 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                 };
             });
 
+            const recipient = activeData.recipient;
             allSuppliers.push(...processedSuppliers);
             allTransport.push({
                 ...tItem,
-                name: `[${pNum}] ${tItem.name || 'Transport'}`
-            });
+                name: `[${pNum}] ${tItem.name || 'Transport'}`,
+                contactPerson: recipient?.contactPerson,
+                contactEmail: recipient?.email
+            } as any);
         });
 
         // Use earliest order date found as base
@@ -642,19 +681,17 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3">
-                                                <input
-                                                    type="date"
+                                                <DatePickerInput
                                                     className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-32 outline-none"
                                                     value={tItem.pickupDate || ''}
-                                                    onChange={(e) => handleUpdateTransport(row.projectNumber, row.transportId, { pickupDate: e.target.value })}
+                                                    onChange={(val) => handleUpdateTransport(row.projectNumber, row.transportId, { pickupDate: val })}
                                                 />
                                             </td>
                                             <td className="px-4 py-3">
-                                                <input
-                                                    type="date"
+                                                <DatePickerInput
                                                     className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-32 outline-none"
                                                     value={tItem.confirmedDeliveryDate || ''}
-                                                    onChange={(e) => handleUpdateTransport(row.projectNumber, row.transportId, { confirmedDeliveryDate: e.target.value })}
+                                                    onChange={(val) => handleUpdateTransport(row.projectNumber, row.transportId, { confirmedDeliveryDate: val })}
                                                 />
                                             </td>
                                             <td className="px-4 py-3 text-xs text-zinc-400 italic" colSpan={2}>Edycja wierszy (rozwiń)</td>
@@ -665,6 +702,9 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                                         <div className="text-xs font-bold">{tItem.totalPrice > 0 ? tItem.totalPrice.toLocaleString() : '-'} {tItem.currency}</div>
                                                         <div className="text-[9px] text-zinc-400 uppercase">{tItem.trucksCount} aut(a)</div>
                                                     </div>
+                                                    <button onClick={() => handleSendMail(row)} className="p-2 hover:bg-amber-50 dark:hover:bg-amber-900/30 text-amber-600 rounded-lg border border-transparent hover:border-amber-200" title="Wyślij powiadomienie">
+                                                        <Mail size={16} />
+                                                    </button>
                                                     <button onClick={() => handleOpenProjectWithSync(row.originalProject)} className="p-2 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-600 rounded-lg border border-transparent hover:border-blue-200">
                                                         <ExternalLink size={16} />
                                                     </button>
@@ -684,10 +724,10 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                                 </span>
                                             </td>
                                             <td className="px-4 py-2">
-                                                <input type="date" className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-32 outline-none" value={truck.loadingDates || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { loadingDates: e.target.value })} />
+                                                <DatePickerInput className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-32 outline-none" value={truck.loadingDates || ''} onChange={(val) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { loadingDates: val })} />
                                             </td>
                                             <td className="px-4 py-2">
-                                                <input type="date" className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-32 outline-none" value={truck.deliveryDate || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { deliveryDate: e.target.value })} />
+                                                <DatePickerInput className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-32 outline-none" value={truck.deliveryDate || ''} onChange={(val) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { deliveryDate: val })} />
                                             </td>
                                             <td className="px-4 py-2">
                                                 <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-full outline-none" value={truck.driverInfo || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { driverInfo: e.target.value })} placeholder="Kierowca / Tel" />

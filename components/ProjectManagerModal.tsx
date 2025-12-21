@@ -161,25 +161,23 @@ export const ProjectManagerModal: React.FC<Props> = ({
     const loadCloudData = async () => {
         setIsLoading(true);
         try {
-            const data = await storageService.getCalculations();
-            setCloudData(data);
+            const data = await storageService.getCalculationsMetadata();
+            setCloudData(data as SavedCalculation[]);
             setPathStack([{ name: 'Chmura (Supabase)', handle: 'CLOUD_ROOT' }]);
-            buildCloudView(data, []);
+            buildCloudView(data as SavedCalculation[], []);
             // Populate metadata immediately for cloud items
             const metaUpdate: Record<string, ProjectMetadata> = {};
             data.forEach(item => {
                 // We use the ID as the key for metadata in cloud mode
-                const safeCalc = item.calc as any;
-                const appState = safeCalc.appState;
-                const currency = appState?.offerCurrency || Currency.PLN;
-                const rate = appState?.exchangeRate || 4.3; // Fallback rate
-                const stage = safeCalc.stage || 'DRAFT';
+                const currency = Currency.EUR; // Cloud columns are already in specific currency or assume EUR for calculation context
+                const rate = 4.3; // Fallback rate or we could fetch it
+                const stage = item.project_stage || 'DRAFT';
 
                 const valOriginal = item.total_price || 0;
-                const valEUR = currency === Currency.PLN ? valOriginal / rate : valOriginal;
+                const valEUR = valOriginal; // Assuming total_price in DB is in offer currency (usually EUR)
 
                 // Consistent Project ID extraction
-                const projNum = item.project_id || appState?.initial?.meta?.projectNumber || safeCalc.meta?.projectNumber || 'Bez Projektu';
+                const projNum = item.project_id || 'Bez Projektu';
 
                 // MATCHING KEY: Must match the name used in searchIndex/buildCloudView
                 const displayName = `${stage} - ${new Date(item.created_at).toLocaleDateString()} (${valOriginal.toLocaleString()} ${currency})`;
@@ -194,9 +192,9 @@ export const ProjectManagerModal: React.FC<Props> = ({
                     assistantPerson: item.specialist,
                     valueOriginal: valOriginal,
                     currencyOriginal: currency as Currency,
-                    valuePLN: currency === Currency.EUR ? valOriginal * rate : valOriginal,
+                    valuePLN: valOriginal * rate, // Simplified for metadata view
                     valueEUR: valEUR,
-                    costPLN: currency === Currency.EUR ? (item.total_cost || 0) * rate : (item.total_cost || 0),
+                    costPLN: (item.total_cost || 0) * rate,
                     timestamp: new Date(item.created_at).getTime(),
                     orderDate: item.order_date || undefined,
                     protocolDate: item.close_date || undefined
@@ -206,10 +204,8 @@ export const ProjectManagerModal: React.FC<Props> = ({
 
             // Populate SearchIndex for Statistics/Search in Cloud Mode
             const cloudIndex: DirectoryItem[] = data.map(d => {
-                const safeCalc = d.calc as any;
-                const appState = safeCalc.appState;
-                const currency = appState?.offerCurrency || 'PLN';
-                const stage = safeCalc.stage || 'DRAFT';
+                const currency = 'EUR';
+                const stage = d.project_stage || 'DRAFT';
                 const valOriginal = d.total_price || 0;
 
                 const displayName = `${stage} - ${new Date(d.created_at).toLocaleDateString()} (${valOriginal.toLocaleString()} ${currency})`;
@@ -224,7 +220,7 @@ export const ProjectManagerModal: React.FC<Props> = ({
                     } as any,
                     date: new Date(d.created_at),
                     size: 0,
-                    path: [d.customer_name || 'Inni', d.project_id || safeCalc.appState?.initial?.meta?.projectNumber || safeCalc.meta?.projectNumber || 'Bez Projektu']
+                    path: [d.customer_name || 'Inni', d.project_id || 'Bez Projektu']
                 };
             });
             setSearchIndex(cloudIndex);
@@ -252,8 +248,8 @@ export const ProjectManagerModal: React.FC<Props> = ({
             // Level 1: List Projects for selected Client
             const client = currentPath[0];
             const clientData = data.filter(d => (d.customer_name || 'Inni') === client);
-            // Use project_id column if available, fallback to metadata inside JSON
-            const projects = Array.from(new Set(clientData.map(d => d.project_id || (d.calc as any).appState?.initial?.meta?.projectNumber || (d.calc as any).meta?.projectNumber || 'Bez Projektu')));
+            // Use project_id column
+            const projects = Array.from(new Set(clientData.map(d => d.project_id || 'Bez Projektu')));
             projects.sort().forEach(proj => {
                 items.push({ kind: 'directory', name: proj, handle: { kind: 'directory', name: proj } as any });
             });
@@ -263,16 +259,14 @@ export const ProjectManagerModal: React.FC<Props> = ({
             const project = currentPath[1];
             const projectData = data.filter(d =>
                 (d.customer_name || 'Inni') === client &&
-                (d.project_id || (d.calc as any).appState?.initial?.meta?.projectNumber || (d.calc as any).meta?.projectNumber || 'Bez Projektu') === project
+                (d.project_id || 'Bez Projektu') === project
             );
 
             projectData.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
             projectData.forEach(d => {
-                const safeCalc = d.calc as any;
-                const appState = safeCalc.appState;
-                const currency = appState?.offerCurrency || 'PLN';
-                const stage = safeCalc.stage || 'DRAFT';
+                const currency = 'EUR';
+                const stage = d.project_stage || 'DRAFT';
                 const valOriginal = d.total_price || 0;
 
                 const displayName = `${stage} - ${new Date(d.created_at).toLocaleDateString()} (${valOriginal.toLocaleString()} ${currency})`;
@@ -839,7 +833,46 @@ export const ProjectManagerModal: React.FC<Props> = ({
         }
     };
 
-    const handleLoad = async (fileHandle: FileSystemFileHandle | any) => {
+    const handleLoad = async (fileHandleOrId: FileSystemFileHandle | any) => {
+        // [MODIFIED] Correct identification of source (Cloud vs Local)
+        let isCloud = false;
+        let cloudId = '';
+        let displayName = 'Wybrany projekt';
+
+        // Extract native handle if this is a table row wrapper
+        let effectiveHandle = fileHandleOrId;
+        if (fileHandleOrId && typeof fileHandleOrId === 'object') {
+            if (fileHandleOrId.handle) {
+                effectiveHandle = fileHandleOrId.handle;
+            } else if (fileHandleOrId.cloudData) {
+                // If it's a cloudData wrapper, we don't extract it here yet,
+                // but we definitely want to avoid treating it as a local handle later.
+            }
+        }
+
+        const isCloudString = typeof fileHandleOrId === 'string' && fileHandleOrId.startsWith('cloud-id:');
+        const isCloudNamed = !!(fileHandleOrId?.name?.startsWith('cloud-id:'));
+        const isCloudWrapped = !!(fileHandleOrId?.cloudData?.id);
+        const isCloudLegacy = !!(fileHandleOrId?.id && !fileHandleOrId?.getFile && !effectiveHandle?.getFile);
+
+        isCloud = isCloudString || isCloudNamed || isCloudWrapped || isCloudLegacy;
+
+        if (isCloudString) {
+            cloudId = fileHandleOrId.split(':')[1];
+        } else if (isCloudNamed) {
+            cloudId = fileHandleOrId.name.split(':')[1];
+            displayName = fileHandleOrId.name;
+        } else if (isCloudWrapped) {
+            cloudId = fileHandleOrId.cloudData.id;
+            displayName = fileHandleOrId.cloudData.project_id || 'Cloud Project';
+        } else if (isCloudLegacy) {
+            cloudId = fileHandleOrId.id;
+            displayName = fileHandleOrId.project_id || fileHandleOrId.id;
+        } else if (effectiveHandle?.getFile) {
+            displayName = effectiveHandle.name;
+        }
+
+
         // Check if current project is "dirty" or has data
         const currentMeta = appState.mode === CalculationMode.FINAL ? appState.final?.meta : appState.initial?.meta;
         const currentClient = appState.mode === CalculationMode.FINAL ? appState.final?.orderingParty?.name : appState.initial?.orderingParty?.name;
@@ -848,59 +881,73 @@ export const ProjectManagerModal: React.FC<Props> = ({
             (currentClient && currentClient !== '-' && currentClient !== 'Nieznany Klient');
 
         if (isProjectOpen && !loadConfirm) {
-            setLoadConfirm({ handle: fileHandle, name: fileHandle.name || fileHandle.cloudData?.project_id || 'Wybrany projekt' });
+            setLoadConfirm({ handle: effectiveHandle, name: displayName });
             return;
         }
 
+        setIsLoading(true);
         try {
-            if (fileHandle.cloudData) {
-                // ... (existing cloud load logic)
-                const cloudItem = fileHandle.cloudData as SavedCalculation;
-                const rawJson = cloudItem.calc as any;
+            if (isCloud) {
+                // Cloud Load
+                console.log('[ProjectManager] Fetching cloud ID:', cloudId);
+                const fullProject = await storageService.getCalculationById(cloudId);
+                console.log('[ProjectManager] Fetched project:', fullProject);
 
-                if (rawJson.appState) {
-                    // Inject lock state from DB into the loaded app wrapper
-                    const projectData = rawJson as ProjectFile;
-                    if (projectData.appState) {
-                        projectData.appState.isLocked = cloudItem.is_locked || false;
+                if (fullProject) {
+                    // [FIX] Support nested details.calc structure
+                    let fullFile = fullProject.calc;
+                    if (!fullFile && (fullProject as any).details?.calc) {
+                        fullFile = (fullProject as any).details.calc;
                     }
-                    // [NEW] Inject the database ID so that sub-components know which calculation to reference
-                    projectData.id = cloudItem.id;
-                    onLoadProject(projectData);
-                } else {
-                    const wrapped: ProjectFile = {
+
+                    console.log('[ProjectManager] Calc payload:', fullFile);
+
+                    if (fullFile) {
+                        // proceed
+                    } else {
+                        console.error('[ProjectManager] Calc data missing even in details');
+                        showSnackbar("Błąd: Dane projektu są puste/uszkodzone.");
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    const wrapped = (fullFile as any).appState ? {
+                        ...fullFile,
+                        id: fullProject.id,
+                        historyLog: [],
+                        past: [],
+                        future: []
+                    } : {
                         version: '1.0',
                         timestamp: Date.now(),
                         stage: 'DRAFT',
                         appState: {
-                            initial: rawJson,
-                            final: rawJson,
-                            scenarios: [],
-                            activeScenarioId: 'default',
+                            initial: fullFile,
                             mode: CalculationMode.INITIAL,
-                            stage: 'DRAFT',
-                            viewMode: 'CALCULATOR',
-                            exchangeRate: 4.3,
-                            offerCurrency: Currency.EUR,
-                            clientCurrency: Currency.PLN,
-                            targetMargin: 20,
-                            manualPrice: null,
-                            finalManualPrice: null,
-                            globalSettings: { ormFeePercent: 1.6, truckLoadCapacity: 22000 },
-                            isLocked: cloudItem.is_locked || false // [NEW] Pass lock state
+                            isLocked: fullProject.is_locked || false
                         } as any,
                         historyLog: [],
                         past: [],
                         future: []
                     };
+
+                    // Inject lock state from DB
+                    if (wrapped.appState) {
+                        wrapped.appState.isLocked = fullProject.is_locked || false;
+                    }
                     onLoadProject(wrapped);
                 }
             } else {
                 // Disk Load
-                const file = await fileHandle.getFile();
-                const text = await file.text();
-                const data = JSON.parse(text);
-                onLoadProject(data);
+                if (effectiveHandle && typeof effectiveHandle.getFile === 'function') {
+                    const file = await effectiveHandle.getFile();
+                    const text = await file.text();
+                    const data = JSON.parse(text);
+                    onLoadProject(data);
+                } else {
+                    console.error("Critical: Invalid file handle for disk load", effectiveHandle);
+                    showSnackbar("Błąd: Nieprawidłowy uchwyt pliku. Odśwież listę.");
+                }
             }
             onClose();
             setLoadConfirm(null);
@@ -908,6 +955,8 @@ export const ProjectManagerModal: React.FC<Props> = ({
             console.error(err);
             showSnackbar("Błąd odczytu/parsowania pliku");
             setLoadConfirm(null);
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -1070,22 +1119,21 @@ export const ProjectManagerModal: React.FC<Props> = ({
         let raw: any[] = [];
         if (source === 'cloud') {
             raw = cloudData.map(d => {
-                const safeCalc = d.calc as any;
-                const appState = safeCalc.appState;
-                const currency = appState?.offerCurrency || Currency.EUR;
-                const rate = appState?.exchangeRate || 4.3;
-                const valueEUR = currency === Currency.EUR ? d.total_price : d.total_price / rate;
+                const currency = Currency.EUR; // Shared default for database-level metadata
+                const rate = 4.3; // Default or fetched rate
+                const valueEUR = d.total_price || 0;
                 const margin = d.total_price > 0 ? (1 - (d.total_cost / d.total_price)) * 100 : 0;
+
                 return {
                     id: d.id,
-                    project_id: d.project_id || safeCalc.appState?.initial?.meta?.projectNumber || safeCalc.meta?.projectNumber || 'Unknown',
+                    project_id: d.project_id || 'Unknown',
                     customer: d.customer_name || 'Inni',
                     price: valueEUR,
-                    cost: currency === Currency.EUR ? d.total_cost : d.total_cost / rate,
+                    cost: d.total_cost || 0,
                     margin,
                     engineer: d.engineer || '-',
                     specialist: d.specialist || '-',
-                    stage: safeCalc.stage || 'DRAFT',
+                    stage: d.project_stage || 'DRAFT',
                     date: new Date(d.created_at),
                     open_date: d.order_date ? new Date(d.order_date) : null,
                     close_date: d.close_date ? new Date(d.close_date) : null,

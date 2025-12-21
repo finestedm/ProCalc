@@ -143,6 +143,13 @@ ${data.meta.salesPerson || 'Handlowiec'}
     };
 
     const handleApproveAndSendOpening = async () => {
+        // [NEW] Validation: Ensure all logistics suppliers have a delivery date
+        const missingDates = logisticsSuppliers.filter(s => !s.deliveryDate || s.deliveryDate.trim() === '');
+        if (missingDates.length > 0) {
+            alert(`Uzupełnij daty dostaw dla dostawców:\n${missingDates.map(s => `- ${s.name}`).join('\n')}`);
+            return;
+        }
+
         if (onApproveOpening) {
             const success = await onApproveOpening();
             if (success) {
