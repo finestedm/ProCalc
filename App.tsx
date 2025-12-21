@@ -1643,11 +1643,31 @@ const App: React.FC = () => {
                 if (!data || !data.transport) return data;
                 if (logisticsOverrides.length === 0) return data;
 
+                // 1. Sync transport items
                 const updatedTransport = data.transport.map(t => {
                     const override = logisticsOverrides.find(o => o.transport_id === t.id);
                     return override ? { ...t, ...override.data } : t;
                 });
-                return { ...data, transport: updatedTransport };
+
+                // 2. [NEW] Force Supplier date sync from synced transport
+                let updatedSuppliers = data.suppliers ? [...data.suppliers] : [];
+                updatedTransport.forEach(t => {
+                    const targetDate = t.isSupplierOrganized ? t.confirmedDeliveryDate : t.pickupDate;
+                    if (targetDate) {
+                        const linkedIds = t.isSupplierOrganized && t.supplierId
+                            ? [t.supplierId]
+                            : (t.linkedSupplierIds || []);
+
+                        updatedSuppliers = updatedSuppliers.map(s => {
+                            if (linkedIds.includes(s.id)) {
+                                return { ...s, deliveryDate: targetDate };
+                            }
+                            return s;
+                        });
+                    }
+                });
+
+                return { ...data, transport: updatedTransport, suppliers: updatedSuppliers };
             };
 
             // If loading full ProjectFile struct with 'appState' key
@@ -2189,20 +2209,51 @@ const App: React.FC = () => {
                                             const t = currentData.transport.find(x => x.id === tid);
                                             if (!t) return;
 
-                                            // 1. Update local state
-                                            const updatedTransport = currentData.transport.map(x => x.id === tid ? { ...x, ...fields } : x);
+                                            // 1. Validation & Propagation
+                                            const current = t;
+                                            const updated = { ...current, ...fields };
+
+                                            // Validation: Delivery date cannot be before loading date
+                                            const finalPickup = fields.pickupDate || current.pickupDate;
+                                            const finalDelivery = fields.confirmedDeliveryDate || current.confirmedDeliveryDate;
+
+                                            if (finalPickup && finalDelivery && new Date(finalDelivery) < new Date(finalPickup)) {
+                                                if (fields.confirmedDeliveryDate) {
+                                                    updated.confirmedDeliveryDate = finalPickup;
+                                                } else if (fields.pickupDate) {
+                                                    updated.pickupDate = finalDelivery;
+                                                }
+                                            }
+
+                                            // Propagation: Update all trucks when summary dates change
+                                            if (fields.confirmedDeliveryDate || fields.pickupDate) {
+                                                updated.trucks = updated.trucks?.map(truck => ({
+                                                    ...truck,
+                                                    loadingDates: updated.pickupDate || truck.loadingDates,
+                                                    deliveryDate: updated.confirmedDeliveryDate || truck.deliveryDate
+                                                }));
+                                            }
+
+                                            // 2. Update local state
+                                            const updatedTransport = currentData.transport.map(x => x.id === tid ? updated : x);
                                             setAppState(prev => ({
                                                 ...prev,
                                                 [key]: { ...prev[key], transport: updatedTransport }
                                             }));
 
-                                            // 2. Persistent Save to Centralized Logistics Table
+                                            // 3. Persistent Save to Centralized Logistics Table
                                             const pnum = currentData.meta.projectNumber;
                                             if (pnum && pnum !== 'BezNumeru') {
                                                 try {
-                                                    // Merge with existing data from state to ensure full record persistence
-                                                    const fullData = { ...t, ...fields };
-                                                    await storageService.saveLogisticsTransport(pnum, tid, fullData);
+                                                    await storageService.saveLogisticsTransport({
+                                                        project_number: pnum,
+                                                        transport_id: tid,
+                                                        data: updated,
+                                                        delivery_date: updated.isSupplierOrganized ? updated.confirmedDeliveryDate : updated.pickupDate,
+                                                        pickup_date: updated.pickupDate,
+                                                        carrier: updated.carrier,
+                                                        supplier_id: updated.supplierId
+                                                    });
                                                 } catch (err) {
                                                     console.error("Failed to save logistics override from individual view:", err);
                                                 }

@@ -4,6 +4,7 @@ import { CalculationData, Supplier, SupplierStatus, TransportItem, Language } fr
 import { Truck, Calendar, Package, Printer, UserCircle, Combine, LayoutDashboard, Flag, Link, Layers } from 'lucide-react';
 import { GanttChart } from './GanttChart';
 import { OrderPreviewModal } from './OrderPreviewModal';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Props {
     data: CalculationData;
@@ -23,6 +24,7 @@ const isOrganizedBySupplier = (s: Supplier, transport: TransportItem[]) => {
 };
 
 export const LogisticsView: React.FC<Props> = ({ data, onChange, onUpdateTransport, readOnly }) => {
+    const { profile } = useAuth();
     const [previewSuppliers, setPreviewSuppliers] = useState<Supplier[] | null>(null);
 
     const onUpdateSupplier = (supplierId: string, updates: Partial<Supplier>) => {
@@ -92,23 +94,51 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange, onUpdateTranspo
 
     const renderStandaloneTransportCard = (t: TransportItem) => {
         return (
-            <div key={t.id} className="p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors border-b border-zinc-100 dark:border-zinc-800">
-                <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                        <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{t.name || 'Transport Dodatkowy'}</h4>
-                        <span className="text-[9px] font-bold bg-zinc-100 text-zinc-700 px-1.5 py-0.5 rounded border border-zinc-200">STANDALONE</span>
-                    </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400 items-center">
-                        <span className="flex items-center gap-1">
-                            <Truck size={12} /> {t.trucksCount} aut ({t.totalPrice.toFixed(0)} {t.currency})
-                        </span>
-                        {t.carrier && (
-                            <span className="flex items-center gap-1 font-bold text-blue-500">
-                                <Flag size={12} /> {t.carrier}
+            <div key={t.id} className="p-4 flex flex-col hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors border-b border-zinc-100 dark:border-zinc-800">
+                <div className="flex justify-between items-start md:items-center gap-4">
+                    <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                            <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{t.name || 'Transport Dodatkowy'}</h4>
+                            <span className="text-[9px] font-bold bg-zinc-100 text-zinc-700 px-1.5 py-0.5 rounded border border-zinc-200">STANDALONE</span>
+                        </div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400 items-center">
+                            <span className="flex items-center gap-1">
+                                <Truck size={12} /> {t.trucksCount} aut ({t.totalPrice.toFixed(0)} {t.currency})
                             </span>
-                        )}
+                            {t.carrier && (
+                                <span className="flex items-center gap-1 font-bold text-blue-500">
+                                    <Flag size={12} /> {t.carrier}
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
+
+                {/* Truck Details (Read-Only) */}
+                {t.trucks && t.trucks.length > 0 && (
+                    <div className="mt-3 pl-3 border-l-2 border-zinc-200 dark:border-zinc-700 space-y-1">
+                        {t.trucks.map((truck, idx) => (
+                            <div key={truck.id || idx} className="text-[10px] text-zinc-500 flex flex-wrap gap-3 items-center">
+                                <span className="font-bold text-zinc-400">#{idx + 1}</span>
+                                {truck.deliveryDate && (
+                                    <span className="flex items-center gap-1" title="Data dostawy">
+                                        <Calendar size={10} /> {truck.deliveryDate}
+                                    </span>
+                                )}
+                                {truck.registrationNumbers && (
+                                    <span className="font-mono bg-zinc-100 dark:bg-zinc-800 px-1 rounded text-zinc-700 dark:text-zinc-300">
+                                        {truck.registrationNumbers}
+                                    </span>
+                                )}
+                                {truck.driverInfo && (
+                                    <span className="text-zinc-400">
+                                        {truck.driverInfo}
+                                    </span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         );
     };
@@ -235,28 +265,56 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange, onUpdateTranspo
 
         return (
             <div key={transport.id} className="border-b-4 border-zinc-100 dark:border-zinc-800 last:border-b-0">
-                <div className="bg-cyan-50/50 dark:bg-cyan-900/10 p-4 border-b border-cyan-100 dark:border-cyan-900/30 flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                        <div className="bg-cyan-500 text-white p-1.5 rounded shadow-sm">
-                            <Combine size={16} />
+                <div className="bg-cyan-50/50 dark:bg-cyan-900/10 p-4 border-b border-cyan-100 dark:border-cyan-900/30 flex flex-col gap-2">
+                    <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-cyan-500 text-white p-1.5 rounded shadow-sm">
+                                <Combine size={16} />
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">{transport.name}</h4>
+                                <div className="text-[10px] text-cyan-600 dark:text-cyan-400 mt-0.5 font-bold uppercase tracking-wide">
+                                    Transport Zbiorczy (JH)
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">{transport.name}</h4>
-                            <div className="text-[10px] text-cyan-600 dark:text-cyan-400 mt-0.5 font-bold uppercase tracking-wide">
-                                Transport Zbiorczy (JH)
+                        <div className="flex gap-6 text-sm items-center">
+                            <div className="text-right">
+                                <div className="text-[9px] text-zinc-400 uppercase font-bold">Auta</div>
+                                <div className="font-mono font-bold text-zinc-800 dark:text-zinc-200">{transport.trucksCount}</div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-[9px] text-zinc-400 uppercase font-bold">Waga Całk.</div>
+                                <div className="font-mono font-bold text-cyan-600 dark:text-cyan-400">{totalCombinedWeight.toLocaleString()} kg</div>
                             </div>
                         </div>
                     </div>
-                    <div className="flex gap-6 text-sm items-center">
-                        <div className="text-right">
-                            <div className="text-[9px] text-zinc-400 uppercase font-bold">Auta</div>
-                            <div className="font-mono font-bold text-zinc-800 dark:text-zinc-200">{transport.trucksCount}</div>
+
+                    {/* Truck Details (Read-Only) */}
+                    {transport.trucks && transport.trucks.length > 0 && (
+                        <div className="mt-2 pl-3 border-l-2 border-cyan-200 dark:border-cyan-800/50 space-y-1">
+                            {transport.trucks.map((truck, idx) => (
+                                <div key={truck.id || idx} className="text-[10px] text-zinc-500 flex flex-wrap gap-3 items-center">
+                                    <span className="font-bold text-cyan-600/50">#{idx + 1}</span>
+                                    {truck.deliveryDate && (
+                                        <span className="flex items-center gap-1" title="Data dostawy">
+                                            <Calendar size={10} /> {truck.deliveryDate}
+                                        </span>
+                                    )}
+                                    {truck.registrationNumbers && (
+                                        <span className="font-mono bg-white dark:bg-zinc-800 px-1 rounded text-zinc-700 dark:text-zinc-300 border border-zinc-100 dark:border-zinc-700">
+                                            {truck.registrationNumbers}
+                                        </span>
+                                    )}
+                                    {truck.driverInfo && (
+                                        <span className="text-zinc-400">
+                                            {truck.driverInfo}
+                                        </span>
+                                    )}
+                                </div>
+                            ))}
                         </div>
-                        <div className="text-right">
-                            <div className="text-[9px] text-zinc-400 uppercase font-bold">Waga Całk.</div>
-                            <div className="font-mono font-bold text-cyan-600 dark:text-cyan-400">{totalCombinedWeight.toLocaleString()} kg</div>
-                        </div>
-                    </div>
+                    )}
                 </div>
                 <div className="divide-y divide-zinc-100 dark:divide-zinc-700 bg-white dark:bg-zinc-900">
                     {linkedSuppliers.map(s => renderSupplierRow(s, false, true))}
@@ -315,7 +373,7 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange, onUpdateTranspo
             </div>
 
             {/* GANTT CHART */}
-            <div className="bg-white dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+            <div className="bg-white dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden h-[600px]">
                 <GanttChart
                     suppliers={activeSuppliers}
                     installation={data.installation}
@@ -327,6 +385,7 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange, onUpdateTranspo
                     tasks={data.tasks}
                     onUpdateTasks={(tasks) => onChange({ tasks })}
                     readOnly={readOnly}
+                    canEditPlanning={profile?.role === 'logistics'}
                 />
             </div>
 

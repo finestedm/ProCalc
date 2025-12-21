@@ -17,6 +17,9 @@ interface Props {
     tasks?: ProjectTask[];
     onUpdateTasks?: (tasks: ProjectTask[]) => void;
     readOnly?: boolean;
+    canEditPlanning?: boolean;
+    expandedGroupsProp?: Set<string>;
+    onToggleGroup?: (id: string) => void;
 }
 
 // --- CONSTANTS ---
@@ -60,7 +63,9 @@ const getWeekNumber = (d: Date) => {
     return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 };
 
-export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, transport = [], onUpdateInstallation, onUpdateSupplier, onUpdateTransport, tasks = [], onUpdateTasks, readOnly }) => {
+type DragType = 'DELIVERY' | 'STAGE_MOVE' | 'STAGE_RESIZE' | 'CUSTOM_MOVE' | 'CUSTOM_RESIZE' | 'RENTAL_MOVE' | null;
+
+export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, transport = [], onUpdateInstallation, onUpdateSupplier, onUpdateTransport, tasks = [], onUpdateTasks, readOnly, canEditPlanning = true, expandedGroupsProp, onToggleGroup }) => {
     const [viewMode, setViewMode] = useState<'GANTT' | 'CALENDAR'>('GANTT');
     const [zoom, setZoom] = useState(1); // 1 = 40px per day
     const [isCompact, setIsCompact] = useState(false);
@@ -74,7 +79,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
 
     // Drag State
     const [isDragging, setIsDragging] = useState<string | null>(null);
-    const [dragType, setDragType] = useState<'DELIVERY' | 'STAGE_MOVE' | 'STAGE_RESIZE' | 'CUSTOM_MOVE' | 'CUSTOM_RESIZE' | 'RENTAL_MOVE' | null>(null);
+    const [dragType, setDragType] = useState<DragType>(null);
     const [dragSubType, setDragSubType] = useState<string | null>(null); // To distinguish rental types
     const [dragStartX, setDragStartX] = useState(0);
     const [dragCurrentX, setDragCurrentX] = useState(0);
@@ -94,7 +99,8 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
     const [customOrder, setCustomOrder] = useState<string[]>([]);
 
     // Group Expansion State
-    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+    const [localExpandedGroups, setLocalExpandedGroups] = useState<Set<string>>(new Set());
+    const expandedGroups = expandedGroupsProp || localExpandedGroups;
 
     // Edit Item Popover State (Calendar)
     const [editPopover, setEditPopover] = useState<{ id: string, type: string, x: number, y: number, name: string } | null>(null);
@@ -102,10 +108,14 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
     const [editEnd, setEditEnd] = useState('');
 
     const toggleGroup = (groupId: string) => {
-        const newSet = new Set(expandedGroups);
-        if (newSet.has(groupId)) newSet.delete(groupId);
-        else newSet.add(groupId);
-        setExpandedGroups(newSet);
+        if (onToggleGroup) {
+            onToggleGroup(groupId);
+        } else {
+            const newSet = new Set(localExpandedGroups);
+            if (newSet.has(groupId)) newSet.delete(groupId);
+            else newSet.add(groupId);
+            setLocalExpandedGroups(newSet);
+        }
     };
 
     // --- 1. PREPARE DATA ---
@@ -165,95 +175,71 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
             };
         };
 
-        // 1. MERGED GROUPS (From Transport)
+        // 1. TRANSPORTS (Consolidated View)
         transport.forEach(t => {
-            if (t.linkedSupplierIds && t.linkedSupplierIds.length > 1) {
-                const linkedSuppliers = suppliers.filter(s => t.linkedSupplierIds?.includes(s.id));
+            if (t.isExcluded) return;
 
-                if (linkedSuppliers.length > 0) {
-                    // Mark as processed
-                    linkedSuppliers.forEach(s => processedSupplierIds.add(s.id));
+            // Calculate aggregated dates for the Transport Group
+            let minLoad: Date | null = null;
+            let maxDel: Date | null = null;
 
-                    // Create Group Item
-                    const childrenItems = linkedSuppliers.map(s => createSupplierData(s, true, t.id));
+            const truckItems: any[] = [];
 
-                    // Aggregate dates for Group
-                    let minStart = childrenItems[0].start;
-                    let maxDelEnd = childrenItems[0].delEnd;
+            if (t.trucks && t.trucks.length > 0) {
+                t.trucks.forEach((truck, idx) => {
+                    const tStart = truck.loadingDates ? new Date(truck.loadingDates) : null;
+                    const tEnd = truck.deliveryDate ? new Date(truck.deliveryDate) : null;
 
-                    // PREFER Transport Item Dates if available
-                    let sharedDelStart = t.isSupplierOrganized ? t.confirmedDeliveryDate : t.pickupDate;
-
-                    if (!sharedDelStart) {
-                        sharedDelStart = childrenItems[0].delStart; // Fallback
-                    } else {
-                        sharedDelStart = new Date(sharedDelStart); // Convert string to Date
+                    if (tStart && isValidDate(tStart)) {
+                        if (!minLoad || tStart < minLoad) minLoad = tStart;
+                    }
+                    if (tEnd && isValidDate(tEnd)) {
+                        if (!maxDel || tEnd > maxDel) maxDel = tEnd;
                     }
 
-                    childrenItems.forEach(c => {
-                        if (c.start < minStart) minStart = c.start;
-                        if (c.delEnd > maxDelEnd) maxDelEnd = c.delEnd;
+                    // Create sub-item for truck if parent is expanded
+                    truckItems.push({
+                        id: `${t.id}|${truck.id}`,
+                        type: 'TRUCK',
+                        name: `Auto #${idx + 1} (${truck.registrationNumbers || 'Brak rej.'})`,
+                        start: tStart && isValidDate(tStart) ? tStart : (t.pickupDate ? new Date(t.pickupDate) : orderDate),
+                        end: tEnd && isValidDate(tEnd) ? tEnd : addBusinessDays(tStart || orderDate, 1),
+                        delStart: tStart && isValidDate(tStart) ? tStart : (t.pickupDate ? new Date(t.pickupDate) : orderDate),
+                        delEnd: tEnd && isValidDate(tEnd) ? tEnd : addBusinessDays(tStart || orderDate, 1),
+                        prodStart: tStart && isValidDate(tStart) ? tStart : (t.pickupDate ? new Date(t.pickupDate) : orderDate),
+                        prodEnd: tEnd && isValidDate(tEnd) ? tEnd : addBusinessDays(tStart || orderDate, 1),
+                        isJH: true,
+                        parentId: t.id,
+                        isChild: true
                     });
-
-                    items.push({
-                        id: t.id,
-                        type: 'TRANSPORT_GROUP',
-                        name: t.name || 'Transport Zbiorczy',
-                        start: minStart,
-                        end: maxDelEnd,
-                        delStart: sharedDelStart,
-                        delEnd: addBusinessDays(sharedDelStart, 1),
-                        prodStart: minStart,
-                        prodEnd: sharedDelStart, // Visual approximation
-                        isDateEstimated: childrenItems.some(c => c.isDateEstimated),
-                        childIds: childrenItems.map(c => c.id)
-                    });
-
-                    // Add Children if Expanded (Gantt Only)
-                    // For calendar we might want to just show the group or all, logic handles list flat
-                    if (expandedGroups.has(t.id)) {
-                        childrenItems.forEach(c => items.push(c));
-                    }
-                }
-            }
-        });
-
-        // 2. REMAINING SUPPLIERS
-        suppliers.forEach(s => {
-            if (!processedSupplierIds.has(s.id)) {
-                items.push(createSupplierData(s));
-            }
-        });
-
-        // 2b. STANDALONE TRANSPORTS (Not linked to any supplier)
-        const processedTransportIds = new Set(items.filter(i => i.type === 'TRANSPORT_GROUP').map(i => i.id));
-        transport.forEach(t => {
-            const isAssignedToSupplier = suppliers.some(s => s.id === t.supplierId);
-            if (!processedTransportIds.has(t.id) && !isAssignedToSupplier && !t.isExcluded) {
-                // Determine Date
-                let dStr = t.isSupplierOrganized ? t.confirmedDeliveryDate : t.pickupDate;
-                let start: Date;
-                if (dStr) {
-                    start = new Date(dStr);
-                } else {
-                    start = new Date(orderDate);
-                    start.setDate(start.getDate() + 14); // Fallback
-                }
-                if (!isValidDate(start)) start = new Date(orderDate);
-
-                items.push({
-                    id: t.id,
-                    type: 'TRANSPORT_GROUP', // Reuse type for styling/behavior or a new 'STANDALONE'
-                    name: t.name || 'Transport Dodatkowy',
-                    start: start,
-                    end: addBusinessDays(start, 1),
-                    delStart: start,
-                    delEnd: addBusinessDays(start, 1),
-                    prodStart: start,
-                    prodEnd: start,
-                    isDateEstimated: !dStr
                 });
             }
+
+            // Fallback for summary if no trucks or missing dates
+            const summaryStart = minLoad || (t.pickupDate ? new Date(t.pickupDate) : orderDate);
+            const summaryEnd = maxDel || (t.confirmedDeliveryDate ? new Date(t.confirmedDeliveryDate) : addBusinessDays(summaryStart, 2));
+
+            items.push({
+                id: t.id,
+                type: 'TRANSPORT_GROUP',
+                name: t.name || 'Transport',
+                start: summaryStart,
+                end: summaryEnd,
+                delStart: summaryStart,
+                delEnd: summaryEnd,
+                prodStart: summaryStart,
+                prodEnd: summaryEnd,
+                isDateEstimated: !t.pickupDate && !t.confirmedDeliveryDate && !minLoad,
+                childIds: truckItems.map(ti => ti.id)
+            });
+
+            if (expandedGroups.has(t.id)) {
+                items.push(...truckItems);
+            }
+
+            // Mark linked suppliers as processed so they don't appear as standalone rows
+            if (t.linkedSupplierIds) t.linkedSupplierIds.forEach(id => processedSupplierIds.add(id));
+            if (t.supplierId) processedSupplierIds.add(t.supplierId);
         });
 
         // 3. INSTALLATION STAGES (Waterfall Logic)
@@ -579,8 +565,12 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
         onUpdateInstallation({ stages: updated });
     };
 
-    const handleMouseDownItem = (e: React.MouseEvent, id: string, type: typeof dragType, subType: string | null = null) => {
+    // --- MOUSE HANDLERS ---
+    const handleMouseDownItem = (e: React.MouseEvent, id: string, type: DragType, subType?: string) => {
         if (readOnly) return;
+        if (!canEditPlanning && (type === 'DELIVERY' || type === 'STAGE_MOVE' || type === 'STAGE_RESIZE' || type === 'CUSTOM_MOVE' || type === 'CUSTOM_RESIZE' || type === 'RENTAL_MOVE')) {
+            return;
+        }
         e.stopPropagation();
         e.preventDefault();
         const item = timelineItems.find(i => i.id === id);
@@ -1299,9 +1289,8 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                             const rowStart = itemSlots[idx] + 1; // 1-based
 
                                             let barColor = 'bg-blue-100 text-blue-700 border-blue-200';
-                                            if (item.type === 'STAGE') barColor = 'bg-purple-100 text-purple-700 border-purple-200';
-                                            if (item.type === 'CUSTOM') barColor = 'bg-zinc-100 text-zinc-700 border-zinc-200';
                                             if (item.type === 'TRANSPORT_GROUP') barColor = 'bg-blue-50 text-blue-600 border-blue-200 border-dashed';
+                                            if (item.type === 'TRUCK') barColor = 'bg-blue-100 text-blue-800 border-blue-300';
 
                                             return (
                                                 <div
@@ -1735,9 +1724,10 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                     if (item.type === 'STAGE') barColor = 'bg-purple-500 border-purple-600';
                                     if (item.type === 'CUSTOM') barColor = 'bg-zinc-500 border-zinc-600';
                                     if (item.type === 'TRANSPORT_GROUP') barColor = 'bg-blue-600/20 border-blue-400 border-dashed';
-                                    if (item.isChild) barColor = 'bg-blue-300/50 border-blue-400/50';
+                                    if (item.type === 'TRUCK') barColor = 'bg-blue-500 border-blue-600';
+                                    if (item.isChild && item.type !== 'TRUCK') barColor = 'bg-blue-300/50 border-blue-400/50';
 
-                                    const label = item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' ? 'Produkcja' : item.name;
+                                    const label = (item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP') ? 'Produkcja' : item.name;
 
                                     const itemTasks = tasks.filter(t => t.linkedItemId === item.id && t.dueDate);
 
@@ -1751,7 +1741,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
 
                                             {/* Main Bar (Production / Stage / Custom / Group Prod) */}
                                             <div
-                                                className={`absolute top-2 h-5 border rounded shadow-sm flex items-center justify-between z-20 select-none overflow-visible ${barColor} ${item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP' ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                                                className={`absolute top-2 h-5 border rounded shadow-sm flex items-center justify-between z-20 select-none overflow-visible ${barColor} ${(item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP' && item.type !== 'TRUCK') ? 'cursor-grab active:cursor-grabbing' : ''}`}
                                                 style={{ left: renderProdLeft, width: renderProdWidth }}
                                                 onMouseDown={(e) => {
                                                     if (item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP') {
@@ -1832,7 +1822,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                                 );
                                             })}
 
-                                            {/* Delivery Bar (Suppliers & Transport Groups Only) */}
+                                            {/* Delivery Bar (Suppliers, Transport Groups & Trucks) */}
                                             {/* For Children suppliers in a group, we hide the delivery bar or make it ghosted to imply it's handled by parent */}
                                             {(item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP') && !item.isChild && (
                                                 <div
@@ -1853,9 +1843,11 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                             {/* Ghost Delivery Bar for Children to show alignment */}
                                             {item.isChild && (
                                                 <div
-                                                    className="absolute bottom-4 h-4 border border-blue-300/50 bg-blue-100/30 rounded flex items-center z-10 pointer-events-none opacity-50"
+                                                    className={`absolute bottom-4 h-4 border rounded flex items-center z-10 pointer-events-none ${item.type === 'TRUCK' ? 'bg-blue-500 border-blue-600 shadow-sm opacity-100' : 'border-blue-300/50 bg-blue-100/30 opacity-50'}`}
                                                     style={{ left: renderDelLeft, width: delWidth }}
-                                                ></div>
+                                                >
+                                                    {item.type === 'TRUCK' && <div className="w-full h-full flex items-center justify-center"><Truck size={8} className="text-white" /></div>}
+                                                </div>
                                             )}
 
                                             {/* Connector Line for Suppliers */}
