@@ -75,10 +75,26 @@ export class SupabaseStorage implements ICalculationStorage {
             total_price: summary.totalPrice,
             is_locked: isLocked,
             logistics_status: appState?.logisticsStatus || null,
+            logistics_operator_id: null as string | null, // Will be filled below if existing
             project_stage: appState?.stage || (optimizedData as any).stage || 'DRAFT',
             project_notes: activeData?.projectNotes || ''
         };
 
+        // Carry over logistics from latest version if exists
+        if (payload.project_id && payload.project_id !== 'BezNumeru') {
+            const { data: latest } = await this.supabase
+                .from(this.tableName)
+                .select('logistics_status, logistics_operator_id')
+                .eq('project_id', payload.project_id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+            if (latest) {
+                if (!payload.logistics_status) payload.logistics_status = latest.logistics_status;
+                payload.logistics_operator_id = latest.logistics_operator_id;
+            }
+        }
         const { data: insertedData, error } = await this.supabase
             .from(this.tableName)
             .insert(payload)
@@ -161,7 +177,7 @@ export class SupabaseStorage implements ICalculationStorage {
         // Try fetching with legacy 'calc' column first
         const { data: dataWithCalc, error: errorWithCalc } = await this.supabase
             .from(this.tableName)
-            .select('id, created_at, specialist, specialist_id, engineer, engineer_id, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, logistics_status, project_stage, project_notes, user_id, sales_person_1_id, sales_person_2_id, calc, user:users!user_id(full_name), details:calculations_details(calc)')
+            .select('id, created_at, specialist, specialist_id, engineer, engineer_id, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, logistics_status, logistics_operator_id, project_stage, project_notes, user_id, sales_person_1_id, sales_person_2_id, calc, user:users!user_id(full_name), details:calculations_details(calc)')
             .order('created_at', { ascending: false });
 
         if (!errorWithCalc) {
@@ -171,7 +187,7 @@ export class SupabaseStorage implements ICalculationStorage {
             console.warn("Legacy 'calc' column fetch failed, retrying without it:", errorWithCalc.message);
             const { data: dataWithoutCalc, error: errorWithoutCalc } = await this.supabase
                 .from(this.tableName)
-                .select('id, created_at, specialist, specialist_id, engineer, engineer_id, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, logistics_status, project_stage, project_notes, user_id, sales_person_1_id, sales_person_2_id, user:users!user_id(full_name), details:calculations_details(calc)')
+                .select('id, created_at, specialist, specialist_id, engineer, engineer_id, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, logistics_status, logistics_operator_id, project_stage, project_notes, user_id, sales_person_1_id, sales_person_2_id, user:users!user_id(full_name), details:calculations_details(calc)')
                 .order('created_at', { ascending: false });
 
             if (errorWithoutCalc) throw new Error(errorWithoutCalc.message);
@@ -200,7 +216,7 @@ export class SupabaseStorage implements ICalculationStorage {
     async getCalculationsMetadata(): Promise<any[]> {
         const { data, error } = await this.supabase
             .from(this.tableName)
-            .select('id, created_at, specialist, specialist_id, engineer, engineer_id, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, logistics_status, project_stage, project_notes, user_id, sales_person_1_id, sales_person_2_id, user:users!user_id(full_name)')
+            .select('id, created_at, specialist, specialist_id, engineer, engineer_id, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, logistics_status, logistics_operator_id, project_stage, project_notes, user_id, sales_person_1_id, sales_person_2_id, user:users!user_id(full_name)')
             .order('created_at', { ascending: false });
 
         if (error) throw new Error(error.message);
@@ -223,7 +239,7 @@ export class SupabaseStorage implements ICalculationStorage {
             // Fallback
             const { data: dataWithoutCalc, error: errorWithoutCalc } = await this.supabase
                 .from(this.tableName)
-                .select('id, created_at, specialist, specialist_id, engineer, engineer_id, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, logistics_status, project_stage, project_notes, user_id, sales_person_1_id, sales_person_2_id, user:users!user_id(full_name), details:calculations_details(calc)')
+                .select('id, created_at, specialist, specialist_id, engineer, engineer_id, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, logistics_status, logistics_operator_id, project_stage, project_notes, user_id, sales_person_1_id, sales_person_2_id, user:users!user_id(full_name), details:calculations_details(calc)')
                 .eq('id', id)
                 .single();
             if (errorWithoutCalc) return null;
@@ -282,6 +298,13 @@ export class SupabaseStorage implements ICalculationStorage {
         await this.supabase
             .from(this.tableName)
             .update({ logistics_status: status })
+            .eq('id', id);
+    }
+
+    async updateLogisticsOperator(id: string, operatorId: string | null): Promise<void> {
+        await this.supabase
+            .from(this.tableName)
+            .update({ logistics_operator_id: operatorId })
             .eq('id', id);
     }
 

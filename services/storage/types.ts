@@ -18,6 +18,7 @@ export interface SavedCalculation {
     sales_person_2_id: string | null;
     is_locked: boolean; // [NEW] Locking mechanism
     logistics_status: 'PENDING' | 'PROCESSED' | null; // [NEW] Logistics processing status
+    logistics_operator_id: string | null; // [NEW] ID of the logistics operator assigned
     project_stage: string; // [NEW] For fast metadata listing
     project_notes: string; // [NEW] Dedicated column for fast notes access
     calc: CalculationData; // The JSON blob
@@ -58,6 +59,7 @@ export interface ICalculationStorage {
     lockProject(projectId: string, isLocked: boolean): Promise<void>;
     isProjectLocked(projectId: string): Promise<boolean>;
     updateLogisticsStatus(id: string, status: 'PENDING' | 'PROCESSED' | null): Promise<void>;
+    updateLogisticsOperator(id: string, operatorId: string | null): Promise<void>;
     getInstallationStages(calculationIds: string[]): Promise<any[]>;
 
     // Access Requests

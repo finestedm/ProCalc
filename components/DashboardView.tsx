@@ -267,6 +267,7 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
             });
 
             setRecentProjects(myMetadata.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5));
+            setRawExperiments(myMetadata as any); // Sync rawExperiments for Logistics Queue
 
             // [NEW] Fetch relational stages for Gantt/Events
             const metaIds = myMetadata.map(m => m.id);
@@ -617,6 +618,16 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
         }
     };
 
+    const handleLogisticsOperatorToggle = async (id: string, operatorId: string | null) => {
+        try {
+            await storageService.updateLogisticsOperator(id, operatorId);
+            loadData();
+        } catch (e) {
+            console.error("Failed to update logistics operator", e);
+            alert("Błąd przypisania operatora.");
+        }
+    };
+
     // Filter for Logistics Queue
     const logisticsQueue = useMemo(() => {
         if (profile?.role !== 'logistics') return [];
@@ -867,9 +878,9 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
                                                     <span className="text-xs font-mono text-zinc-400 block mb-1">
                                                         {new Date(p.created_at).toLocaleDateString()}
                                                     </span>
-                                                    {(p.calc as any).stage && (
+                                                    {p.project_stage && (
                                                         <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-100 dark:bg-zinc-700">
-                                                            {(p.calc as any).stage}
+                                                            {p.project_stage}
                                                         </span>
                                                     )}
                                                 </div>
@@ -884,12 +895,30 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
                                                 </button>
 
                                                 {logisticsViewMode === 'PENDING' ? (
-                                                    <button
-                                                        onClick={() => handleLogisticsStatusToggle(p.id, 'PROCESSED')}
-                                                        className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-bold transition-colors flex items-center gap-2"
-                                                    >
-                                                        <Check size={14} /> Oznacz jako Przetworzone
-                                                    </button>
+                                                    <div className="flex items-center gap-2">
+                                                        {p.logistics_operator_id === profile?.id ? (
+                                                            <button
+                                                                onClick={() => handleLogisticsOperatorToggle(p.id, null)}
+                                                                className="px-3 py-1.5 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-red-500 hover:border-red-500/30 rounded text-[10px] font-black uppercase tracking-wider transition-all"
+                                                                title="Zrezygnuj z przypisania"
+                                                            >
+                                                                Zrezygnuj
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => handleLogisticsOperatorToggle(p.id, profile?.id || null)}
+                                                                className="px-3 py-1.5 bg-white dark:bg-zinc-800 border border-blue-500/30 text-blue-600 hover:bg-blue-500 hover:text-white rounded text-[10px] font-black uppercase tracking-wider transition-all shadow-sm"
+                                                            >
+                                                                Przypisz
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => handleLogisticsStatusToggle(p.id, 'PROCESSED')}
+                                                            className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-bold transition-colors flex items-center gap-2"
+                                                        >
+                                                            <Check size={14} /> Gotowe
+                                                        </button>
+                                                    </div>
                                                 ) : (
                                                     <button
                                                         onClick={() => handleLogisticsStatusToggle(p.id, 'PENDING')}

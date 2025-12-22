@@ -110,6 +110,7 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
     const [filterText, setFilterText] = useState('');
     const [showGantt, setShowGantt] = useState(true);
     const [showMap, setShowMap] = useState(false);
+    const [showOnlyMine, setShowOnlyMine] = useState(false);
 
     // --- LOAD DATA ---
     const loadData = async () => {
@@ -384,6 +385,9 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
             const project = projMap.get(pNum);
             if (!project || hiddenProjectIds.has(project.id)) return;
 
+            // Robust "My Projects" filter check
+            const isAssignedToMe = project.logistics_operator_id && profile?.id && String(project.logistics_operator_id) === String(profile.id);
+            if (showOnlyMine && !isAssignedToMe) return;
             const calcData = project.calc as CalculationData;
             const appState = (calcData as any).appState;
             const activeData = (appState ? (appState.mode === 'FINAL' ? appState.final : appState.initial) : calcData) as CalculationData;
@@ -442,7 +446,7 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
             meta: combinedMeta,
             installation: { stages: [] } // Hub gantt focuses on delivery for now
         };
-    }, [projects, localState, hiddenProjectIds]);
+    }, [projects, localState, hiddenProjectIds, showOnlyMine, profile]);
 
     const deliveryMapData = useMemo(() => {
         const data: any[] = [];
@@ -453,6 +457,10 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
             const [pNum] = key.split('|');
             const project = projMap.get(pNum);
             if (!project || hiddenProjectIds.has(project.id)) return;
+
+            const currentUserId = profile?.id;
+            const isAssignedToMe = project.logistics_operator_id && currentUserId && String(project.logistics_operator_id) === String(currentUserId);
+            if (showOnlyMine && !isAssignedToMe) return;
 
             // Robust data extraction
             const rawCalc = project.calc as any;
@@ -508,7 +516,7 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
             });
         });
         return data;
-    }, [projects, localState, hiddenProjectIds]);
+    }, [projects, localState, hiddenProjectIds, showOnlyMine, profile]);
 
     // --- DISPLAY MODEL ---
     const gridRows = useMemo(() => {
@@ -521,9 +529,13 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
             const project = projMap.get(pNum);
 
             if (!project || hiddenProjectIds.has(project.id)) return;
+
+            const currentUserId = profile?.id;
+            const isAssignedToMe = project.logistics_operator_id && currentUserId && String(project.logistics_operator_id) === String(currentUserId);
+            if (showOnlyMine && !isAssignedToMe) return;
+
             if (filterText && !pNum.toLowerCase().includes(filterText.toLowerCase()) &&
                 !(project.customer_name || '').toLowerCase().includes(filterText.toLowerCase())) return;
-
             const calcData = project.calc as CalculationData;
             let vendor = 'Nieznany';
             if (tItem.isSupplierOrganized && tItem.supplierId) {
@@ -616,7 +628,7 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
         });
 
         return finalRows;
-    }, [projects, localState, hiddenProjectIds, filterText, expandedGroups, collapsedProjects]);
+    }, [projects, localState, hiddenProjectIds, filterText, expandedGroups, collapsedProjects, showOnlyMine, profile]);
 
     const toggleExpand = (id: string) => {
         setExpandedGroups(prev => {
@@ -667,94 +679,125 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
     if (loading) return <div className="p-10 text-center animate-pulse text-zinc-400">Ładowanie Hubu Logistycznego...</div>;
 
     return (
-        <div className="p-6 bg-zinc-50 dark:bg-zinc-950 min-h-screen">
-            <div className="flex justify-between items-center mb-6">
+        <div className="p-6 bg-zinc-50 dark:bg-zinc-950 min-h-screen animate-fadeIn">
+            <div className="flex justify-between items-end mb-8 border-b border-zinc-200 dark:border-zinc-800 pb-6">
                 <div>
-                    <h1 className="text-3xl font-bold text-zinc-900 dark:text-white flex items-center gap-3">
-                        <Truck className="text-blue-500" size={36} />
+                    <h1 className="text-4xl font-black text-zinc-900 dark:text-white flex items-center gap-3 tracking-tighter uppercase">
+                        <div className="p-2 bg-amber-500 text-zinc-950 rounded-lg shadow-glow">
+                            <Truck size={32} strokeWidth={2.5} />
+                        </div>
                         Globalny Hub Logistyczny
                     </h1>
-                    <p className="text-zinc-500 mt-2">Zarządzaj flotą, kierowcami i terminami dla wszystkich projektów.</p>
+                    <div className="flex items-center gap-2 mt-2">
+                        <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></div>
+                        <p className="text-zinc-500 text-xs font-medium uppercase tracking-widest">Flota • Kierowcy • Terminy Dostaw</p>
+                    </div>
                 </div>
-                <div className="flex gap-2">
-                    <button
-                        onClick={handleUndo}
-                        disabled={historyIndex <= 0}
-                        className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-600 disabled:opacity-30 hover:bg-zinc-50 transition-colors"
-                        title="Cofnij (Undo)"
-                    >
-                        <Undo size={20} />
-                    </button>
-                    <button
-                        onClick={handleRedo}
-                        disabled={historyIndex >= history.length - 1}
-                        className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-600 disabled:opacity-30 hover:bg-zinc-50 transition-colors"
-                        title="Ponów (Redo)"
-                    >
-                        <Redo size={20} />
-                    </button>
-                    <div className="w-4" />
-                    <button
-                        onClick={() => setShowGantt(!showGantt)}
-                        className={`p-2 rounded-lg transition-colors flex items-center gap-2 font-bold text-xs ${showGantt ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-white dark:bg-zinc-900 border border-zinc-200 text-zinc-500'}`}
-                    >
-                        <CalendarIcon size={18} /> {showGantt ? 'Ukryj Wykres' : 'Pokaż Wykres'}
-                    </button>
-                    <button
-                        onClick={() => setShowMap(!showMap)}
-                        className={`p-2 rounded-lg transition-colors flex items-center gap-2 font-bold text-xs ${showMap ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-white dark:bg-zinc-900 border border-zinc-200 text-zinc-500'}`}
-                    >
-                        <MapIcon size={18} /> {showMap ? 'Ukryj Mapę' : 'Pokaż Mapę'}
-                    </button>
+                <div className="flex gap-2 items-center">
+                    <div className="flex bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-1 mr-2 shadow-sm">
+                        <button
+                            onClick={handleUndo}
+                            disabled={historyIndex <= 0}
+                            className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded text-zinc-600 disabled:opacity-20 transition-colors"
+                            title="Cofnij (Undo)"
+                        >
+                            <Undo size={16} />
+                        </button>
+                        <button
+                            onClick={handleRedo}
+                            disabled={historyIndex >= history.length - 1}
+                            className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded text-zinc-600 disabled:opacity-20 transition-colors"
+                            title="Ponów (Redo)"
+                        >
+                            <Redo size={16} />
+                        </button>
+                    </div>
+
+                    <div className="flex bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-1 mr-4 shadow-sm">
+                        <button
+                            onClick={() => setShowGantt(!showGantt)}
+                            className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${showGantt ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/20' : 'text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800'}`}
+                        >
+                            <CalendarIcon size={14} /> Wykres
+                        </button>
+                        <button
+                            onClick={() => setShowMap(!showMap)}
+                            className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${showMap ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800'}`}
+                        >
+                            <MapIcon size={14} /> Mapa
+                        </button>
+                    </div>
+
                     <button
                         onClick={loadData}
-                        className="p-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors text-zinc-500"
+                        className="p-2.5 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors text-zinc-500 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700"
                         title="Odśwież dane z serwera"
                     >
-                        <RefreshCw size={20} />
+                        <RefreshCw size={18} />
                     </button>
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-lg shadow-blue-500/20 disabled:opacity-70 transition-all"
+                        className="flex items-center gap-2 px-8 py-2.5 bg-amber-500 hover:bg-amber-600 text-zinc-950 rounded-lg font-black uppercase text-[11px] tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-70 transition-all hover:scale-[1.02] active:scale-[0.98]"
                     >
-                        {saving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
-                        {saving ? 'Zapisywanie...' : 'Zapisz Zmiany'}
+                        {saving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                        {saving ? 'Zapisywanie...' : 'Zapisz Hub'}
                     </button>
                 </div>
             </div>
 
-            <div className="mb-6 flex gap-4 flex-wrap items-center">
-                <div className="relative">
-                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                    <input
-                        placeholder="Szukaj projektu / klienta..."
-                        className="pl-9 pr-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-sm w-64 outline-none focus:ring-2 focus:ring-blue-500"
-                        value={filterText}
-                        onChange={e => setFilterText(e.target.value)}
-                    />
+            <div className="mb-8 flex gap-6 flex-wrap items-end bg-white dark:bg-zinc-900/50 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+                <div className="flex flex-col gap-2">
+                    <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <Search size={10} /> Panel Filtrów
+                    </span>
+                    <div className="relative">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                        <input
+                            placeholder="Szukaj projektu / klienta..."
+                            className="pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs w-72 outline-none focus:ring-2 focus:ring-amber-500 transition-all font-medium"
+                            value={filterText}
+                            onChange={e => setFilterText(e.target.value)}
+                        />
+                    </div>
                 </div>
 
-                <div className="h-8 w-px bg-zinc-300 dark:bg-zinc-700 mx-2" />
+                <div className="flex flex-col gap-2">
+                    <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest">Moje Przypisania</span>
+                    <button
+                        onClick={() => setShowOnlyMine(!showOnlyMine)}
+                        className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border-2 flex items-center gap-2 ${showOnlyMine
+                            ? 'bg-cyan-500 border-cyan-500 text-white shadow-lg shadow-cyan-500/20'
+                            : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-cyan-500/30'
+                            }`}
+                    >
+                        <Truck size={14} /> Moje Projekty
+                    </button>
+                </div>
 
-                <div className="flex gap-2 flex-wrap">
-                    {projects.map(p => (
-                        <button
-                            key={p.id}
-                            onClick={() => {
-                                const newHidden = new Set(hiddenProjectIds);
-                                if (newHidden.has(p.id)) newHidden.delete(p.id);
-                                else newHidden.add(p.id);
-                                setHiddenProjectIds(newHidden);
-                            }}
-                            className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all border ${hiddenProjectIds.has(p.id)
-                                ? 'bg-zinc-100 border-zinc-200 text-zinc-400'
-                                : 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400'
-                                }`}
-                        >
-                            {p.project_id || 'Bez Numeru'}
-                        </button>
-                    ))}
+                <div className="h-10 w-px bg-zinc-200 dark:bg-zinc-800 mx-2 hidden md:block" />
+
+                <div className="flex flex-col gap-2 flex-1">
+                    <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest">Aktywne Projekty (Widoczność)</span>
+                    <div className="flex gap-2 flex-wrap">
+                        {projects.map(p => (
+                            <button
+                                key={p.id}
+                                onClick={() => {
+                                    const newHidden = new Set(hiddenProjectIds);
+                                    if (newHidden.has(p.id)) newHidden.delete(p.id);
+                                    else newHidden.add(p.id);
+                                    setHiddenProjectIds(newHidden);
+                                }}
+                                className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all border ${hiddenProjectIds.has(p.id)
+                                    ? 'bg-zinc-100 border-zinc-200 text-zinc-400'
+                                    : 'bg-amber-50 border-amber-200 text-amber-600 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400 shadow-sm'
+                                    }`}
+                            >
+                                {p.project_id || 'Bez Numeru'}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
@@ -814,16 +857,18 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                     <table className="w-full text-left border-collapse min-w-[1400px]">
                         <thead className="text-[10px] uppercase font-bold text-zinc-400 bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-800">
                             <tr>
-                                <th className="px-4 py-3 w-10"></th>
-                                <th className="px-4 py-3">Projekt / Klient</th>
-                                <th className="px-4 py-3">Dostawca / Typ</th>
-                                <th className="px-4 py-3">Data Załadunku</th>
-                                <th className="px-4 py-3">Data Dostawy</th>
-                                <th className="px-4 py-3">Kierowca / Dane</th>
-                                <th className="px-4 py-3">Rejestracja</th>
-                                <th className="px-4 py-3 w-32">Firma Transp.</th>
-                                <th className="px-4 py-3 w-32">Komentarz</th>
-                                <th className="px-4 py-3 text-right">Opcje</th>
+                                <th className="px-4 py-4 w-12 text-center">Ind</th>
+                                <th className="px-4 py-4">Projekt / Klient</th>
+                                <th className="px-4 py-4">Dostawca / Typ Transp.</th>
+                                <th className="px-4 py-4">Data Załadunku</th>
+                                <th className="px-4 py-4">Data Dostawy</th>
+                                <th className="px-4 py-4" colSpan={3}>
+                                    <div className="flex items-center gap-2">
+                                        <Truck size={10} /> Szczegóły Auta (Kierowca / Rejestracja / Firma / Notatki)
+                                    </div>
+                                </th>
+                                <th className="px-4 py-4 text-right">Koszt / Waga</th>
+                                <th className="px-4 py-4 text-right w-32">Opcje</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -835,29 +880,32 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                 if (isProject) {
                                     const isCollapsed = collapsedProjects.has(row.projectNumber);
                                     return (
-                                        <tr key={row.id} className="bg-zinc-100/80 dark:bg-zinc-800/80 border-l-4 border-l-zinc-400 group">
-                                            <td className="px-4 py-1.5 text-center">
-                                                <button onClick={() => toggleProjectCollapse(row.projectNumber)} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-zinc-600">
+                                        <tr key={row.id} className="bg-zinc-100/50 dark:bg-zinc-800/40 border-l-4 border-l-zinc-300 dark:border-l-zinc-700 group">
+                                            <td className="px-4 py-2 text-center">
+                                                <button onClick={() => toggleProjectCollapse(row.projectNumber)} className="p-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded shadow-sm transition-all text-zinc-500">
                                                     {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                                                 </button>
                                             </td>
-                                            <td className="px-4 py-1.5">
-                                                <div className="font-black text-[12px] text-zinc-900 dark:text-white uppercase tracking-tighter leading-none">{row.projectNumber}</div>
-                                                <div className="text-[9px] font-bold text-zinc-500 truncate max-w-[200px] leading-tight">{row.customerName}</div>
+                                            <td className="px-4 py-2">
+                                                <div className="font-black text-[13px] text-zinc-900 dark:text-white uppercase tracking-tighter leading-none mb-0.5">{row.projectNumber}</div>
+                                                <div className="text-[10px] font-bold text-zinc-400 truncate max-w-[200px] leading-tight uppercase tracking-wide">{row.customerName}</div>
                                             </td>
-                                            <td className="px-4 py-1.5" colSpan={5}>
+                                            <td className="px-4 py-2" colSpan={5}>
                                                 <div className="flex items-center gap-4">
-                                                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{row.vendorName}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                                                        <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest">{row.vendorName}</span>
+                                                    </div>
                                                     {isCollapsed && (
-                                                        <span className="text-[9px] bg-zinc-200 dark:bg-zinc-700 px-2 py-0.5 rounded text-zinc-600 dark:text-zinc-400 font-mono">
-                                                            Suma: {row.suggestedWeight.toLocaleString()} kg
+                                                        <span className="text-[10px] bg-zinc-200/50 dark:bg-zinc-700/50 px-2 py-0.5 rounded text-zinc-500 dark:text-zinc-400 font-mono font-bold">
+                                                            ∑ {row.suggestedWeight.toLocaleString()} KG
                                                         </span>
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-1.5 text-right" colSpan={3}>
+                                            <td className="px-4 py-2 text-right" colSpan={3}>
                                                 <div className="text-right">
-                                                    <div className="text-[11px] font-black text-zinc-800 dark:text-zinc-200 font-mono">
+                                                    <div className="text-[12px] font-bold text-zinc-800 dark:text-zinc-200 font-mono bg-white dark:bg-zinc-900 inline-block px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-800 shadow-sm">
                                                         {row.price > 0 ? row.price.toLocaleString() : '-'} {row.currency}
                                                     </div>
                                                 </div>
@@ -872,68 +920,73 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                     const isSuppLayer = row.isSupplierOrganized;
 
                                     return (
-                                        <tr key={row.id} className={`transition-colors group border-l-4 border-zinc-200 dark:border-zinc-700 ${isSuppLayer
-                                            ? 'bg-amber-50/40 dark:bg-amber-900/10 hover:bg-amber-50/60 dark:hover:bg-amber-900/20'
-                                            : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/30'
+                                        <tr key={row.id} className={`transition-all group border-l-4 ${isSuppLayer
+                                            ? 'bg-amber-50/20 dark:bg-amber-900/5 hover:bg-amber-50/40 dark:hover:bg-amber-900/10 border-amber-500'
+                                            : 'bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 border-cyan-500'
                                             }`}>
-                                            <td className="px-4 py-3 text-center">
-                                                <button onClick={() => toggleExpand(row.id)} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-zinc-400">
-                                                    {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                            <td className="px-4 py-4 text-center">
+                                                <button onClick={() => toggleExpand(row.id)} className={`p-1.5 rounded transition-all ${isExpanded ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600' : 'text-zinc-400 hover:text-zinc-600'}`}>
+                                                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                                                 </button>
                                             </td>
-                                            <td className="px-4 py-3 pl-12 relative">
-                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-px bg-zinc-300 dark:bg-zinc-600"></div>
-                                                <div className="text-[11px] font-bold text-zinc-400">{row.projectNumber}</div>
-                                                <div className="text-[10px] text-zinc-400 truncate max-w-[150px]">{row.customerName}</div>
+                                            <td className="px-4 py-4 pl-12 relative">
+                                                <div className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-px ${isSuppLayer ? 'bg-amber-300 dark:bg-amber-800' : 'bg-cyan-300 dark:bg-cyan-800'}`}></div>
+                                                <div className="text-[11px] font-black text-zinc-950 dark:text-zinc-50 tracking-tight">{row.projectNumber}</div>
+                                                <div className="text-[9px] font-bold text-zinc-400 uppercase truncate max-w-[150px]">{row.customerName}</div>
                                             </td>
-                                            <td className="px-4 py-3">
-                                                <div className={`font-bold text-xs truncate max-w-[150px] ${isSuppLayer ? 'text-amber-600' : 'text-blue-600'}`}>{row.vendorName}</div>
-                                                <div className="flex gap-2 items-center mt-1 text-[9px] uppercase font-bold text-zinc-400">
-                                                    {isSuppLayer ? 'Dostawca' : 'JH Logistyka'}
+                                            <td className="px-4 py-4">
+                                                <div className={`font-black text-xs truncate max-w-[150px] uppercase tracking-tight ${isSuppLayer ? 'text-amber-600 dark:text-amber-400' : 'text-cyan-600 dark:text-cyan-400'}`}>{row.vendorName}</div>
+                                                <div className="flex gap-2 items-center mt-1">
+                                                    <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${isSuppLayer ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700' : 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700'}`}>
+                                                        {isSuppLayer ? 'Dostawca' : 'JH Logistyka'}
+                                                    </span>
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3">
+                                            <td className="px-4 py-4">
                                                 <DatePickerInput
-                                                    className="bg-transparent border-b border-zinc-200 dark:border-zinc-800 px-1 py-0.5 text-xs w-28 outline-none focus:border-blue-500"
+                                                    className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1 text-xs w-28 outline-none focus:ring-2 focus:ring-amber-500 transition-all font-mono"
                                                     value={tItem.pickupDate || ''}
                                                     onChange={(val) => handleUpdateTransport(row.projectNumber, row.transportId, { pickupDate: val })}
                                                 />
                                             </td>
-                                            <td className="px-4 py-3">
+                                            <td className="px-4 py-4">
                                                 <DatePickerInput
-                                                    className="bg-transparent border-b border-zinc-200 dark:border-zinc-800 px-1 py-0.5 text-xs w-28 outline-none focus:border-blue-500"
+                                                    className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1 text-xs w-28 outline-none focus:ring-2 focus:ring-amber-500 transition-all font-mono"
                                                     value={tItem.confirmedDeliveryDate || ''}
                                                     onChange={(val) => handleUpdateTransport(row.projectNumber, row.transportId, { confirmedDeliveryDate: val })}
                                                 />
                                             </td>
-                                            <td className="px-4 py-3 text-xs text-zinc-400 italic" colSpan={3}>
-                                                <div className="flex items-center gap-2 opacity-50">
-                                                    <Truck size={12} /> {tItem.trucksCount} aut(a) - rozwiń do edycji
+                                            <td className="px-4 py-4 text-xs text-zinc-400 italic" colSpan={3}>
+                                                <div className="flex items-center gap-2 opacity-60">
+                                                    <Truck size={14} className={isSuppLayer ? 'text-amber-500' : 'text-cyan-500'} />
+                                                    <span className="font-bold text-[10px] uppercase tracking-wide">{tItem.trucksCount} aut(a)</span>
+                                                    <span className="mx-1">|</span>
+                                                    <span className="text-[9px]">Rozwiń do edycji szczegółów</span>
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <div className="text-right mr-2 flex flex-col items-end">
-                                                    <div className="text-[9px] text-zinc-400 font-mono italic">Sugerowana: {tItem.totalPrice > 0 ? tItem.totalPrice.toLocaleString() : '-'} {tItem.currency}</div>
-                                                    <div className="flex items-center gap-1">
+                                            <td className="px-4 py-4 text-right">
+                                                <div className="text-right mr-2 flex flex-col items-end gap-1">
+                                                    <div className="text-[9px] text-zinc-400 font-mono font-bold uppercase">Sugerowana: {tItem.totalPrice > 0 ? tItem.totalPrice.toLocaleString() : '-'} {tItem.currency}</div>
+                                                    <div className="flex items-center gap-1 bg-white dark:bg-zinc-950 p-1 rounded border border-zinc-200 dark:border-zinc-800 shadow-sm">
                                                         <input
                                                             type="number"
-                                                            placeholder="Cena potw."
-                                                            className="bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-0.5 text-[10px] w-20 font-bold outline-none focus:border-blue-500"
+                                                            placeholder="Cena"
+                                                            className="bg-transparent text-right px-1.5 py-0.5 text-[11px] w-20 font-black outline-none text-zinc-900 dark:text-zinc-100"
                                                             value={tItem.confirmedPrice || ''}
                                                             onChange={(e) => handleUpdateTransport(row.projectNumber, row.transportId, { confirmedPrice: parseFloat(e.target.value) || 0 })}
                                                         />
-                                                        <span className="text-[10px] font-bold">{tItem.currency}</span>
+                                                        <span className="text-[9px] font-black text-zinc-400 border-l border-zinc-200 dark:border-zinc-800 ml-1 pl-1">{tItem.currency}</span>
                                                     </div>
-                                                    <div className="text-[9px] text-zinc-400 font-mono italic mt-0.5">{row.suggestedWeight?.toLocaleString()} kg</div>
+                                                    <div className="text-[10px] font-black text-zinc-500 font-mono bg-zinc-100 dark:bg-zinc-800 px-1.5 rounded-sm">{row.suggestedWeight?.toLocaleString()} KG</div>
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3 text-right">
+                                            <td className="px-4 py-4 text-right">
                                                 <div className="flex justify-end gap-1 items-center">
-                                                    <button onClick={() => handleSendMail(row)} className="p-2 hover:bg-amber-50 dark:hover:bg-amber-900/30 text-amber-600 rounded-lg border border-transparent hover:border-amber-200" title="Wyślij powiadomienie">
-                                                        <Mail size={16} />
+                                                    <button onClick={() => handleSendMail(row)} className="p-2 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm" title="Wyślij powiadomienie">
+                                                        <Mail size={16} strokeWidth={2.5} />
                                                     </button>
-                                                    <button onClick={() => handleOpenProjectWithSync(row.originalProject)} className="p-2 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-600 rounded-lg border border-transparent hover:border-blue-200" title="Otwórz projekt">
-                                                        <ExternalLink size={16} />
+                                                    <button onClick={() => handleOpenProjectWithSync(row.originalProject)} className="p-2 hover:bg-cyan-100 dark:hover:bg-cyan-900/40 text-cyan-600 dark:text-cyan-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm" title="Otwórz projekt">
+                                                        <ExternalLink size={16} strokeWidth={2.5} />
                                                     </button>
                                                 </div>
                                             </td>
@@ -941,34 +994,37 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                     );
                                 } else {
                                     const truck = row.truckData;
+                                    const isSuppLayer = row.isSupplierOrganized;
                                     if (!truck) return null;
                                     return (
-                                        <tr key={row.id} className="bg-zinc-50/50 dark:bg-zinc-900/30 border-l-4 border-l-blue-400">
-                                            <td className="px-4 py-2 text-center">
-                                                <button onClick={() => handleUpdateTruckCount(row.projectNumber, row.transportId, Math.max(0, row.transportData.trucksCount - 1))} className="text-red-400 hover:text-red-600 text-[10px] uppercase font-bold px-2">Usuń</button>
+                                        <tr key={row.id} className={`bg-zinc-50/30 dark:bg-zinc-900/20 border-l-4 transition-colors ${isSuppLayer ? 'border-amber-400/50' : 'border-cyan-400/50'}`}>
+                                            <td className="px-4 py-2 text-center text-zinc-300">
+                                                <div className="w-1 h-1 bg-zinc-300 dark:bg-zinc-700 rounded-full mx-auto"></div>
                                             </td>
                                             <td className="px-4 py-2 text-center" colSpan={2}>
-                                                <span className="text-[10px] font-bold text-blue-500 uppercase bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                                                <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded shadow-sm border inline-flex items-center gap-1 ${isSuppLayer
+                                                    ? 'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-900/20 dark:border-amber-800'
+                                                    : 'bg-cyan-50 text-cyan-600 border-cyan-100 dark:bg-cyan-900/20 dark:border-cyan-800'}`}>
                                                     <Truck size={10} /> {row.vendorName}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-2">
-                                                <DatePickerInput className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-28 outline-none" value={truck.loadingDates || ''} onChange={(val) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { loadingDates: val })} />
+                                                <DatePickerInput className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1.5 text-xs w-28 outline-none focus:ring-1 focus:ring-amber-500 transition-all font-mono" value={truck.loadingDates || ''} onChange={(val) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { loadingDates: val })} />
                                             </td>
                                             <td className="px-4 py-2">
-                                                <DatePickerInput className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-28 outline-none" value={truck.deliveryDate || ''} onChange={(val) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { deliveryDate: val })} />
+                                                <DatePickerInput className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1.5 text-xs w-28 outline-none focus:ring-1 focus:ring-amber-500 transition-all font-mono" value={truck.deliveryDate || ''} onChange={(val) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { deliveryDate: val })} />
                                             </td>
                                             <td className="px-4 py-2">
-                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-full outline-none" value={truck.driverInfo || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { driverInfo: e.target.value })} placeholder="Kierowca / Tel" />
+                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1.5 text-xs w-full outline-none focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-[10px] font-medium" value={truck.driverInfo || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { driverInfo: e.target.value })} placeholder="Imię Nazwisko / Telefon" />
                                             </td>
                                             <td className="px-4 py-2">
-                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-28 uppercase font-mono outline-none" value={truck.registrationNumbers || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { registrationNumbers: e.target.value })} placeholder="Rejestracja" />
+                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1.5 text-xs w-28 uppercase font-mono outline-none focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-[10px]" value={truck.registrationNumbers || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { registrationNumbers: e.target.value })} placeholder="NUMER REJ." />
                                             </td>
                                             <td className="px-4 py-2">
-                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-full outline-none" value={truck.transportCompany || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { transportCompany: e.target.value })} placeholder="Firma" />
+                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1.5 text-xs w-full outline-none focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-[10px]" value={truck.transportCompany || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { transportCompany: e.target.value })} placeholder="Nazwa firmy transportowej" />
                                             </td>
                                             <td className="px-4 py-2">
-                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-full outline-none" value={truck.notes || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { notes: e.target.value })} placeholder="Komentarz" />
+                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1.5 text-xs w-full outline-none focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-[10px]" value={truck.notes || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { notes: e.target.value })} placeholder="Notatki dodatkowe..." />
                                             </td>
                                             <td className="px-4 py-2 text-right"></td>
                                         </tr>

@@ -24,7 +24,8 @@ interface Props {
 
 // --- CONSTANTS ---
 const HEADER_HEIGHT = 60;
-const ROW_HEIGHT = 60; // Reduced height
+const DEFAULT_ROW_HEIGHT = 60;
+const TRUCK_ROW_HEIGHT = 38;
 const CHROME_HEIGHT = 66;
 const DEFAULT_VISIBLE_ROWS = 4;
 
@@ -481,7 +482,21 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
     };
 
     // --- HEIGHT LOGIC ---
-    const innerContentHeight = HEADER_HEIGHT + (timelineItems.length * ROW_HEIGHT);
+    const getRowHeight = (item: any) => item.type === 'TRUCK' ? TRUCK_ROW_HEIGHT : DEFAULT_ROW_HEIGHT;
+
+    const innerContentHeight = useMemo(() => {
+        let rowsHeight = 0;
+        let separatorsHeight = 0;
+        timelineItems.forEach((item, index) => {
+            rowsHeight += getRowHeight(item);
+            const prevItem = index > 0 ? timelineItems[index - 1] : null;
+            if (item.projectNumber && prevItem && prevItem.projectNumber && item.projectNumber !== prevItem.projectNumber) {
+                separatorsHeight += 24; // Project separator height (h-6)
+            }
+        });
+        return HEADER_HEIGHT + rowsHeight + separatorsHeight;
+    }, [timelineItems]);
+
     const totalContainerHeight = innerContentHeight + CHROME_HEIGHT;
 
     // --- 2. SCALE & AXIS ---
@@ -1109,6 +1124,20 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
         return m;
     };
 
+    const cumulativeHeights = useMemo(() => {
+        let currentHeight = HEADER_HEIGHT; // Start after header
+        const heights = [currentHeight]; // heights[0] will be height before first item
+        timelineItems.forEach((item, index) => {
+            const prevItem = index > 0 ? timelineItems[index - 1] : null;
+            if (item.projectNumber && prevItem && prevItem.projectNumber && item.projectNumber !== prevItem.projectNumber) {
+                currentHeight += 24; // Add separator height (h-6)
+            }
+            currentHeight += getRowHeight(item);
+            heights.push(currentHeight);
+        });
+        return heights;
+    }, [timelineItems]);
+
     const renderDependencies = () => {
         if (!installation.dependencies) return null;
 
@@ -1129,10 +1158,10 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                     const toIdx = timelineItems.indexOf(toItem);
 
                     const x1 = dateToPx(fromItem.type === 'SUPPLIER' || fromItem.type === 'TRANSPORT_GROUP' ? fromItem.delEnd : fromItem.end);
-                    const y1 = (fromIdx * ROW_HEIGHT) + HEADER_HEIGHT + (ROW_HEIGHT / 3);
+                    const y1 = cumulativeHeights[fromIdx] + (getRowHeight(fromItem) / 2); // Center of the row
 
                     const x2 = dateToPx(toItem.type === 'SUPPLIER' || toItem.type === 'TRANSPORT_GROUP' ? toItem.delStart : toItem.start);
-                    const y2 = (toIdx * ROW_HEIGHT) + HEADER_HEIGHT + (ROW_HEIGHT / 3);
+                    const y2 = cumulativeHeights[toIdx] + (getRowHeight(toItem) / 2); // Center of the row
 
                     const c1x = x1 + 30;
                     const c2x = x2 - 30;
@@ -1146,7 +1175,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                 })}
                 {isConnecting && connectMousePos && (
                     <path
-                        d={`M ${dateToPx(timelineItems.find(i => i.id === isConnecting)!.end)} ${(timelineItems.findIndex(i => i.id === isConnecting) * ROW_HEIGHT) + HEADER_HEIGHT + (ROW_HEIGHT / 3)} L ${connectMousePos.x} ${connectMousePos.y}`}
+                        d={`M ${dateToPx(timelineItems.find(i => i.id === isConnecting)!.end)} ${cumulativeHeights[timelineItems.findIndex(i => i.id === isConnecting)] + (getRowHeight(timelineItems.find(i => i.id === isConnecting)!) / 2)} L ${connectMousePos.x} ${connectMousePos.y}`}
                         stroke="#fbbf24"
                         strokeWidth="2"
                         fill="none"
@@ -1603,9 +1632,9 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                                 )}
                                                 <div
                                                     className={`border-b border-zinc-100 dark:border-zinc-800 px-2 flex flex-col justify-center transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900 group relative ${isChild ? 'bg-zinc-50/50 dark:bg-zinc-900/30' : ''}`}
-                                                    style={{ height: ROW_HEIGHT }}
+                                                    style={{ height: getRowHeight(item) }}
                                                 >
-                                                    <div className="flex justify-between items-center mb-1 gap-2">
+                                                    <div className="flex justify-between items-center mb-0.5 gap-2">
                                                         <div className="flex flex-col gap-0.5 justify-center opacity-0 group-hover:opacity-100 transition-opacity w-4">
                                                             <button
                                                                 onClick={readOnly ? undefined : () => moveRow(index, 'up')}
@@ -1629,9 +1658,8 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                                                 {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                                                             </button>
                                                         ) : isChild ? (
-                                                            <div className="w-3"></div> // Indent
+                                                            <div className="w-3"></div>
                                                         ) : null}
-
                                                         <div className={`flex items-center gap-2 flex-1 min-w-0 ${isChild ? 'pl-2 border-l border-zinc-300 dark:border-zinc-700' : ''}`}>
                                                             {item.type === 'SUPPLIER' && !isChild && <Truck size={12} className="text-blue-500 shrink-0" />}
                                                             {isChild && <Truck size={12} className="text-zinc-400 shrink-0" />}
@@ -1679,28 +1707,36 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                                     </div>
 
                                                     {!isCompact && (
-                                                        <div className={`grid grid-cols-2 gap-2 text-[10px] mb-1 pl-6 transition-all duration-300`}>
+                                                        <div className={`grid grid-cols-2 gap-2 text-[10px] ${item.type === 'TRUCK' ? 'mb-0' : 'mb-1'} pl-6 transition-all duration-300`}>
                                                             <div className="flex flex-col">
-                                                                <span className="text-zinc-400 text-[9px] uppercase font-bold">
-                                                                    {item.type === 'TRANSPORT_GROUP' || item.type === 'TRUCK' ? 'Załadunek' : (item.type === 'SUPPLIER' ? 'Produkcja' : 'Start')}
-                                                                </span>
-                                                                {item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP' ? (
+                                                                {item.type !== 'TRUCK' && (
+                                                                    <span className="text-zinc-400 text-[9px] uppercase font-bold">
+                                                                        {item.type === 'TRANSPORT_GROUP' ? 'Załadunek' : (item.type === 'SUPPLIER' ? 'Produkcja' : 'Start')}
+                                                                    </span>
+                                                                )}
+                                                                {item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP' && item.type !== 'TRUCK' ? (
                                                                     <DatePickerInput
                                                                         className={`bg-transparent border-b border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 w-full outline-none p-0 text-[10px] h-4 ${readOnly ? '' : 'focus:border-amber-500'}`}
                                                                         value={toISODateString(item.prodStart)}
                                                                         onChange={(val) => handleDateChange(item.id, item.type, 'start', val)}
                                                                         disabled={readOnly}
                                                                     />
-                                                                ) : <span className="text-zinc-500 font-mono">{toEuropeanDateString(item.prodStart)}</span>}
+                                                                ) : <span className={`text-zinc-500 font-mono ${item.type === 'TRUCK' ? 'text-[9px]' : ''}`}>{toEuropeanDateString(item.prodStart)}</span>}
                                                             </div>
                                                             <div className="flex flex-col">
-                                                                <span className="text-zinc-400 text-[9px] uppercase font-bold">{item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' || item.type === 'TRUCK' ? 'Dostawa' : 'Koniec'}</span>
-                                                                <DatePickerInput
-                                                                    className={`bg-transparent border-b border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 w-full outline-none p-0 text-[10px] h-4 font-bold ${readOnly ? '' : 'focus:border-amber-500'}`}
-                                                                    value={toISODateString(item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' ? item.delStart : item.end)}
-                                                                    onChange={(val) => handleDateChange(item.id, item.type, 'end', val)}
-                                                                    disabled={isChild || readOnly}
-                                                                />
+                                                                {item.type !== 'TRUCK' && (
+                                                                    <span className="text-zinc-400 text-[9px] uppercase font-bold">{item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' ? 'Dostawa' : 'Koniec'}</span>
+                                                                )}
+                                                                {item.type === 'TRUCK' ? (
+                                                                    <span className="text-zinc-500 font-mono text-[9px]">{toEuropeanDateString(item.delStart)}</span>
+                                                                ) : (
+                                                                    <DatePickerInput
+                                                                        className={`bg-transparent border-b border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 w-full outline-none p-0 text-[10px] h-4 font-bold ${readOnly ? '' : 'focus:border-amber-500'}`}
+                                                                        value={toISODateString(item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' ? item.delStart : item.end)}
+                                                                        onChange={(val) => handleDateChange(item.id, item.type, 'end', val)}
+                                                                        disabled={isChild || readOnly}
+                                                                    />
+                                                                )}
                                                             </div>
                                                         </div>
                                                     )}
@@ -1804,12 +1840,12 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                             )}
                                             <div
                                                 className="relative border-b border-zinc-100 dark:border-zinc-800 hover:bg-black/5 dark:hover:bg-white/5 transition-colors group"
-                                                style={{ height: ROW_HEIGHT }}
+                                                style={{ height: getRowHeight(item) }}
                                                 onDoubleClick={(e) => handleGridDoubleClick(e, item)}
                                             >
 
                                                 <div
-                                                    className={`absolute ${item.type === 'TRANSPORT_GROUP' || item.type === 'TRUCK' ? 'top-3 h-8 shadow-md' : 'top-2 h-5 shadow-sm'} border rounded flex items-center justify-between z-20 select-none overflow-visible ${barColor} ${(item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP' && item.type !== 'TRUCK') ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                                                    className={`absolute ${item.type === 'TRANSPORT_GROUP' ? 'top-3 h-8 shadow-md' : (item.type === 'TRUCK' ? 'top-1.5 h-6 shadow-sm' : 'top-2 h-5 shadow-sm')} border rounded flex items-center justify-between z-20 select-none overflow-visible ${barColor} ${(item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP' && item.type !== 'TRUCK') ? 'cursor-grab active:cursor-grabbing' : ''}`}
                                                     style={{ left: renderProdLeft, width: renderProdWidth }}
                                                     onMouseDown={(e) => {
                                                         if (item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP') {
