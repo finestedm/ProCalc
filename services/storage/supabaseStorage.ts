@@ -381,8 +381,17 @@ export class SupabaseStorage implements ICalculationStorage {
         if (!transport.project_number || !transport.transport_id) {
             throw new Error("Missing PK fields for transport save");
         }
+        const cleanedTransport = { ...transport };
+        const dateFields = ['pickup_date', 'confirmed_delivery_date', 'loading_dates', 'delivery_date'];
+
+        dateFields.forEach(field => {
+            if ((cleanedTransport as any)[field] === '') {
+                (cleanedTransport as any)[field] = null;
+            }
+        });
+
         const payload = {
-            ...transport,
+            ...cleanedTransport,
             updated_by: user?.id,
             updated_at: new Date().toISOString()
         };

@@ -151,6 +151,7 @@ export interface TruckDetail {
   deliveryDate?: string;
   driverInfo?: string;         // Name, Phone
   registrationNumbers?: string; // Car, Trailer
+  transportCompany?: string;   // [NEW]
   notes?: string;
 }
 
@@ -178,6 +179,7 @@ export interface TransportItem {
   weight?: number;               // Current total weight
   ldm?: number;                  // Loading meters
   carrier?: string;              // Carrier company name
+  confirmedPrice?: number;       // [NEW] Actual cost from logistician
   transitTime?: string;          // e.g. "2 days"
 
   // Multi-truck support

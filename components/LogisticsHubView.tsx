@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Truck, ExternalLink, ChevronDown, ChevronRight, RefreshCw, Save, Undo, Redo, Search, Calendar as CalendarIcon, Mail } from 'lucide-react';
+import { Truck, ExternalLink, ChevronDown, ChevronRight, RefreshCw, Save, Undo, Redo, Search, Calendar as CalendarIcon, Mail, Map as MapIcon } from 'lucide-react';
 import { DatePickerInput } from './DatePickerInput';
+import { DeliveryMap } from './DeliveryMap';
 import { storageService } from '../services/storage';
 import { SavedCalculation, SavedLogisticsTransport } from '../services/storage/types';
 import { useAuth } from '../contexts/AuthContext';
@@ -36,8 +37,8 @@ const calculateSuggestedWeight = (data: CalculationData, transport: TransportIte
 // Flattened row for the datagrid
 interface HubRow {
     id: string; // Composite ID
-    type: 'GROUP' | 'TRUCK';
-    parentId?: string; // For TRUCK rows
+    type: 'PROJECT' | 'GROUP' | 'TRUCK';
+    parentId?: string; // For TRUCK or GROUP (project) rows
 
     // Data References
     projectId: string;
@@ -104,9 +105,11 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
 
     // UI State
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+    const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
     const [hiddenProjectIds, setHiddenProjectIds] = useState<Set<string>>(new Set());
     const [filterText, setFilterText] = useState('');
     const [showGantt, setShowGantt] = useState(true);
+    const [showMap, setShowMap] = useState(false);
 
     // --- LOAD DATA ---
     const loadData = async () => {
@@ -408,10 +411,24 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
             allTransport.push({
                 ...tItem,
                 name: `[${pNum}] ${tItem.name || 'Transport'}`,
+                projectNumber: pNum, // Attach project metadata
                 contactPerson: recipient?.contactPerson,
                 contactEmail: recipient?.email
             } as any);
         });
+
+        // [NEW] Sort by Project Number then by date
+        allTransport.sort((a, b) => {
+            if ((a as any).projectNumber !== (b as any).projectNumber) {
+                return ((a as any).projectNumber || '').localeCompare((b as any).projectNumber || '');
+            }
+            const da = a.confirmedDeliveryDate || a.pickupDate || '9999-99-99';
+            const db = b.confirmedDeliveryDate || b.pickupDate || '9999-99-99';
+            return da.localeCompare(db);
+        });
+
+        // Re-order suppliers to match their transport order if possible
+        // (GanttChart will match them via processed IDs anyway, but sorting transport is primary)
 
         // Use earliest order date found as base
         const orderDates = projects.map(p => (p.calc as any).meta?.orderDate).filter(Boolean);
@@ -427,10 +444,76 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
         };
     }, [projects, localState, hiddenProjectIds]);
 
+    const deliveryMapData = useMemo(() => {
+        const data: any[] = [];
+        const projMap = new Map<string, SavedCalculation>(projects.map(p => [p.project_id || 'BezNumeru', p]));
+
+        const entries = Object.entries(localState) as [string, TransportItem][];
+        entries.forEach(([key, tItem]) => {
+            const [pNum] = key.split('|');
+            const project = projMap.get(pNum);
+            if (!project || hiddenProjectIds.has(project.id)) return;
+
+            // Robust data extraction
+            const rawCalc = project.calc as any;
+            if (!rawCalc) return;
+
+            let activeData: CalculationData | null = null;
+
+            // Case 1: Wrapped in ProjectFile (appState)
+            if (rawCalc.appState) {
+                const mode = rawCalc.appState.mode || 'INITIAL';
+                activeData = mode === 'FINAL' ? rawCalc.appState.final : rawCalc.appState.initial;
+            }
+            // Case 2: Wrapped in AppState directly
+            else if (rawCalc.initial || rawCalc.final) {
+                const mode = rawCalc.mode || 'INITIAL';
+                activeData = mode === 'FINAL' ? rawCalc.final : rawCalc.initial;
+            }
+            // Case 3: CalculationData directly
+            else if (rawCalc.recipient || rawCalc.orderingParty || rawCalc.payer) {
+                activeData = rawCalc;
+            }
+
+            if (!activeData) return;
+
+            // Try different address sources (Recipient is priority, then Ordering Party, then Payer)
+            const getAddr = (addr: any) => {
+                if (!addr) return null;
+                // Exclude 'name' from geocoding string to avoid confusing the search engine with person names
+                const parts = [addr.street, addr.zip, addr.city].filter(Boolean);
+                return parts.length > 0 ? parts.join(', ') : null;
+            };
+
+            const address = getAddr(activeData.recipient);
+
+            if (!address) return;
+
+            const targetDate = tItem.isSupplierOrganized ? tItem.confirmedDeliveryDate : tItem.pickupDate;
+
+            // Get supplier names
+            const linkedIds = tItem.linkedSupplierIds || [];
+            if (tItem.supplierId) linkedIds.push(tItem.supplierId);
+            const suppliers = (activeData.suppliers || [])
+                .filter((s: any) => linkedIds.includes(s.id))
+                .map((s: any) => s.name);
+
+            data.push({
+                projectId: project.id,
+                projectNumber: pNum,
+                customerName: project.customer_name || activeData.orderingParty?.name || activeData.recipient?.name || 'Klient',
+                address,
+                deliveryDate: targetDate ? toEuropeanDateString(targetDate) : 'Nie ustalono',
+                suppliers: suppliers.length > 0 ? suppliers : ['Własny']
+            });
+        });
+        return data;
+    }, [projects, localState, hiddenProjectIds]);
+
     // --- DISPLAY MODEL ---
     const gridRows = useMemo(() => {
-        const rows: HubRow[] = [];
         const projMap = new Map<string, SavedCalculation>(projects.map(p => [p.project_id || 'BezNumeru', p]));
+        const projectGroups: Record<string, HubRow[]> = {};
 
         const entries = Object.entries(localState) as [string, TransportItem][];
         entries.forEach(([key, tItem]) => {
@@ -442,7 +525,6 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                 !(project.customer_name || '').toLowerCase().includes(filterText.toLowerCase())) return;
 
             const calcData = project.calc as CalculationData;
-
             let vendor = 'Nieznany';
             if (tItem.isSupplierOrganized && tItem.supplierId) {
                 vendor = calcData.suppliers?.find(s => s.id === tItem.supplierId)?.name || 'Dostawca';
@@ -452,7 +534,9 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                 vendor = 'Transport Własny';
             }
 
-            rows.push({
+            if (!projectGroups[pNum]) projectGroups[pNum] = [];
+
+            projectGroups[pNum].push({
                 id: key,
                 type: 'GROUP',
                 projectId: project.id,
@@ -465,64 +549,117 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                 deliveryDate: tItem.isSupplierOrganized ? tItem.confirmedDeliveryDate || '' : tItem.pickupDate || '',
                 driverInfo: '',
                 regNumber: '',
-                price: tItem.totalPrice,
+                price: tItem.confirmedPrice || tItem.totalPrice,
                 currency: tItem.currency,
                 comments: '',
                 originalProject: project,
                 transportData: tItem,
                 suggestedWeight: calculateSuggestedWeight(calcData, tItem)
             });
+        });
 
-            if (expandedGroups.has(key)) {
-                (tItem.trucks || []).forEach((truck, idx) => {
-                    rows.push({
-                        id: `${key}|${truck.id}`,
-                        type: 'TRUCK',
-                        parentId: key,
-                        projectId: project.id,
-                        projectNumber: pNum,
-                        transportId: tId,
-                        customerName: '',
-                        vendorName: `Auto #${idx + 1}`,
-                        isSupplierOrganized: tItem.isSupplierOrganized,
-                        loadingDate: truck.loadingDates || '',
-                        deliveryDate: truck.deliveryDate || '',
-                        driverInfo: truck.driverInfo || '',
-                        regNumber: truck.registrationNumbers || '',
-                        price: 0,
-                        currency: tItem.currency,
-                        comments: truck.notes || '',
-                        originalProject: project,
-                        transportData: tItem,
-                        truckData: truck
-                    });
+        const finalRows: HubRow[] = [];
+
+        // Sort projects alphabetically
+        const sortedProjectNumbers = Object.keys(projectGroups).sort((a, b) => a.localeCompare(b));
+
+        sortedProjectNumbers.forEach(pNum => {
+            const transports = projectGroups[pNum].sort((a, b) => {
+                const da = a.deliveryDate || a.loadingDate || '9999-99-99';
+                const db = b.deliveryDate || b.loadingDate || '9999-99-99';
+                return da.localeCompare(db);
+            });
+
+            const isCollapsed = collapsedProjects.has(pNum);
+            const firstT = transports[0];
+
+            // Add Project Summary Row
+            finalRows.push({
+                ...firstT,
+                id: `PROJECT|${pNum}`,
+                type: 'PROJECT',
+                vendorName: `${transports.length} transport(y)`,
+                price: transports.reduce((sum, t) => sum + (t.transportData.confirmedPrice || t.transportData.totalPrice), 0),
+                suggestedWeight: transports.reduce((sum, t) => sum + (t.suggestedWeight || 0), 0)
+            });
+
+            if (!isCollapsed) {
+                transports.forEach(tRow => {
+                    finalRows.push(tRow);
+                    if (expandedGroups.has(tRow.id)) {
+                        (tRow.transportData.trucks || []).forEach((truck, idx) => {
+                            finalRows.push({
+                                id: `${tRow.id}|${truck.id}`,
+                                type: 'TRUCK',
+                                parentId: tRow.id,
+                                projectId: tRow.projectId,
+                                projectNumber: pNum,
+                                transportId: tRow.transportId,
+                                customerName: '',
+                                vendorName: `Auto #${idx + 1}`,
+                                isSupplierOrganized: tRow.isSupplierOrganized,
+                                loadingDate: truck.loadingDates || '',
+                                deliveryDate: truck.deliveryDate || '',
+                                driverInfo: truck.driverInfo || '',
+                                regNumber: truck.registrationNumbers || '',
+                                price: 0,
+                                currency: tRow.currency,
+                                comments: truck.notes || '',
+                                originalProject: tRow.originalProject,
+                                transportData: tRow.transportData,
+                                truckData: truck
+                            });
+                        });
+                    }
                 });
             }
         });
 
-        const groups = rows.filter(r => r.type === 'GROUP').sort((a, b) => {
-            const dateA = a.deliveryDate || a.loadingDate || '9999-99-99';
-            const dateB = b.deliveryDate || b.loadingDate || '9999-99-99';
-            return dateA.localeCompare(dateB);
-        });
-
-        const finalRows: HubRow[] = [];
-        groups.forEach(g => {
-            finalRows.push(g);
-            if (expandedGroups.has(g.id)) {
-                const children = rows.filter(r => r.type === 'TRUCK' && r.parentId === g.id);
-                finalRows.push(...children);
-            }
-        });
-
         return finalRows;
-    }, [projects, localState, hiddenProjectIds, filterText, expandedGroups]);
+    }, [projects, localState, hiddenProjectIds, filterText, expandedGroups, collapsedProjects]);
 
     const toggleExpand = (id: string) => {
         setExpandedGroups(prev => {
             const next = new Set(prev);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
+            const isExpanding = !next.has(id);
+
+            if (isExpanding) {
+                // Auto-initialize trucks if they don't exist but trucksCount > 0
+                const [pNum, tId] = id.split('|');
+                const tItem = localState[id];
+
+                if (tItem && tItem.trucksCount > 0 && (!tItem.trucks || tItem.trucks.length < tItem.trucksCount)) {
+                    let newTrucks = [...(tItem.trucks || [])];
+                    for (let i = newTrucks.length; i < tItem.trucksCount; i++) {
+                        newTrucks.push({
+                            id: Math.random().toString(36).substr(2, 9),
+                            loadingDates: tItem.pickupDate || '',
+                            deliveryDate: tItem.confirmedDeliveryDate || '',
+                            driverInfo: '',
+                            registrationNumbers: ''
+                        });
+                    }
+
+                    // Update localState immediately
+                    setLocalState(curr => ({
+                        ...curr,
+                        [id]: { ...tItem, trucks: newTrucks }
+                    }));
+                }
+
+                next.add(id);
+            } else {
+                next.delete(id);
+            }
+            return next;
+        });
+    };
+
+    const toggleProjectCollapse = (pNum: string) => {
+        setCollapsedProjects(prev => {
+            const next = new Set(prev);
+            if (next.has(pNum)) next.delete(pNum);
+            else next.add(pNum);
             return next;
         });
     };
@@ -562,6 +699,12 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                         className={`p-2 rounded-lg transition-colors flex items-center gap-2 font-bold text-xs ${showGantt ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-white dark:bg-zinc-900 border border-zinc-200 text-zinc-500'}`}
                     >
                         <CalendarIcon size={18} /> {showGantt ? 'Ukryj Wykres' : 'Pokaż Wykres'}
+                    </button>
+                    <button
+                        onClick={() => setShowMap(!showMap)}
+                        className={`p-2 rounded-lg transition-colors flex items-center gap-2 font-bold text-xs ${showMap ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-white dark:bg-zinc-900 border border-zinc-200 text-zinc-500'}`}
+                    >
+                        <MapIcon size={18} /> {showMap ? 'Ukryj Mapę' : 'Pokaż Mapę'}
                     </button>
                     <button
                         onClick={loadData}
@@ -623,7 +766,7 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                             <CalendarIcon size={14} /> Harmonogram Dostaw (Globalny)
                         </span>
                     </div>
-                    <div className="h-[600px]">
+                    <div className="flex-1 min-h-[400px]">
                         <GanttChart
                             suppliers={ganttData.suppliers}
                             transport={ganttData.transport}
@@ -636,6 +779,31 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                             expandedGroupsProp={expandedGroups}
                             onToggleGroup={toggleExpand}
                         />
+                    </div>
+                </div>
+            )}
+
+            {/* MAP SECTION */}
+            {showMap && (
+                <div className="mb-8 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm bg-white dark:bg-zinc-950">
+                    <div className="p-3 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center">
+                        <span className="text-xs font-bold uppercase text-zinc-400 tracking-wider flex items-center gap-2">
+                            <MapIcon size={14} /> Mapa Miejsc Docelowych Dostaw
+                        </span>
+                        <div className="text-[10px] text-zinc-400 font-medium">
+                            {deliveryMapData.length > 0 ? `Pokazano ${deliveryMapData.length} lokalizacji` : 'Brak lokalizacji do wyświetlenia'}
+                        </div>
+                    </div>
+                    <div className="p-4">
+                        {deliveryMapData.length > 0 ? (
+                            <DeliveryMap deliveries={deliveryMapData} />
+                        ) : (
+                            <div className="h-[200px] flex flex-col items-center justify-center text-zinc-400 gap-2 border-2 border-dashed border-zinc-100 dark:border-zinc-800 rounded-lg">
+                                <Search size={24} />
+                                <p className="text-sm">Nie znaleziono projektów z danymi adresowymi do wyświetlenia na mapie.</p>
+                                <p className="text-[10px]">Upewnij się, że odbiorca projektu ma wpisane miasto lub ulicę.</p>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -653,59 +821,118 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                 <th className="px-4 py-3">Data Dostawy</th>
                                 <th className="px-4 py-3">Kierowca / Dane</th>
                                 <th className="px-4 py-3">Rejestracja</th>
+                                <th className="px-4 py-3 w-32">Firma Transp.</th>
                                 <th className="px-4 py-3 w-32">Komentarz</th>
                                 <th className="px-4 py-3 text-right">Opcje</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                             {gridRows.map((row) => {
+                                const isProject = row.type === 'PROJECT';
                                 const isGroup = row.type === 'GROUP';
+                                const isTruck = row.type === 'TRUCK';
+
+                                if (isProject) {
+                                    const isCollapsed = collapsedProjects.has(row.projectNumber);
+                                    return (
+                                        <tr key={row.id} className="bg-zinc-100/80 dark:bg-zinc-800/80 border-l-4 border-l-zinc-400 group">
+                                            <td className="px-4 py-1.5 text-center">
+                                                <button onClick={() => toggleProjectCollapse(row.projectNumber)} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-zinc-600">
+                                                    {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                                                </button>
+                                            </td>
+                                            <td className="px-4 py-1.5">
+                                                <div className="font-black text-[12px] text-zinc-900 dark:text-white uppercase tracking-tighter leading-none">{row.projectNumber}</div>
+                                                <div className="text-[9px] font-bold text-zinc-500 truncate max-w-[200px] leading-tight">{row.customerName}</div>
+                                            </td>
+                                            <td className="px-4 py-1.5" colSpan={5}>
+                                                <div className="flex items-center gap-4">
+                                                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{row.vendorName}</span>
+                                                    {isCollapsed && (
+                                                        <span className="text-[9px] bg-zinc-200 dark:bg-zinc-700 px-2 py-0.5 rounded text-zinc-600 dark:text-zinc-400 font-mono">
+                                                            Suma: {row.suggestedWeight.toLocaleString()} kg
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-1.5 text-right" colSpan={3}>
+                                                <div className="text-right">
+                                                    <div className="text-[11px] font-black text-zinc-800 dark:text-zinc-200 font-mono">
+                                                        {row.price > 0 ? row.price.toLocaleString() : '-'} {row.currency}
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                }
+
                                 if (isGroup) {
                                     const tItem = row.transportData;
                                     const isExpanded = expandedGroups.has(row.id);
+                                    const isSuppLayer = row.isSupplierOrganized;
+
                                     return (
-                                        <tr key={row.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors group">
+                                        <tr key={row.id} className={`transition-colors group border-l-4 border-zinc-200 dark:border-zinc-700 ${isSuppLayer
+                                            ? 'bg-amber-50/40 dark:bg-amber-900/10 hover:bg-amber-50/60 dark:hover:bg-amber-900/20'
+                                            : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/30'
+                                            }`}>
                                             <td className="px-4 py-3 text-center">
                                                 <button onClick={() => toggleExpand(row.id)} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-zinc-400">
                                                     {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                                                 </button>
                                             </td>
-                                            <td className="px-4 py-3">
-                                                <div className="font-bold text-xs">{row.projectNumber}</div>
-                                                <div className="text-[10px] text-zinc-500 truncate max-w-[150px]">{row.customerName}</div>
+                                            <td className="px-4 py-3 pl-12 relative">
+                                                <div className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-px bg-zinc-300 dark:bg-zinc-600"></div>
+                                                <div className="text-[11px] font-bold text-zinc-400">{row.projectNumber}</div>
+                                                <div className="text-[10px] text-zinc-400 truncate max-w-[150px]">{row.customerName}</div>
                                             </td>
                                             <td className="px-4 py-3">
-                                                <div className="font-bold text-blue-600 text-xs truncate max-w-[150px]">{row.vendorName}</div>
+                                                <div className={`font-bold text-xs truncate max-w-[150px] ${isSuppLayer ? 'text-amber-600' : 'text-blue-600'}`}>{row.vendorName}</div>
                                                 <div className="flex gap-2 items-center mt-1 text-[9px] uppercase font-bold text-zinc-400">
-                                                    {row.isSupplierOrganized ? 'Dostawca' : 'JH Logistyka'}
+                                                    {isSuppLayer ? 'Dostawca' : 'JH Logistyka'}
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3">
                                                 <DatePickerInput
-                                                    className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-32 outline-none"
+                                                    className="bg-transparent border-b border-zinc-200 dark:border-zinc-800 px-1 py-0.5 text-xs w-28 outline-none focus:border-blue-500"
                                                     value={tItem.pickupDate || ''}
                                                     onChange={(val) => handleUpdateTransport(row.projectNumber, row.transportId, { pickupDate: val })}
                                                 />
                                             </td>
                                             <td className="px-4 py-3">
                                                 <DatePickerInput
-                                                    className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-32 outline-none"
+                                                    className="bg-transparent border-b border-zinc-200 dark:border-zinc-800 px-1 py-0.5 text-xs w-28 outline-none focus:border-blue-500"
                                                     value={tItem.confirmedDeliveryDate || ''}
                                                     onChange={(val) => handleUpdateTransport(row.projectNumber, row.transportId, { confirmedDeliveryDate: val })}
                                                 />
                                             </td>
-                                            <td className="px-4 py-3 text-xs text-zinc-400 italic" colSpan={2}>Edycja wierszy (rozwiń)</td>
-                                            <td className="px-4 py-3"></td>
+                                            <td className="px-4 py-3 text-xs text-zinc-400 italic" colSpan={3}>
+                                                <div className="flex items-center gap-2 opacity-50">
+                                                    <Truck size={12} /> {tItem.trucksCount} aut(a) - rozwiń do edycji
+                                                </div>
+                                            </td>
                                             <td className="px-4 py-3 text-right">
-                                                <div className="flex justify-end gap-2 items-center">
-                                                    <div className="text-right mr-2">
-                                                        <div className="text-xs font-bold">{tItem.totalPrice > 0 ? tItem.totalPrice.toLocaleString() : '-'} {tItem.currency}</div>
-                                                        <div className="text-[9px] text-zinc-400 uppercase">{tItem.trucksCount} aut(a)</div>
+                                                <div className="text-right mr-2 flex flex-col items-end">
+                                                    <div className="text-[9px] text-zinc-400 font-mono italic">Sugerowana: {tItem.totalPrice > 0 ? tItem.totalPrice.toLocaleString() : '-'} {tItem.currency}</div>
+                                                    <div className="flex items-center gap-1">
+                                                        <input
+                                                            type="number"
+                                                            placeholder="Cena potw."
+                                                            className="bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-0.5 text-[10px] w-20 font-bold outline-none focus:border-blue-500"
+                                                            value={tItem.confirmedPrice || ''}
+                                                            onChange={(e) => handleUpdateTransport(row.projectNumber, row.transportId, { confirmedPrice: parseFloat(e.target.value) || 0 })}
+                                                        />
+                                                        <span className="text-[10px] font-bold">{tItem.currency}</span>
                                                     </div>
+                                                    <div className="text-[9px] text-zinc-400 font-mono italic mt-0.5">{row.suggestedWeight?.toLocaleString()} kg</div>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <div className="flex justify-end gap-1 items-center">
                                                     <button onClick={() => handleSendMail(row)} className="p-2 hover:bg-amber-50 dark:hover:bg-amber-900/30 text-amber-600 rounded-lg border border-transparent hover:border-amber-200" title="Wyślij powiadomienie">
                                                         <Mail size={16} />
                                                     </button>
-                                                    <button onClick={() => handleOpenProjectWithSync(row.originalProject)} className="p-2 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-600 rounded-lg border border-transparent hover:border-blue-200">
+                                                    <button onClick={() => handleOpenProjectWithSync(row.originalProject)} className="p-2 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-600 rounded-lg border border-transparent hover:border-blue-200" title="Otwórz projekt">
                                                         <ExternalLink size={16} />
                                                     </button>
                                                 </div>
@@ -717,17 +944,19 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                     if (!truck) return null;
                                     return (
                                         <tr key={row.id} className="bg-zinc-50/50 dark:bg-zinc-900/30 border-l-4 border-l-blue-400">
-                                            <td className="px-4 py-2"></td>
+                                            <td className="px-4 py-2 text-center">
+                                                <button onClick={() => handleUpdateTruckCount(row.projectNumber, row.transportId, Math.max(0, row.transportData.trucksCount - 1))} className="text-red-400 hover:text-red-600 text-[10px] uppercase font-bold px-2">Usuń</button>
+                                            </td>
                                             <td className="px-4 py-2 text-center" colSpan={2}>
-                                                <span className="text-[10px] font-bold text-blue-500 uppercase bg-blue-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                                                <span className="text-[10px] font-bold text-blue-500 uppercase bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
                                                     <Truck size={10} /> {row.vendorName}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-2">
-                                                <DatePickerInput className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-32 outline-none" value={truck.loadingDates || ''} onChange={(val) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { loadingDates: val })} />
+                                                <DatePickerInput className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-28 outline-none" value={truck.loadingDates || ''} onChange={(val) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { loadingDates: val })} />
                                             </td>
                                             <td className="px-4 py-2">
-                                                <DatePickerInput className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-32 outline-none" value={truck.deliveryDate || ''} onChange={(val) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { deliveryDate: val })} />
+                                                <DatePickerInput className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-28 outline-none" value={truck.deliveryDate || ''} onChange={(val) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { deliveryDate: val })} />
                                             </td>
                                             <td className="px-4 py-2">
                                                 <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-full outline-none" value={truck.driverInfo || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { driverInfo: e.target.value })} placeholder="Kierowca / Tel" />
@@ -736,11 +965,12 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                                 <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-28 uppercase font-mono outline-none" value={truck.registrationNumbers || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { registrationNumbers: e.target.value })} placeholder="Rejestracja" />
                                             </td>
                                             <td className="px-4 py-2">
+                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-full outline-none" value={truck.transportCompany || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { transportCompany: e.target.value })} placeholder="Firma" />
+                                            </td>
+                                            <td className="px-4 py-2">
                                                 <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1 text-xs w-full outline-none" value={truck.notes || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { notes: e.target.value })} placeholder="Komentarz" />
                                             </td>
-                                            <td className="px-4 py-2 text-right">
-                                                <button onClick={() => handleUpdateTruckCount(row.projectNumber, row.transportId, Math.max(0, row.transportData.trucksCount - 1))} className="text-red-400 hover:text-red-600 text-[10px] uppercase font-bold px-2">Usuń</button>
-                                            </td>
+                                            <td className="px-4 py-2 text-right"></td>
                                         </tr>
                                     );
                                 }

@@ -2069,14 +2069,14 @@ const App: React.FC = () => {
                     />
 
                     {/* Main Layout - Modified to support Bottom Summary */}
-                    <main ref={mainScrollRef} className="flex-1 overflow-y-auto w-full max-w-[1920px] mx-auto grid grid-cols-1 xl:grid-cols-12 items-start relative gap-0 scroll-smooth">
+                    <main ref={mainScrollRef} className="flex-1 overflow-y-auto w-full grid grid-cols-1 xl:grid-cols-12 items-start relative gap-0 scroll-smooth">
 
                         {/* LEFT COLUMN (Forms) - Expanded */}
                         {appState.viewMode === ViewMode.CALCULATOR && (
                             <div className="xl:col-span-10 p-1 md:p-6 pb-20 md:pb-32 relative">
                                 {/* ScrollSpy Removed from here, moved to Sidebar */}
 
-                                <div className="max-w-[1350px] mx-auto space-y-6">
+                                <div className="max-w-[1920px] mx-auto space-y-6 px-4 md:px-6">
                                     {isFinal ? (
                                         <FinalCalculationView
                                             data={appState.final}

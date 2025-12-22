@@ -1,6 +1,5 @@
-
-import React, { useState, useEffect } from 'react';
-import { toISODateString, toEuropeanDateString, parseEuropeanDate } from '../services/dateUtils';
+import React from 'react';
+import { toEuropeanDateString } from '../services/dateUtils';
 
 interface Props {
     value: string; // YYYY-MM-DD
@@ -19,60 +18,39 @@ export const DatePickerInput: React.FC<Props> = ({
     disabled,
     readOnly
 }) => {
-    const [localValue, setLocalValue] = useState('');
-    const [isFocused, setIsFocused] = useState(false);
+    const dateInputRef = React.useRef<HTMLInputElement>(null);
 
-    // Sync with parent value
-    useEffect(() => {
-        if (!isFocused) {
-            setLocalValue(toEuropeanDateString(value));
-        }
-    }, [value, isFocused]);
-
-    const handleBlur = () => {
-        setIsFocused(false);
-        if (readOnly || disabled) return;
-
-        const parsed = parseEuropeanDate(localValue);
-        if (parsed) {
-            const iso = toISODateString(parsed);
-            if (iso !== value) {
-                onChange(iso);
-            }
-            setLocalValue(toEuropeanDateString(iso));
-        } else {
-            // Revert if invalid
-            setLocalValue(toEuropeanDateString(value));
-        }
-    };
-
-    const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-        setIsFocused(true);
-        e.currentTarget.select();
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') {
-            e.currentTarget.blur();
-        }
-        if (e.key === 'Escape') {
-            setLocalValue(toEuropeanDateString(value));
-            e.currentTarget.blur();
+    const handleTextClick = () => {
+        if (disabled || readOnly) return;
+        try {
+            (dateInputRef.current as any)?.showPicker();
+        } catch (e) {
+            // Fallback for older browsers or issues
+            dateInputRef.current?.focus();
         }
     };
 
     return (
-        <input
-            type="text"
-            className={className}
-            value={localValue}
-            onChange={(e) => setLocalValue(e.target.value)}
-            onBlur={handleBlur}
-            onFocus={handleFocus}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            disabled={disabled || readOnly}
-            autoComplete="off"
-        />
+        <div className="relative inline-block w-full">
+            <input
+                type="text"
+                className={className}
+                value={toEuropeanDateString(value)}
+                readOnly
+                onClick={handleTextClick}
+                placeholder={placeholder}
+                disabled={disabled}
+                autoComplete="off"
+            />
+            <input
+                ref={dateInputRef}
+                type="date"
+                className="absolute opacity-0 pointer-events-none inset-0 w-full h-full -z-10"
+                value={value || ''}
+                onChange={(e) => onChange(e.target.value)}
+                disabled={disabled}
+                autoComplete="off"
+            />
+        </div>
     );
 };

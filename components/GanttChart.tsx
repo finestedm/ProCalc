@@ -43,6 +43,12 @@ const addBusinessDays = (date: Date, days: number): Date => {
     return result;
 };
 
+const addDays = (date: Date, days: number): Date => {
+    let result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
+};
+
 const countBusinessDays = (startDate: Date, endDate: Date): number => {
     let count = 0;
     let curDate = new Date(startDate);
@@ -213,9 +219,9 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                     allDates.push(...truckDelDates);
 
                     const tStart = truckLoadDates.length > 0 ? truckLoadDates[0] : (t.pickupDate ? (parseLocalISODate(t.pickupDate) || orderDate) : orderDate);
-                    const tEndRaw = truckDelDates.length > 0 ? truckDelDates[truckDelDates.length - 1] : addBusinessDays(tStart, 1);
+                    const tEndRaw = truckDelDates.length > 0 ? truckDelDates[truckDelDates.length - 1] : addDays(tStart, 1);
                     // Add 1 day if it's a car's delivery date to make it inclusive
-                    const tEnd = truckDelDates.length > 0 ? addBusinessDays(tEndRaw, 1) : tEndRaw;
+                    const tEnd = truckDelDates.length > 0 ? addDays(tEndRaw, 1) : tEndRaw;
 
                     // Create sub-item for truck if parent is expanded
                     truckItems.push({
@@ -230,14 +236,15 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                         prodEnd: tEnd,
                         isJH: true,
                         parentId: t.id,
-                        isChild: true
+                        isChild: true,
+                        projectNumber: (t as any).projectNumber // Attach project number
                     });
                 });
             }
 
             // Absolute Min/Max across all trucks and planned dates
             let summaryStart = orderDate;
-            let summaryEnd = addBusinessDays(orderDate, 2);
+            let summaryEnd = addDays(orderDate, 2);
 
             if (allDates.length > 0) {
                 const sorted = allDates.map(d => {
@@ -248,7 +255,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                 summaryStart = sorted[0];
                 const summaryEndRaw = sorted[sorted.length - 1];
                 // Collective bar should end at the END of the last delivery day
-                summaryEnd = addBusinessDays(summaryEndRaw, 1);
+                summaryEnd = addDays(summaryEndRaw, 1);
             }
 
             items.push({
@@ -267,7 +274,8 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                 contactEmail: (t as any).contactEmail,
                 trucksCount: t.trucksCount,
                 weight: t.weight,
-                childIds: truckItems.map(ti => ti.id)
+                childIds: truckItems.map(ti => ti.id),
+                projectNumber: (t as any).projectNumber // Attach project number
             });
 
             if (expandedGroups.has(t.id)) {
@@ -472,40 +480,9 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
         setCustomOrder([]);
     };
 
-    // --- HEIGHT & RESIZING LOGIC ---
+    // --- HEIGHT LOGIC ---
     const innerContentHeight = HEADER_HEIGHT + (timelineItems.length * ROW_HEIGHT);
     const totalContainerHeight = innerContentHeight + CHROME_HEIGHT;
-    const initialVisibleRows = Math.min(timelineItems.length, DEFAULT_VISIBLE_ROWS);
-    const initialContainerHeight = CHROME_HEIGHT + HEADER_HEIGHT + (initialVisibleRows * ROW_HEIGHT);
-
-    const [containerHeight, setContainerHeight] = useState(initialContainerHeight);
-    const [isResizing, setIsResizing] = useState(false);
-
-    useEffect(() => {
-        if (containerHeight > totalContainerHeight + 50) {
-            setContainerHeight(Math.max(200, totalContainerHeight + 20));
-        }
-    }, [timelineItems.length, totalContainerHeight]);
-
-    const handleResizeMouseDown = (e: React.MouseEvent) => {
-        e.preventDefault();
-        setIsResizing(true);
-        const startY = e.clientY;
-        const startH = containerHeight;
-
-        const onMouseMove = (moveEvent: MouseEvent) => {
-            const deltaY = moveEvent.clientY - startY;
-            setContainerHeight(Math.max(200, Math.min(startH + deltaY, totalContainerHeight + 100)));
-        };
-
-        const onMouseUp = () => {
-            setIsResizing(false);
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-        };
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-    };
 
     // --- 2. SCALE & AXIS ---
     let minDate = new Date(orderDate);
@@ -1413,7 +1390,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
         <div
             ref={mainContainerRef}
             className="bg-white dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 flex flex-col relative"
-            style={{ height: viewMode === 'CALENDAR' ? '700px' : containerHeight }}
+            style={{ height: viewMode === 'CALENDAR' ? '700px' : totalContainerHeight }}
         >
             {/* EDIT ITEM POPOVER (Calendar) */}
             {editPopover && (
@@ -1446,7 +1423,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
             {activeTaskModal && (
                 <div
                     className="absolute z-[100] bg-white dark:bg-zinc-900 shadow-xl border border-zinc-200 dark:border-zinc-700 w-80 rounded-md overflow-hidden animate-fadeIn"
-                    style={{ top: Math.min(activeTaskModal.top, (viewMode === 'CALENDAR' ? 400 : containerHeight - 300)), left: 280 }}
+                    style={{ top: Math.min(activeTaskModal.top, (viewMode === 'CALENDAR' ? 400 : totalContainerHeight - 300)), left: 280 }}
                 >
                     <div className="bg-zinc-50 dark:bg-zinc-800 p-2 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center">
                         <h4 className="text-xs font-bold uppercase text-zinc-600 dark:text-zinc-300">Zadania dla etapu</h4>
@@ -1605,6 +1582,9 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                             <div className="flex-1 overflow-hidden relative">
                                 <div ref={sidebarRef} className="w-full absolute top-0 left-0 right-0 will-change-transform">
                                     {timelineItems.map((item, index) => {
+                                        const prevItem = index > 0 ? timelineItems[index - 1] : null;
+                                        const showProjectSeparator = item.projectNumber && prevItem && prevItem.projectNumber && item.projectNumber !== prevItem.projectNumber;
+
                                         const activeTasks = tasks.filter(t => t.linkedItemId === item.id && !t.isCompleted).length;
                                         const incomingDeps = (installation.dependencies || []).filter(d => d.toId === item.id);
 
@@ -1613,132 +1593,142 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                         const isExpanded = expandedGroups.has(item.id);
 
                                         return (
-                                            <div
-                                                key={item.id}
-                                                className={`border-b border-zinc-100 dark:border-zinc-800 px-2 flex flex-col justify-center transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900 group relative ${isChild ? 'bg-zinc-50/50 dark:bg-zinc-900/30' : ''}`}
-                                                style={{ height: ROW_HEIGHT }}
-                                            >
-                                                <div className="flex justify-between items-center mb-1 gap-2">
-                                                    <div className="flex flex-col gap-0.5 justify-center opacity-0 group-hover:opacity-100 transition-opacity w-4">
-                                                        <button
-                                                            onClick={readOnly ? undefined : () => moveRow(index, 'up')}
-                                                            disabled={index === 0 || readOnly}
-                                                            className="text-zinc-400 hover:text-zinc-800 disabled:opacity-20"
-                                                        >
-                                                            <ArrowUp size={10} />
-                                                        </button>
-                                                        <button
-                                                            onClick={readOnly ? undefined : () => moveRow(index, 'down')}
-                                                            disabled={index === timelineItems.length - 1 || readOnly}
-                                                            className="text-zinc-400 hover:text-zinc-800 disabled:opacity-20"
-                                                        >
-                                                            <ArrowDown size={10} />
-                                                        </button>
+                                            <React.Fragment key={item.id}>
+                                                {showProjectSeparator && (
+                                                    <div className="h-6 bg-zinc-200 dark:bg-zinc-800/80 flex items-center px-4 border-y border-zinc-300 dark:border-zinc-700">
+                                                        <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
+                                                            Projekt: {item.projectNumber}
+                                                        </span>
                                                     </div>
-
-                                                    {/* Toggle Expand for Groups */}
-                                                    {isGroup ? (
-                                                        <button onClick={() => toggleGroup(item.id)} className="p-0.5 text-zinc-500">
-                                                            {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                                                        </button>
-                                                    ) : isChild ? (
-                                                        <div className="w-3"></div> // Indent
-                                                    ) : null}
-
-                                                    <div className={`flex items-center gap-2 flex-1 min-w-0 ${isChild ? 'pl-2 border-l border-zinc-300 dark:border-zinc-700' : ''}`}>
-                                                        {item.type === 'SUPPLIER' && !isChild && <Truck size={12} className="text-blue-500 shrink-0" />}
-                                                        {isChild && <Truck size={12} className="text-zinc-400 shrink-0" />}
-                                                        {isGroup && <Combine size={12} className="text-blue-600 shrink-0" />}
-                                                        {item.type === 'STAGE' && <Layers size={12} className="text-purple-500 shrink-0" />}
-                                                        {item.type === 'CUSTOM' && <PenLine size={12} className="text-zinc-500 shrink-0" />}
-
-                                                        {item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' ? (
-                                                            <div className={`font-bold text-xs truncate ${isChild ? 'text-zinc-500 dark:text-zinc-400' : 'text-zinc-800 dark:text-zinc-200'}`} title={item.name}>{item.name}</div>
-                                                        ) : (
-                                                            <input
-                                                                type="text"
-                                                                className={`font-bold text-xs text-zinc-800 dark:text-zinc-200 bg-transparent border-b border-transparent outline-none w-full ${readOnly ? '' : 'hover:border-zinc-300'}`}
-                                                                value={item.name}
-                                                                onChange={(e) => item.type === 'STAGE' ? updateStageName(item.id, e.target.value) : updateCustomItemName(item.id, e.target.value)}
-                                                                readOnly={readOnly}
-                                                            />
-                                                        )}
-                                                    </div>
-                                                    <div className="flex items-center gap-1">
-                                                        {isGroup && (
+                                                )}
+                                                <div
+                                                    className={`border-b border-zinc-100 dark:border-zinc-800 px-2 flex flex-col justify-center transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900 group relative ${isChild ? 'bg-zinc-50/50 dark:bg-zinc-900/30' : ''}`}
+                                                    style={{ height: ROW_HEIGHT }}
+                                                >
+                                                    <div className="flex justify-between items-center mb-1 gap-2">
+                                                        <div className="flex flex-col gap-0.5 justify-center opacity-0 group-hover:opacity-100 transition-opacity w-4">
                                                             <button
-                                                                onClick={() => handleSendMail(item)}
-                                                                className="p-1 rounded text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                                                                title={`Wyślij powiadomienie do: ${item.contactPerson || 'brak osoby'}`}
+                                                                onClick={readOnly ? undefined : () => moveRow(index, 'up')}
+                                                                disabled={index === 0 || readOnly}
+                                                                className="text-zinc-400 hover:text-zinc-800 disabled:opacity-20"
                                                             >
-                                                                <Mail size={12} />
+                                                                <ArrowUp size={10} />
                                                             </button>
-                                                        )}
-                                                        {/* TASK BUTTON */}
-                                                        <button
-                                                            onClick={(e) => handleTaskClick(e, item.id, item.type)}
-                                                            className={`p-1 rounded transition-colors relative ${activeTasks > 0 ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/20' : 'text-zinc-300 hover:text-zinc-500 hover:bg-zinc-100'}`}
-                                                            title="Zadania / Notatki"
-                                                        >
-                                                            <ClipboardList size={12} />
-                                                            {activeTasks > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full text-[7px] text-white flex items-center justify-center font-bold">{activeTasks}</span>}
-                                                        </button>
+                                                            <button
+                                                                onClick={readOnly ? undefined : () => moveRow(index, 'down')}
+                                                                disabled={index === timelineItems.length - 1 || readOnly}
+                                                                className="text-zinc-400 hover:text-zinc-800 disabled:opacity-20"
+                                                            >
+                                                                <ArrowDown size={10} />
+                                                            </button>
+                                                        </div>
 
-                                                        {item.type === 'CUSTOM' && !readOnly && (
-                                                            <button onClick={() => handleDeleteCustomRow(item.id)} className="text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12} /></button>
-                                                        )}
-                                                        {item.isDateEstimated && !isGroup && <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" title="Data szacunkowa"></span>}
-                                                    </div>
-                                                </div>
+                                                        {/* Toggle Expand for Groups */}
+                                                        {isGroup ? (
+                                                            <button onClick={() => toggleGroup(item.id)} className="p-0.5 text-zinc-500">
+                                                                {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                                                            </button>
+                                                        ) : isChild ? (
+                                                            <div className="w-3"></div> // Indent
+                                                        ) : null}
 
-                                                {!isCompact && (
-                                                    <div className={`grid grid-cols-2 gap-2 text-[10px] mb-1 pl-6 transition-all duration-300`}>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-zinc-400 text-[9px] uppercase font-bold">{item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' ? 'Produkcja' : 'Start'}</span>
-                                                            {item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP' ? (
-                                                                <DatePickerInput
-                                                                    className={`bg-transparent border-b border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 w-full outline-none p-0 text-[10px] h-4 ${readOnly ? '' : 'focus:border-amber-500'}`}
-                                                                    value={toISODateString(item.prodStart)}
-                                                                    onChange={(val) => handleDateChange(item.id, item.type, 'start', val)}
-                                                                    disabled={readOnly}
+                                                        <div className={`flex items-center gap-2 flex-1 min-w-0 ${isChild ? 'pl-2 border-l border-zinc-300 dark:border-zinc-700' : ''}`}>
+                                                            {item.type === 'SUPPLIER' && !isChild && <Truck size={12} className="text-blue-500 shrink-0" />}
+                                                            {isChild && <Truck size={12} className="text-zinc-400 shrink-0" />}
+                                                            {isGroup && <Combine size={12} className="text-blue-600 shrink-0" />}
+                                                            {item.type === 'STAGE' && <Layers size={12} className="text-purple-500 shrink-0" />}
+                                                            {item.type === 'CUSTOM' && <PenLine size={12} className="text-zinc-500 shrink-0" />}
+
+                                                            {item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' ? (
+                                                                <div className={`font-bold text-xs truncate ${isChild ? 'text-zinc-500 dark:text-zinc-400' : 'text-zinc-800 dark:text-zinc-200'}`} title={item.name}>{item.name}</div>
+                                                            ) : (
+                                                                <input
+                                                                    type="text"
+                                                                    className={`font-bold text-xs text-zinc-800 dark:text-zinc-200 bg-transparent border-b border-transparent outline-none w-full ${readOnly ? '' : 'hover:border-zinc-300'}`}
+                                                                    value={item.name}
+                                                                    onChange={(e) => item.type === 'STAGE' ? updateStageName(item.id, e.target.value) : updateCustomItemName(item.id, e.target.value)}
+                                                                    readOnly={readOnly}
                                                                 />
-                                                            ) : <span className="text-zinc-500 font-mono">{toEuropeanDateString(item.prodStart)}</span>}
+                                                            )}
                                                         </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-zinc-400 text-[9px] uppercase font-bold">{item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' ? 'Dostawa' : 'Koniec'}</span>
-                                                            <DatePickerInput
-                                                                className={`bg-transparent border-b border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 w-full outline-none p-0 text-[10px] h-4 font-bold ${readOnly ? '' : 'focus:border-amber-500'}`}
-                                                                value={toISODateString(item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' ? item.delStart : item.end)}
-                                                                onChange={(val) => handleDateChange(item.id, item.type, 'end', val)}
-                                                                disabled={isChild || readOnly}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                )}
+                                                        <div className="flex items-center gap-1">
+                                                            {isGroup && (
+                                                                <button
+                                                                    onClick={() => handleSendMail(item)}
+                                                                    className="p-1 rounded text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                                                    title={`Wyślij powiadomienie do: ${item.contactPerson || 'brak osoby'}`}
+                                                                >
+                                                                    <Mail size={12} />
+                                                                </button>
+                                                            )}
+                                                            {/* TASK BUTTON */}
+                                                            <button
+                                                                onClick={(e) => handleTaskClick(e, item.id, item.type)}
+                                                                className={`p-1 rounded transition-colors relative ${activeTasks > 0 ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/20' : 'text-zinc-300 hover:text-zinc-500 hover:bg-zinc-100'}`}
+                                                                title="Zadania / Notatki"
+                                                            >
+                                                                <ClipboardList size={12} />
+                                                                {activeTasks > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full text-[7px] text-white flex items-center justify-center font-bold">{activeTasks}</span>}
+                                                            </button>
 
-                                                {/* DEPENDENCY BADGES */}
-                                                {incomingDeps.length > 0 && !isCompact && (
-                                                    <div className="flex flex-wrap gap-1 pl-6">
-                                                        {incomingDeps.map(dep => {
-                                                            const sourceItem = timelineItems.find(i => i.id === dep.fromId);
-                                                            return (
-                                                                <div key={dep.id} className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-[9px] text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 group/badge">
-                                                                    <Link size={8} />
-                                                                    <span className="truncate max-w-[80px]">{sourceItem?.name || 'Nieznany'}</span>
-                                                                    <button
-                                                                        onClick={readOnly ? undefined : () => removeDependency(dep.id)}
-                                                                        disabled={readOnly}
-                                                                        className={`ml-1 text-zinc-400 hover:text-red-500 transition-opacity ${readOnly ? 'opacity-0 cursor-default' : 'opacity-0 group-hover/badge:opacity-100'}`}
-                                                                    >
-                                                                        <X size={8} />
-                                                                    </button>
-                                                                </div>
-                                                            );
-                                                        })}
+                                                            {item.type === 'CUSTOM' && !readOnly && (
+                                                                <button onClick={() => handleDeleteCustomRow(item.id)} className="text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12} /></button>
+                                                            )}
+                                                            {item.isDateEstimated && !isGroup && <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" title="Data szacunkowa"></span>}
+                                                        </div>
                                                     </div>
-                                                )}
-                                            </div>
-                                        );
+
+                                                    {!isCompact && (
+                                                        <div className={`grid grid-cols-2 gap-2 text-[10px] mb-1 pl-6 transition-all duration-300`}>
+                                                            <div className="flex flex-col">
+                                                                <span className="text-zinc-400 text-[9px] uppercase font-bold">
+                                                                    {item.type === 'TRANSPORT_GROUP' || item.type === 'TRUCK' ? 'Załadunek' : (item.type === 'SUPPLIER' ? 'Produkcja' : 'Start')}
+                                                                </span>
+                                                                {item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP' ? (
+                                                                    <DatePickerInput
+                                                                        className={`bg-transparent border-b border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 w-full outline-none p-0 text-[10px] h-4 ${readOnly ? '' : 'focus:border-amber-500'}`}
+                                                                        value={toISODateString(item.prodStart)}
+                                                                        onChange={(val) => handleDateChange(item.id, item.type, 'start', val)}
+                                                                        disabled={readOnly}
+                                                                    />
+                                                                ) : <span className="text-zinc-500 font-mono">{toEuropeanDateString(item.prodStart)}</span>}
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <span className="text-zinc-400 text-[9px] uppercase font-bold">{item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' || item.type === 'TRUCK' ? 'Dostawa' : 'Koniec'}</span>
+                                                                <DatePickerInput
+                                                                    className={`bg-transparent border-b border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 w-full outline-none p-0 text-[10px] h-4 font-bold ${readOnly ? '' : 'focus:border-amber-500'}`}
+                                                                    value={toISODateString(item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' ? item.delStart : item.end)}
+                                                                    onChange={(val) => handleDateChange(item.id, item.type, 'end', val)}
+                                                                    disabled={isChild || readOnly}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* DEPENDENCY BADGES */}
+                                                    {incomingDeps.length > 0 && !isCompact && (
+                                                        <div className="flex flex-wrap gap-1 pl-6">
+                                                            {incomingDeps.map(dep => {
+                                                                const sourceItem = timelineItems.find(i => i.id === dep.fromId);
+                                                                return (
+                                                                    <div key={dep.id} className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-[9px] text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 group/badge">
+                                                                        <Link size={8} />
+                                                                        <span className="truncate max-w-[80px]">{sourceItem?.name || 'Nieznany'}</span>
+                                                                        <button
+                                                                            onClick={readOnly ? undefined : () => removeDependency(dep.id)}
+                                                                            disabled={readOnly}
+                                                                            className={`ml-1 text-zinc-400 hover:text-red-500 transition-opacity ${readOnly ? 'opacity-0 cursor-default' : 'opacity-0 group-hover/badge:opacity-100'}`}
+                                                                        >
+                                                                            <X size={8} />
+                                                                        </button>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </React.Fragment>
+                                        )
                                     })}
                                 </div>
                             </div>
@@ -1753,7 +1743,10 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                             <div className="relative">
                                 {renderGrid()}
                                 {renderMilestones()}
-                                {timelineItems.map((item) => {
+                                {timelineItems.map((item, index) => {
+                                    const prevItem = index > 0 ? timelineItems[index - 1] : null;
+                                    const showProjectSeparator = item.projectNumber && prevItem && prevItem.projectNumber && item.projectNumber !== prevItem.projectNumber;
+
                                     const originalProdLeft = dateToPx(item.prodStart);
                                     const originalDelLeft = dateToPx(item.delStart);
                                     const prodWidth = Math.max(2, dateToPx(item.prodEnd) - originalProdLeft);
@@ -1794,165 +1787,167 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                     if (item.type === 'CUSTOM') barColor = 'bg-zinc-500 border-zinc-600';
                                     if (item.type === 'TRANSPORT_GROUP') {
                                         barColor = item.isSupplierOrganized
-                                            ? 'bg-zinc-100/30 dark:bg-zinc-800/20 border-zinc-300 dark:border-zinc-700/50 border-dashed text-zinc-400'
-                                            : 'bg-blue-500/20 dark:bg-blue-600/20 border-blue-500 dark:border-blue-400 border-solid';
+                                            ? 'bg-amber-400 border-amber-500 text-amber-900 shadow-amber-500/20'
+                                            : 'bg-blue-600 border-blue-700 text-white';
                                     }
                                     if (item.type === 'TRUCK') barColor = 'bg-blue-500 border-blue-600';
                                     if (item.isChild && item.type !== 'TRUCK') barColor = 'bg-blue-300/50 border-blue-400/50';
 
-                                    const label = (item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP') ? 'Produkcja' : item.name;
+                                    const label = item.type === 'SUPPLIER' ? 'Produkcja' : item.name;
 
                                     const itemTasks = tasks.filter(t => t.linkedItemId === item.id && t.dueDate);
 
                                     return (
-                                        <div
-                                            key={item.id}
-                                            className="relative border-b border-zinc-100 dark:border-zinc-800 hover:bg-black/5 dark:hover:bg-white/5 transition-colors group"
-                                            style={{ height: ROW_HEIGHT }}
-                                            onDoubleClick={(e) => handleGridDoubleClick(e, item)}
-                                        >
-
-                                            {/* Main Bar (Production / Stage / Custom / Group Prod) */}
+                                        <React.Fragment key={item.id}>
+                                            {showProjectSeparator && (
+                                                <div className="h-6 bg-zinc-200/30 dark:bg-zinc-800/20 border-y border-zinc-300/30 dark:border-zinc-700/30" style={{ width: chartWidth }} />
+                                            )}
                                             <div
-                                                className={`absolute top-2 h-5 border rounded shadow-sm flex items-center justify-between z-20 select-none overflow-visible ${barColor} ${(item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP' && item.type !== 'TRUCK') ? 'cursor-grab active:cursor-grabbing' : ''}`}
-                                                style={{ left: renderProdLeft, width: renderProdWidth }}
-                                                onMouseDown={(e) => {
-                                                    if (item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP') {
-                                                        const dType = item.type === 'STAGE' ? 'STAGE_MOVE' : 'CUSTOM_MOVE';
-                                                        handleMouseDownItem(e, item.id, dType);
-                                                    }
-                                                }}
+                                                className="relative border-b border-zinc-100 dark:border-zinc-800 hover:bg-black/5 dark:hover:bg-white/5 transition-colors group"
+                                                style={{ height: ROW_HEIGHT }}
+                                                onDoubleClick={(e) => handleGridDoubleClick(e, item)}
                                             >
-                                                {/* CONNECTORS DOTS (Parent Items Only) */}
-                                                {!item.isChild && (
-                                                    <>
+
+                                                <div
+                                                    className={`absolute ${item.type === 'TRANSPORT_GROUP' || item.type === 'TRUCK' ? 'top-3 h-8 shadow-md' : 'top-2 h-5 shadow-sm'} border rounded flex items-center justify-between z-20 select-none overflow-visible ${barColor} ${(item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP' && item.type !== 'TRUCK') ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                                                    style={{ left: renderProdLeft, width: renderProdWidth }}
+                                                    onMouseDown={(e) => {
+                                                        if (item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP') {
+                                                            const dType = item.type === 'STAGE' ? 'STAGE_MOVE' : 'CUSTOM_MOVE';
+                                                            handleMouseDownItem(e, item.id, dType);
+                                                        }
+                                                    }}
+                                                >
+                                                    {/* CONNECTORS DOTS (Parent Items Only) */}
+                                                    {!item.isChild && (
+                                                        <>
+                                                            <div
+                                                                className="absolute -left-1.5 w-3 h-3 bg-white border-2 border-zinc-400 rounded-full cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-amber-400 hover:scale-125 transition-all z-30"
+                                                                onMouseUp={(e) => handleConnectEnd(e, item.id)}
+                                                                title="Połącz (Upuść tutaj)"
+                                                            ></div>
+                                                            <div
+                                                                className="absolute -right-1.5 w-3 h-3 bg-white border-2 border-zinc-400 rounded-full cursor-crosshair opacity-0 group-hover:opacity-100 hover:bg-amber-400 hover:scale-125 transition-all z-30"
+                                                                onMouseDown={(e) => handleConnectStart(e, item.id)}
+                                                                title="Połącz (Przeciągnij)"
+                                                            ></div>
+                                                        </>
+                                                    )}
+
+                                                    <span className={`text-[9px] font-bold ml-1 whitespace-nowrap px-1 truncate ${item.type === 'TRANSPORT_GROUP' ? (item.isSupplierOrganized ? 'text-zinc-400/80' : 'text-blue-700 dark:text-blue-400') : 'text-white'}`}>{label}</span>
+                                                    {item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP' && (
                                                         <div
-                                                            className="absolute -left-1.5 w-3 h-3 bg-white border-2 border-zinc-400 rounded-full cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-amber-400 hover:scale-125 transition-all z-30"
-                                                            onMouseUp={(e) => handleConnectEnd(e, item.id)}
-                                                            title="Połącz (Upuść tutaj)"
-                                                        ></div>
+                                                            className="w-3 h-full bg-black/20 hover:bg-black/40 cursor-ew-resize flex items-center justify-center transition-colors"
+                                                            onMouseDown={(e) => handleMouseDownItem(e, item.id, item.type === 'STAGE' ? 'STAGE_RESIZE' : 'CUSTOM_RESIZE')}
+                                                        >
+                                                            <GripVertical size={8} className="text-white/70" />
+                                                        </div>
+                                                    )}
+                                                    {item.type === 'CUSTOM' && <div className="absolute right-6 top-0.5 text-[7px] bg-black/30 text-white px-1 rounded">MAN</div>}
+                                                </div>
+
+                                                {/* RENTAL SUB-BARS (Attached to Stage) */}
+                                                {item.rentals && item.rentals.map((rental: any, rIdx: number) => {
+                                                    let rStart;
+                                                    let rEnd;
+
+                                                    if (isDragging === item.id && dragType === 'RENTAL_MOVE' && dragSubType === rental.type) {
+                                                        const deltaPx = dragCurrentX - dragStartX;
+                                                        const deltaDays = Math.round(deltaPx / pxPerDay);
+                                                        rStart = new Date(rental.start);
+                                                        rStart.setDate(rStart.getDate() + deltaDays);
+
+                                                        if (rStart < effectiveParentStart) rStart = new Date(effectiveParentStart);
+
+                                                        rEnd = addBusinessDays(rStart, rental.days);
+                                                    } else {
+                                                        rStart = addBusinessDays(effectiveParentStart, rental.offset);
+                                                        rEnd = addBusinessDays(rStart, rental.days);
+                                                    }
+
+                                                    if (rEnd > effectiveParentEnd) {
+                                                        rEnd = effectiveParentEnd;
+                                                    }
+
+                                                    const rentalStartPx = dateToPx(rStart);
+                                                    const rentalEndPx = dateToPx(rEnd);
+                                                    const rentalWidthPx = Math.max(5, rentalEndPx - rentalStartPx);
+
+                                                    const topOffset = 32 + (rIdx * 12);
+
+                                                    return (
                                                         <div
-                                                            className="absolute -right-1.5 w-3 h-3 bg-white border-2 border-zinc-400 rounded-full cursor-crosshair opacity-0 group-hover:opacity-100 hover:bg-amber-400 hover:scale-125 transition-all z-30"
+                                                            key={`${item.id}-rental-${rIdx}`}
+                                                            className="absolute h-2.5 bg-amber-400 border border-amber-500 rounded shadow-sm z-20 cursor-ew-resize hover:bg-amber-300"
+                                                            style={{ left: rentalStartPx, width: rentalWidthPx, top: topOffset }}
+                                                            onMouseDown={(e) => handleMouseDownItem(e, item.id, 'RENTAL_MOVE', rental.type)}
+                                                            title={`${rental.type === 'forklift' ? 'Wózek' : 'Podnośnik'} (+${rental.offset} dni)`}
+                                                        >
+                                                            <div className="absolute -left-full text-[8px] text-zinc-400 w-full text-right pr-1 opacity-0 group-hover:opacity-100 pointer-events-none">
+                                                                {rental.type === 'forklift' ? 'Wózek' : 'Podn.'}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+
+                                                {/* Delivery Bar (Suppliers, Transport Groups & Trucks) */}
+                                                {/* For Children suppliers in a group, we hide the delivery bar or make it ghosted to imply it's handled by parent */}
+                                                {(item.type === 'SUPPLIER') && !item.isChild && (
+                                                    <div
+                                                        className={`absolute bottom-4 h-4 rounded shadow-sm flex items-center cursor-ew-resize z-20 select-none group/del overflow-visible ${item.type === 'TRANSPORT_GROUP' ? 'bg-blue-600 border border-blue-700' : 'bg-green-500 border border-green-600'}`}
+                                                        style={{ left: renderDelLeft, width: delWidth }}
+                                                        onMouseDown={(e) => handleMouseDownItem(e, item.id, 'DELIVERY')}
+                                                        title="Dostawa (Przesuń, aby zmienić)"
+                                                    >
+                                                        <div
+                                                            className="absolute -right-1.5 w-3 h-3 bg-white border-2 border-zinc-400 rounded-full cursor-crosshair opacity-0 group-hover/del:opacity-100 hover:bg-amber-400 hover:scale-125 transition-all z-30"
                                                             onMouseDown={(e) => handleConnectStart(e, item.id)}
-                                                            title="Połącz (Przeciągnij)"
                                                         ></div>
-                                                    </>
-                                                )}
 
-                                                <span className={`text-[9px] font-bold ml-1 whitespace-nowrap px-1 truncate ${item.type === 'TRANSPORT_GROUP' ? (item.isSupplierOrganized ? 'text-zinc-400/80' : 'text-blue-700 dark:text-blue-400') : 'text-white'}`}>{label}</span>
-                                                {item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP' && (
-                                                    <div
-                                                        className="w-3 h-full bg-black/20 hover:bg-black/40 cursor-ew-resize flex items-center justify-center transition-colors"
-                                                        onMouseDown={(e) => handleMouseDownItem(e, item.id, item.type === 'STAGE' ? 'STAGE_RESIZE' : 'CUSTOM_RESIZE')}
-                                                    >
-                                                        <GripVertical size={8} className="text-white/70" />
+                                                        <div className="w-full h-full flex items-center justify-center pointer-events-none"><Truck size={10} className="text-white" /></div>
                                                     </div>
                                                 )}
-                                                {item.type === 'CUSTOM' && <div className="absolute right-6 top-0.5 text-[7px] bg-black/30 text-white px-1 rounded">MAN</div>}
-                                            </div>
 
-                                            {/* RENTAL SUB-BARS (Attached to Stage) */}
-                                            {item.rentals && item.rentals.map((rental: any, rIdx: number) => {
-                                                let rStart;
-                                                let rEnd;
-
-                                                if (isDragging === item.id && dragType === 'RENTAL_MOVE' && dragSubType === rental.type) {
-                                                    const deltaPx = dragCurrentX - dragStartX;
-                                                    const deltaDays = Math.round(deltaPx / pxPerDay);
-                                                    rStart = new Date(rental.start);
-                                                    rStart.setDate(rStart.getDate() + deltaDays);
-
-                                                    if (rStart < effectiveParentStart) rStart = new Date(effectiveParentStart);
-
-                                                    rEnd = addBusinessDays(rStart, rental.days);
-                                                } else {
-                                                    rStart = addBusinessDays(effectiveParentStart, rental.offset);
-                                                    rEnd = addBusinessDays(rStart, rental.days);
-                                                }
-
-                                                if (rEnd > effectiveParentEnd) {
-                                                    rEnd = effectiveParentEnd;
-                                                }
-
-                                                const rentalStartPx = dateToPx(rStart);
-                                                const rentalEndPx = dateToPx(rEnd);
-                                                const rentalWidthPx = Math.max(5, rentalEndPx - rentalStartPx);
-
-                                                const topOffset = 32 + (rIdx * 12);
-
-                                                return (
+                                                {/* Ghost Delivery Bar for Children to show alignment (Suppliers only, Trucks are now unified) */}
+                                                {item.isChild && item.type !== 'TRUCK' && (
                                                     <div
-                                                        key={`${item.id}-rental-${rIdx}`}
-                                                        className="absolute h-2.5 bg-amber-400 border border-amber-500 rounded shadow-sm z-20 cursor-ew-resize hover:bg-amber-300"
-                                                        style={{ left: rentalStartPx, width: rentalWidthPx, top: topOffset }}
-                                                        onMouseDown={(e) => handleMouseDownItem(e, item.id, 'RENTAL_MOVE', rental.type)}
-                                                        title={`${rental.type === 'forklift' ? 'Wózek' : 'Podnośnik'} (+${rental.offset} dni)`}
+                                                        className={`absolute bottom-4 h-4 border rounded flex items-center z-10 pointer-events-none border-blue-300/50 bg-blue-100/30 opacity-50`}
+                                                        style={{ left: renderDelLeft, width: delWidth }}
                                                     >
-                                                        <div className="absolute -left-full text-[8px] text-zinc-400 w-full text-right pr-1 opacity-0 group-hover:opacity-100 pointer-events-none">
-                                                            {rental.type === 'forklift' ? 'Wózek' : 'Podn.'}
-                                                        </div>
                                                     </div>
-                                                );
-                                            })}
+                                                )}
 
-                                            {/* Delivery Bar (Suppliers, Transport Groups & Trucks) */}
-                                            {/* For Children suppliers in a group, we hide the delivery bar or make it ghosted to imply it's handled by parent */}
-                                            {(item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP') && !item.isChild && (
-                                                <div
-                                                    className={`absolute bottom-4 h-4 rounded shadow-sm flex items-center cursor-ew-resize z-20 select-none group/del overflow-visible ${item.type === 'TRANSPORT_GROUP' ? 'bg-blue-600 border border-blue-700' : 'bg-green-500 border border-green-600'}`}
-                                                    style={{ left: renderDelLeft, width: delWidth }}
-                                                    onMouseDown={(e) => handleMouseDownItem(e, item.id, 'DELIVERY')}
-                                                    title="Dostawa (Przesuń, aby zmienić)"
-                                                >
-                                                    <div
-                                                        className="absolute -right-1.5 w-3 h-3 bg-white border-2 border-zinc-400 rounded-full cursor-crosshair opacity-0 group-hover/del:opacity-100 hover:bg-amber-400 hover:scale-125 transition-all z-30"
-                                                        onMouseDown={(e) => handleConnectStart(e, item.id)}
-                                                    ></div>
+                                                {/* Connector Line for Suppliers */}
+                                                {(item.type === 'SUPPLIER') && <div className="absolute top-4 border-l border-b border-zinc-400 dark:border-zinc-500 rounded-bl-md opacity-30 pointer-events-none" style={{ left: renderProdLeft + renderProdWidth, width: Math.max(0, renderDelLeft - (renderProdLeft + renderProdWidth) + 5), height: 14 }}></div>}
 
-                                                    <div className="w-full h-full flex items-center justify-center pointer-events-none"><Truck size={10} className="text-white" /></div>
-                                                </div>
-                                            )}
+                                                {/* TASK MARKERS */}
+                                                {itemTasks.map(task => {
+                                                    const tDate = new Date(task.dueDate!);
+                                                    tDate.setHours(0, 0, 0, 0);
+                                                    if (tDate < minDate || tDate > maxDate) return null;
 
-                                            {/* Ghost Delivery Bar for Children to show alignment */}
-                                            {item.isChild && (
-                                                <div
-                                                    className={`absolute bottom-4 h-4 border rounded flex items-center z-10 pointer-events-none ${item.type === 'TRUCK' ? 'bg-blue-500 border-blue-600 shadow-sm opacity-100' : 'border-blue-300/50 bg-blue-100/30 opacity-50'}`}
-                                                    style={{ left: renderDelLeft, width: delWidth }}
-                                                >
-                                                    {item.type === 'TRUCK' && <div className="w-full h-full flex items-center justify-center"><Truck size={8} className="text-white" /></div>}
-                                                </div>
-                                            )}
+                                                    const left = dateToPx(tDate);
 
-                                            {/* Connector Line for Suppliers */}
-                                            {(item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP') && <div className="absolute top-4 border-l border-b border-zinc-400 dark:border-zinc-500 rounded-bl-md opacity-30 pointer-events-none" style={{ left: renderProdLeft + renderProdWidth, width: Math.max(0, renderDelLeft - (renderProdLeft + renderProdWidth) + 5), height: 14 }}></div>}
-
-                                            {/* TASK MARKERS */}
-                                            {itemTasks.map(task => {
-                                                const tDate = new Date(task.dueDate!);
-                                                tDate.setHours(0, 0, 0, 0);
-                                                if (tDate < minDate || tDate > maxDate) return null;
-
-                                                const left = dateToPx(tDate);
-
-                                                return (
-                                                    <div
-                                                        key={task.id}
-                                                        className="absolute top-0 bottom-0 z-30 flex flex-col justify-center items-center group/marker"
-                                                        style={{ left: left + (pxPerDay / 2) }}
-                                                    >
+                                                    return (
                                                         <div
-                                                            className={`w-3 h-3 rotate-45 border border-white dark:border-zinc-800 shadow-sm transition-transform hover:scale-125 cursor-pointer ${task.isCompleted ? 'bg-green-500' : 'bg-red-500'}`}
-                                                            onClick={(e) => handleTaskClick(e, item.id, item.type)}
-                                                        ></div>
+                                                            key={task.id}
+                                                            className="absolute top-0 bottom-0 z-30 flex flex-col justify-center items-center group/marker"
+                                                            style={{ left: left + (pxPerDay / 2) }}
+                                                        >
+                                                            <div
+                                                                className={`w-3 h-3 rotate-45 border border-white dark:border-zinc-800 shadow-sm transition-transform hover:scale-125 cursor-pointer ${task.isCompleted ? 'bg-green-500' : 'bg-red-500'}`}
+                                                                onClick={(e) => handleTaskClick(e, item.id, item.type)}
+                                                            ></div>
 
-                                                        <div className="absolute bottom-full mb-1 opacity-0 group-hover/marker:opacity-100 transition-opacity bg-zinc-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-50 pointer-events-none shadow-lg">
-                                                            {task.text}
+                                                            <div className="absolute bottom-full mb-1 opacity-0 group-hover/marker:opacity-100 transition-opacity bg-zinc-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-50 pointer-events-none shadow-lg">
+                                                                {task.text}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    );
+                                                    );
+                                                })}
+                                            </div>
+                                        </React.Fragment>
+                                    )
                                 })}
                             </div>
                         </div>
@@ -1960,13 +1955,6 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                 </div>
             )}
 
-            {/* RESIZE HANDLE */}
-            <div
-                className={`h-4 bg-zinc-100 dark:bg-zinc-800 border-t border-zinc-300 dark:border-zinc-700 flex justify-center items-center cursor-row-resize hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors shrink-0 select-none ${isResizing ? 'bg-amber-100 dark:bg-amber-900/50' : ''}`}
-                onMouseDown={handleResizeMouseDown}
-            >
-                <GripHorizontal size={14} className="text-zinc-400" />
-            </div>
         </div>
     );
 };
