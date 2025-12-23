@@ -238,7 +238,8 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                         isJH: true,
                         parentId: t.id,
                         isChild: true,
-                        projectNumber: (t as any).projectNumber // Attach project number
+                        projectNumber: (t as any).projectNumber, // Attach project number
+                        isStale: t.isStale
                     });
                 });
             }
@@ -278,7 +279,8 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                 childIds: truckItems.map(ti => ti.id),
                 projectNumber: (t as any).projectNumber, // Attach project number
                 city: (t as any).city,
-                address: (t as any).address
+                address: (t as any).address,
+                isStale: t.isStale
             });
 
             if (expandedGroups.has(t.id)) {
@@ -1344,6 +1346,10 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                             if (item.type === 'TRANSPORT_GROUP') barColor = 'bg-blue-50 text-blue-600 border-blue-200 border-dashed';
                                             if (item.type === 'TRUCK') barColor = 'bg-blue-100 text-blue-800 border-blue-300';
 
+                                            if (item.isStale) {
+                                                barColor = 'bg-zinc-100/40 text-zinc-400 border-zinc-200 saturate-0';
+                                            }
+
                                             return (
                                                 <div
                                                     key={`${item.id}-${wIdx}`}
@@ -1611,13 +1617,13 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                             <React.Fragment key={item.id}>
                                                 {showProjectSeparator && (
                                                     <div className="h-6 bg-zinc-200 dark:bg-zinc-800/80 flex items-center px-4 border-y border-zinc-300 dark:border-zinc-700">
-                                                        <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
+                                                        <span className={`text-[9px] font-black uppercase tracking-widest ${item.isStale ? 'text-zinc-400 opacity-50' : 'text-zinc-500 dark:text-zinc-400'}`}>
                                                             Projekt: {item.projectNumber}
                                                         </span>
                                                     </div>
                                                 )}
                                                 <div
-                                                    className={`border-b border-zinc-100 dark:border-zinc-800 px-2 flex flex-col justify-center transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900 group relative ${isChild ? 'bg-zinc-50/50 dark:bg-zinc-900/30' : ''}`}
+                                                    className={`border-b border-zinc-100 dark:border-zinc-800 px-2 flex flex-col justify-center transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900 group relative ${isChild ? 'bg-zinc-50/50 dark:bg-zinc-900/30' : ''} ${item.isStale ? 'opacity-60 saturate-0' : ''}`}
                                                     style={{ height: getRowHeight(item) }}
                                                 >
                                                     <div className="flex justify-between items-center mb-0.5 gap-2">
@@ -1655,13 +1661,13 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
 
                                                             {item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' ? (
                                                                 <div className="flex flex-col min-w-0">
-                                                                    <div className={`font-bold text-xs truncate ${isChild ? 'text-zinc-500 dark:text-zinc-400' : 'text-zinc-800 dark:text-zinc-200'}`} title={item.name}>{item.name}</div>
-                                                                    {item.city && <div className="text-[10px] text-zinc-400 truncate flex items-center gap-1"><MapPin size={8} /> {item.city}</div>}
+                                                                    <div className={`font-bold text-xs truncate ${item.isStale ? 'text-zinc-400' : (isChild ? 'text-zinc-500 dark:text-zinc-400' : 'text-zinc-800 dark:text-zinc-200')}`} title={item.name}>{item.name}</div>
+                                                                    {item.city && <div className={`text-[10px] truncate flex items-center gap-1 ${item.isStale ? 'text-zinc-300' : 'text-zinc-400'}`}><MapPin size={8} /> {item.city}</div>}
                                                                 </div>
                                                             ) : (
                                                                 <input
                                                                     type="text"
-                                                                    className={`font-bold text-xs text-zinc-800 dark:text-zinc-200 bg-transparent border-b border-transparent outline-none w-full ${readOnly ? '' : 'hover:border-zinc-300'}`}
+                                                                    className={`font-bold text-xs bg-transparent border-b border-transparent outline-none w-full ${item.isStale ? 'text-zinc-400' : 'text-zinc-800 dark:text-zinc-200'} ${readOnly ? '' : 'hover:border-zinc-300'}`}
                                                                     value={item.name}
                                                                     onChange={(e) => item.type === 'STAGE' ? updateStageName(item.id, e.target.value) : updateCustomItemName(item.id, e.target.value)}
                                                                     readOnly={readOnly}
@@ -1808,6 +1814,11 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                     }
                                     if (item.type === 'TRUCK') barColor = 'bg-blue-500 border-blue-600';
                                     if (item.isChild && item.type !== 'TRUCK') barColor = 'bg-blue-300/50 border-blue-400/50';
+
+                                    // STALE OVERRIDE
+                                    if (item.isStale) {
+                                        barColor = 'bg-zinc-300/40 border-zinc-400/50 text-zinc-500 saturate-0';
+                                    }
 
                                     const label = item.type === 'SUPPLIER' ? 'Produkcja' : item.name;
 

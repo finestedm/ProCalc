@@ -7,6 +7,8 @@ import { CalculationData, AppState, CalculationMode, Currency, InstallationStage
 import { formatNumber, extractActiveData } from '../services/calculationService';
 import { LogisticsHubView } from './LogisticsHubView';
 import { OrderPreviewModal } from './OrderPreviewModal';
+import { ProjectStatistics } from './ProjectStatistics';
+import { useProjectData } from '../hooks/useProjectData';
 
 interface Props {
     activeProject: CalculationData | null;
@@ -15,8 +17,8 @@ interface Props {
     onShowComparison: () => void;
     onOpenProject: (data: any, stage: string, mode: CalculationMode) => void;
     onBack: () => void;
-    activeTab?: 'DASH' | 'LOGISTICS';
-    onTabChange?: (tab: 'DASH' | 'LOGISTICS') => void;
+    activeTab?: 'DASH' | 'LOGISTICS' | 'STATS';
+    onTabChange?: (tab: 'DASH' | 'LOGISTICS' | 'STATS') => void;
 }
 
 interface DashboardEvent {
@@ -245,14 +247,30 @@ export const DashboardView: React.FC<Props> = ({
     const [lockedEdits, setLockedEdits] = useState<LockedEdit[]>([]);
     const [requestActionError, setRequestActionError] = useState<string | null>(null);
     const [logisticsViewMode, setLogisticsViewMode] = useState<'PENDING' | 'PROCESSED'>('PENDING');
+    const [dashFeedTab, setDashFeedTab] = useState<'ACTIVITY' | 'MY_EDITS'>('ACTIVITY');
 
     // Use prop if available, otherwise local state (fallback)
-    const [localActiveTab, setLocalActiveTab] = useState<'DASH' | 'LOGISTICS'>('DASH');
-    const activeHubTab = onTabChange ? activeTab : localActiveTab;
-    const setActiveHubTab = (tab: 'DASH' | 'LOGISTICS') => {
+    const [localActiveTab, setLocalActiveTab] = useState<'DASH' | 'LOGISTICS' | 'STATS'>('DASH');
+    const activeHubTab = onTabChange ? (activeTab as any) : localActiveTab;
+    const setActiveHubTab = (tab: 'DASH' | 'LOGISTICS' | 'STATS') => {
         if (onTabChange) onTabChange(tab);
         else setLocalActiveTab(tab);
     };
+
+    // --- STATISTICS STATE (Integrated from ProjectManager) ---
+    const [statsFilters, setStatsFilters] = useState<Record<string, any>>({});
+    const [statsActiveFilterPop, setStatsActiveFilterPop] = useState<string | null>(null);
+    const statsData = useProjectData([], [], {}, rawExperiments, 'cloud');
+    // Override filters in the hook if needed, or pass them to it.
+    // Actually our useProjectData needs these to compute stats.
+    // Let's ensure we use the hook correctly in Dashboard.
+
+    // We need to pass statsFilters to useProjectData.
+    // But DashboardView currently doesn't have a way to pass them into the hook easily if we just call it here.
+    // Wait, useProjectData defines its own statsFilters state.
+    // So we should use the one from the hook or pass it in.
+    // Our useProjectData currently doesn't take filters as args, it manages them.
+    // So we just use statsData.statsFilters etc.
 
     // Gantt State
     const [showDrafts, setShowDrafts] = useState(false);
@@ -299,8 +317,28 @@ export const DashboardView: React.FC<Props> = ({
                 return pEngineer === normalizedUser || pSpecialist === normalizedUser;
             });
 
-            setRecentProjects(myMetadata.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5));
-            setRawExperiments(myMetadata as any); // Sync rawExperiments for Logistics Queue
+            setRawExperiments(myMetadata as any);
+
+            // [NEW] Calculate "My Recent Edits" with version status
+            const userEdits = allMetadata.filter(p => p.user_id === profile?.id);
+            const userRecent = userEdits
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                .slice(0, 10)
+                .map(myEdit => {
+                    // Find the latest version of THIS project number across ALL projects
+                    // (Project number is the UID for project files)
+                    const latestGlobal = allMetadata
+                        .filter(p => p.project_id === myEdit.project_id)
+                        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+
+                    return {
+                        ...myEdit,
+                        isOutdated: latestGlobal && latestGlobal.id !== myEdit.id,
+                        latestOperatorId: latestGlobal?.logistics_operator_id
+                    };
+                });
+
+            setRecentProjects(userRecent);
 
             // [NEW] Fetch relational stages for Gantt/Events
             const metaIds = myMetadata.map(m => m.id);
@@ -740,17 +778,28 @@ export const DashboardView: React.FC<Props> = ({
                         <HardDrive size={18} /> Menedżer Projektów
                     </button>
 
-                    {(profile?.role === 'manager' || profile?.role === 'logistics' || profile?.is_admin) && (
+                    <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm shrink-0">
                         <button
-                            onClick={() => setActiveHubTab(activeHubTab === 'DASH' ? 'LOGISTICS' : 'DASH')}
-                            className={`px-6 py-2.5 rounded-lg font-bold transition-all flex items-center gap-2 border-2 ${activeHubTab === 'LOGISTICS'
-                                ? 'bg-blue-600 border-blue-600 text-white'
-                                : 'border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'
-                                }`}
+                            onClick={() => setActiveHubTab('DASH')}
+                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeHubTab === 'DASH' ? 'bg-white dark:bg-zinc-700 text-amber-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
                         >
-                            <Truck size={18} /> {activeHubTab === 'LOGISTICS' ? 'Wróć do Pulpitu' : 'Centrum Logistyki'}
+                            Pulpit
                         </button>
-                    )}
+                        <button
+                            onClick={() => setActiveHubTab('STATS')}
+                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeHubTab === 'STATS' ? 'bg-white dark:bg-zinc-700 text-amber-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+                        >
+                            Statystyki
+                        </button>
+                        {(profile?.role === 'manager' || profile?.role === 'logistics' || profile?.is_admin) && (
+                            <button
+                                onClick={() => setActiveHubTab('LOGISTICS')}
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeHubTab === 'LOGISTICS' ? 'bg-white dark:bg-zinc-700 text-blue-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+                            >
+                                Logistyka
+                            </button>
+                        )}
+                    </div>
 
                     {activeProject && (
                         <>
@@ -781,54 +830,120 @@ export const DashboardView: React.FC<Props> = ({
             </div>
 
             {/* HUB CONTENT */}
+            {activeHubTab === 'STATS' && (
+                <div className="animate-fadeIn h-full bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden mt-6 min-h-[600px]">
+                    <ProjectStatistics
+                        statistics={statsData.statistics}
+                        statsFilters={statsData.statsFilters}
+                        setStatsFilters={statsData.setStatsFilters}
+                        activeFilterPop={statsActiveFilterPop}
+                        setActiveFilterPop={setStatsActiveFilterPop}
+                        totalFiles={statsData.statistics.totalFiles}
+                    />
+                </div>
+            )}
+
             {activeHubTab === 'DASH' && (
                 <>
                     {/* QUICK STATS & ACTIVITY */}
                     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
                         <div className="lg:col-span-3 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 shadow-sm">
-                            <div className="flex items-center gap-2 mb-4 border-b border-zinc-100 dark:border-zinc-800 pb-2">
-                                <Bell size={18} className="text-amber-500" />
-                                <h2 className="font-bold text-zinc-800 dark:text-zinc-200">Ostatnia Aktywność</h2>
+                            <div className="flex items-center justify-between mb-4 border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                                <div className="flex gap-4">
+                                    <button
+                                        onClick={() => setDashFeedTab('ACTIVITY')}
+                                        className={`flex items-center gap-2 text-sm font-bold transition-all ${dashFeedTab === 'ACTIVITY' ? 'text-amber-600 border-b-2 border-amber-600 pb-2' : 'text-zinc-400 hover:text-zinc-600'}`}
+                                    >
+                                        <Bell size={16} /> Powiadomienia
+                                    </button>
+                                    {(profile?.role === 'engineer' || profile?.role === 'specialist') && (
+                                        <button
+                                            onClick={() => setDashFeedTab('MY_EDITS')}
+                                            className={`flex items-center gap-2 text-sm font-bold transition-all ${dashFeedTab === 'MY_EDITS' ? 'text-blue-600 border-b-2 border-blue-600 pb-2' : 'text-zinc-400 hover:text-zinc-600'}`}
+                                        >
+                                            <Clock size={16} /> Moje Edycje
+                                        </button>
+                                    )}
+                                </div>
                             </div>
-                            {activities.length === 0 ? (
-                                <p className="text-zinc-400 text-sm py-4 italic">Brak nowych powiadomień.</p>
+
+                            {dashFeedTab === 'ACTIVITY' ? (
+                                activities.length === 0 ? (
+                                    <p className="text-zinc-400 text-sm py-4 italic">Brak nowych powiadomień.</p>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {activities.map(act => (
+                                            <div key={act.id} className="flex items-center justify-between p-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 rounded transition-colors group">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400 font-bold text-xs">
+                                                        {act.userName.charAt(0)}
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm text-zinc-700 dark:text-zinc-300">
+                                                            <strong className="text-zinc-900 dark:text-white">{act.userName}</strong> {act.action} projektu <span className="font-mono text-xs font-bold bg-zinc-100 dark:bg-zinc-800 px-1 rounded">{act.projectNumber}</span>
+                                                        </p>
+                                                        <p className="text-[10px] text-zinc-500">{act.customerName}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-[10px] text-zinc-400">{act.timestamp.toLocaleString()}</p>
+                                                    <button
+                                                        onClick={() => {
+                                                            const saved = rawExperiments.find(p => p.id === act.projectId);
+                                                            if (saved) handleProjectClick(saved);
+                                                        }}
+                                                        className="text-[10px] font-bold text-blue-500 hover:underline opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    >
+                                                        Zobacz
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )
                             ) : (
-                                <div className="space-y-3">
-                                    {activities.map(act => (
-                                        <div key={act.id} className="flex items-center justify-between p-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 rounded transition-colors group">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400 font-bold text-xs">
-                                                    {act.userName.charAt(0)}
+                                <div className="space-y-2">
+                                    {recentProjects.length === 0 ? (
+                                        <p className="text-zinc-400 text-sm py-4 italic">Nie edytowałeś jeszcze żadnych projektów.</p>
+                                    ) : (
+                                        recentProjects.map(p => (
+                                            <div key={p.id} className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-800/30 rounded-lg border border-zinc-100 dark:border-zinc-700/50 group">
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`p-2 rounded-lg ${p.isOutdated ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'}`}>
+                                                        <Briefcase size={20} />
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-bold text-zinc-900 dark:text-white">{p.project_id}</span>
+                                                            {p.isOutdated && (
+                                                                <span className="text-[8px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase flex items-center gap-1">
+                                                                    <RefreshCw size={8} /> Nowa wersja
+                                                                </span>
+                                                            )}
+                                                            {p.latestOperatorId && (
+                                                                <span className="text-[8px] bg-blue-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase flex items-center gap-1">
+                                                                    <Truck size={8} /> Logistyka
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs text-zinc-500">{p.customer_name}</p>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <p className="text-sm text-zinc-700 dark:text-zinc-300">
-                                                        <strong className="text-zinc-900 dark:text-white">{act.userName}</strong> {act.action} projektu <span className="font-mono text-xs font-bold bg-zinc-100 dark:bg-zinc-800 px-1 rounded">{act.projectNumber}</span>
-                                                    </p>
-                                                    <p className="text-[10px] text-zinc-500">{act.customerName}</p>
+                                                <div className="flex items-center gap-4">
+                                                    <div className="text-right hidden sm:block">
+                                                        <p className="text-[10px] text-zinc-400">Ostatnia edycja</p>
+                                                        <p className="text-[10px] font-bold text-zinc-600 dark:text-zinc-300">{new Date(p.created_at).toLocaleString()}</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleProjectClick(p)}
+                                                        className="px-4 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-black rounded-lg text-[10px] font-bold"
+                                                    >
+                                                        Otwórz
+                                                    </button>
                                                 </div>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-[10px] text-zinc-400">{act.timestamp.toLocaleString()}</p>
-                                                <button
-                                                    onClick={() => {
-                                                        const saved = rawExperiments.find(p => p.id === act.projectId);
-                                                        if (saved) handleProjectClick(saved);
-                                                        else {
-                                                            // This might be a version strictly from allProjects not myProjects filters
-                                                            // but activities filter already ensures it's "my project"
-                                                            storageService.getCalculations().then(all => {
-                                                                const p = all.find(x => x.id === act.projectId);
-                                                                if (p) handleProjectClick(p);
-                                                            });
-                                                        }
-                                                    }}
-                                                    className="text-[10px] font-bold text-blue-500 hover:underline opacity-0 group-hover:opacity-100 transition-opacity"
-                                                >
-                                                    Zobacz
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        ))
+                                    )}
                                 </div>
                             )}
                         </div>

@@ -55,6 +55,7 @@ import { fetchEurRate } from './services/currencyService';
 import { generateDiff } from './services/diffService';
 import { storageService } from './services/storage';
 import { useAuth } from './contexts/AuthContext';
+import { useNotifications } from './hooks/useNotifications';
 import { calculateProjectCosts, ensureTransportData } from './services/calculationService';
 import { toISODateString } from './services/dateUtils';
 import { Moon, Sun, History, Download, Upload, FilePlus, HardDrive, MousePointer2, X, Plus, Check, Trash2, Settings, Shield, AlertCircle, User, Keyboard, LogOut } from 'lucide-react';
@@ -172,6 +173,7 @@ const mergeScenarioData = (globalSource: CalculationData, scenario: CalculationS
 const App: React.FC = () => {
     // Authentication
     const { user, profile, loading: authLoading, signOut } = useAuth();
+    useNotifications();
 
     const [appState, setAppState] = useState<AppState>({
         initial: JSON.parse(JSON.stringify(EMPTY_CALCULATION)),

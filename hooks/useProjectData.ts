@@ -197,13 +197,40 @@ export const useProjectData = (
     }, [cloudData, searchIndex, fileMetadata, source, tableFilters, searchTerm, sortConfig]);
 
     const statistics = useMemo(() => {
-        const allFiles = searchIndex.filter(i => i.kind === 'file');
-        const monthlyStats: Record<string, { offers: number, opened: number, closed: number, valueSum: number, costSum: number }> = {};
+        const monthlyStats: Record<string, {
+            offers: number, opened: number, closed: number,
+            offersVal: number, offersCost: number,
+            openedVal: number, openedCost: number,
+            closedVal: number, closedCost: number
+        }> = {};
         const projectGroups: Record<string, any> = {};
 
-        const filesToAnalyze = allFiles.filter(f => {
-            const meta = fileMetadata[f.name];
-            if (!meta || meta.projectNumber === 'ERR' || meta.projectNumber === '-') return false;
+        // Unified data source for statistics
+        const rawSource = source === 'cloud'
+            ? cloudData.map(d => ({
+                id: d.id,
+                projectNumber: d.project_id,
+                clientName: d.customer_name,
+                valueEUR: d.total_price,
+                valuePLN: d.total_price * 4.3, // Approximate for margin calculations if needed
+                costPLN: d.total_cost,
+                salesPerson: d.engineer,
+                assistantPerson: d.specialist,
+                stage: d.project_stage,
+                timestamp: new Date(d.created_at).getTime(),
+                orderDate: d.order_date,
+                protocolDate: d.close_date
+            }))
+            : searchIndex.filter(i => i.kind === 'file').map(f => {
+                const meta = fileMetadata[f.name];
+                return {
+                    ...meta,
+                    timestamp: new Date(meta?.timestamp || f.date?.getTime() || Date.now()).getTime()
+                };
+            });
+
+        const itemsToAnalyze = rawSource.filter(meta => {
+            if (!meta || meta.projectNumber === 'ERR' || meta.projectNumber === '-' || !meta.projectNumber) return false;
 
             if (searchTerm) {
                 const lowerTerm = searchTerm.toLowerCase();
@@ -238,8 +265,7 @@ export const useProjectData = (
             });
         });
 
-        filesToAnalyze.forEach(f => {
-            const meta = fileMetadata[f.name];
+        itemsToAnalyze.forEach(meta => {
             if (!projectGroups[meta.projectNumber!]) projectGroups[meta.projectNumber!] = { latestFile: meta, versionCount: 0 };
             if (meta.timestamp > projectGroups[meta.projectNumber!].latestFile.timestamp) projectGroups[meta.projectNumber!].latestFile = meta;
             projectGroups[meta.projectNumber!].versionCount++;
@@ -254,7 +280,14 @@ export const useProjectData = (
         const stageDistribution = { DRAFT: 0, OPENING: 0, FINAL: 0 };
         let totalProjects = 0, globalValue = 0, globalCost = 0, totalDurationDays = 0, projectsWithDuration = 0, totalVersions = 0;
 
-        const initMonth = (m: string) => { if (!monthlyStats[m]) monthlyStats[m] = { offers: 0, opened: 0, closed: 0, valueSum: 0, costSum: 0 }; };
+        const initMonth = (m: string) => {
+            if (!monthlyStats[m]) monthlyStats[m] = {
+                offers: 0, opened: 0, closed: 0,
+                offersVal: 0, offersCost: 0,
+                openedVal: 0, openedCost: 0,
+                closedVal: 0, closedCost: 0
+            };
+        };
 
         Object.values(projectGroups).forEach((group: any) => {
             const { latestFile, draftFile, openingFile, finalFile, versionCount } = group;
@@ -290,19 +323,30 @@ export const useProjectData = (
             if (offerSource) {
                 const m = new Date(offerSource.timestamp).toISOString().slice(0, 7);
                 initMonth(m);
-                monthlyStats[m].offers += isNaN(offerSource.valueEUR) ? 0 : offerSource.valueEUR;
+                const val = isNaN(offerSource.valueEUR) ? 0 : offerSource.valueEUR;
+                const cost = isNaN(offerSource.costPLN) ? 0 : convert(offerSource.costPLN, Currency.PLN, Currency.EUR, 4.3);
+                monthlyStats[m].offers += val;
+                monthlyStats[m].offersVal += val;
+                monthlyStats[m].offersCost += cost;
             }
             if (startDateStr) {
                 const m = startDateStr.slice(0, 7);
                 initMonth(m);
-                monthlyStats[m].opened += isNaN(openingFile ? openingFile.valueEUR : latestFile.valueEUR) ? 0 : (openingFile ? openingFile.valueEUR : latestFile.valueEUR);
+                const source = openingFile || latestFile;
+                const val = isNaN(source.valueEUR) ? 0 : source.valueEUR;
+                const cost = isNaN(source.costPLN) ? 0 : convert(source.costPLN, Currency.PLN, Currency.EUR, 4.3);
+                monthlyStats[m].opened += val;
+                monthlyStats[m].openedVal += val;
+                monthlyStats[m].openedCost += cost;
             }
             if (endDateStr && finalFile) {
                 const m = endDateStr.slice(0, 7);
                 initMonth(m);
-                monthlyStats[m].closed += isNaN(finalFile.valueEUR) ? 0 : finalFile.valueEUR;
-                monthlyStats[m].valueSum += isNaN(finalFile.valueEUR) ? 0 : finalFile.valueEUR;
-                monthlyStats[m].costSum += isNaN(finalFile.costPLN) ? 0 : convert(finalFile.costPLN, Currency.PLN, Currency.EUR, 4.3);
+                const val = isNaN(finalFile.valueEUR) ? 0 : finalFile.valueEUR;
+                const cost = isNaN(finalFile.costPLN) ? 0 : convert(finalFile.costPLN, Currency.PLN, Currency.EUR, 4.3);
+                monthlyStats[m].closed += val;
+                monthlyStats[m].closedVal += val;
+                monthlyStats[m].closedCost += cost;
             }
         });
 
@@ -316,14 +360,17 @@ export const useProjectData = (
             avgVersions: totalProjects > 0 ? totalVersions / totalProjects : 0,
             chartData: Object.entries(monthlyStats).sort((a, b) => a[0].localeCompare(b[0])).map(([month, s]) => ({
                 month, ...s,
-                avgMargin: s.valueSum > 0 ? (1 - (s.costSum / s.valueSum)) * 100 : 0
+                offersMargin: s.offersVal > 0 ? (1 - (s.offersCost / s.offersVal)) * 100 : 0,
+                openedMargin: s.openedVal > 0 ? (1 - (s.openedCost / s.openedVal)) * 100 : 0,
+                closedMargin: s.closedVal > 0 ? (1 - (s.closedCost / s.closedVal)) * 100 : 0,
+                avgMargin: s.closedVal > 0 ? (1 - (s.closedCost / s.closedVal)) * 100 : 0 // Fallback for general avg
             })),
             topClients: Object.entries(clientStats).sort((a, b) => b[1] - a[1]).slice(0, 5),
             engineerStats: Object.entries(engineerStats).sort((a, b) => b[1] - a[1]).slice(0, 5),
             specialistStats: Object.entries(specialistStats).sort((a, b) => b[1] - a[1]).slice(0, 5),
-            stageDistribution, totalFiles: allFiles.length
+            stageDistribution, totalFiles: source === 'cloud' ? cloudData.length : searchIndex.length
         };
-    }, [searchIndex, fileMetadata, statsFilters, searchTerm]);
+    }, [searchIndex, fileMetadata, cloudData, source, statsFilters, searchTerm]);
 
     return {
         searchTerm, setSearchTerm,

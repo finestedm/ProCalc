@@ -78,6 +78,7 @@ export interface ICalculationStorage {
     // Logistics Transports (Relational)
     getLogisticsTransports(projectNumbers?: string[]): Promise<SavedLogisticsTransport[]>; // Nullable projectNumbers -> fetch all
     saveLogisticsTransport(transport: Partial<SavedLogisticsTransport>): Promise<void>;
+    deleteLogisticsTransport(projectNumber: string, transportId: string): Promise<void>;
 }
 
 export interface SavedLogisticsTransport {

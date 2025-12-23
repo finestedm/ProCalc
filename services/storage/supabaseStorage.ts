@@ -401,4 +401,13 @@ export class SupabaseStorage implements ICalculationStorage {
             .upsert(payload, { onConflict: 'project_number, transport_id' });
         if (error) throw new Error(error.message);
     }
+
+    async deleteLogisticsTransport(projectNumber: string, transportId: string): Promise<void> {
+        const { error } = await this.supabase
+            .from('logistics_transports')
+            .delete()
+            .eq('project_number', projectNumber)
+            .eq('transport_id', transportId);
+        if (error) throw new Error(error.message);
+    }
 }

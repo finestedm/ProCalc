@@ -9,7 +9,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useFileSystem } from '../hooks/useFileSystem';
 import { useCloudStorage } from '../hooks/useCloudStorage';
 import { useProjectData } from '../hooks/useProjectData';
-import { ProjectStatistics } from './ProjectStatistics';
 import { ProjectTableView } from './ProjectTableView';
 import { ProjectFolderView } from './ProjectFolderView';
 
@@ -36,17 +35,14 @@ export const ProjectManagerModal: React.FC<Props> = ({
     onSetDirHandle
 }) => {
     const { profile } = useAuth();
-    const abortControllerRef = useRef<AbortController | null>(null);
 
     // --- MODAL STATE ---
     const [source, setSource] = useState<'local' | 'cloud'>('cloud');
-    const [activeTab, setActiveTab] = useState<'files' | 'stats'>('files');
     const [viewType, setViewType] = useState<'folders' | 'table'>('table');
     const [activeFilterPop, setActiveFilterPop] = useState<string | null>(null);
     const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
     const [loadConfirm, setLoadConfirm] = useState<any>(null);
     const [showUnlockModal, setShowUnlockModal] = useState(false);
-    const [filenameSuffix, setFilenameSuffix] = useState('');
 
     // --- CUSTOM HOOKS ---
     const fs = useFileSystem(currentDirHandle, onSetDirHandle, showSnackbar);
@@ -64,9 +60,6 @@ export const ProjectManagerModal: React.FC<Props> = ({
                 cloud.loadCloudData(fs.setPathStack, fs.setCurrentViewItems, fs.setSearchIndex, fs.setFileMetadata);
             }
         }
-        return () => {
-            if (abortControllerRef.current) abortControllerRef.current.abort();
-        };
     }, [isOpen, source, currentDirHandle]);
 
     const handleSave = async (reasonArg?: string | any) => {
@@ -131,7 +124,7 @@ export const ProjectManagerModal: React.FC<Props> = ({
                 const root = fs.pathStack[0].handle as any;
                 const clientDir = await root.getDirectoryHandle(sanitize(clientName), { create: true });
                 const projectDir = await clientDir.getDirectoryHandle(sanitize(projectNum), { create: true });
-                const filename = `PROCALC_${sanitize(projectNum)}_${timestamp}${filenameSuffix ? '_' + sanitize(filenameSuffix) : ''}.json`;
+                const filename = `PROCALC_${sanitize(projectNum)}_${timestamp}.json`;
                 const fileHandle = await projectDir.getFileHandle(filename, { create: true });
                 const writable = await fileHandle.createWritable();
                 await writable.write(JSON.stringify(fileData, null, 2));
@@ -140,7 +133,6 @@ export const ProjectManagerModal: React.FC<Props> = ({
                 const current = fs.pathStack[fs.pathStack.length - 1].handle;
                 if (typeof current !== 'string') fs.loadDirectoryContents(current);
             }
-            setFilenameSuffix('');
         } catch (e) {
             console.error(e);
             showSnackbar("Błąd zapisu projektu");
@@ -231,7 +223,7 @@ export const ProjectManagerModal: React.FC<Props> = ({
                                 Zarządzanie Projektami
                                 {fs.isLoading && <RefreshCw size={16} className="animate-spin text-amber-500" />}
                             </h2>
-                            <p className="text-xs text-zinc-500 font-medium tracking-wide">PRZEGLĄDAJ, STATYSTYKI ORAZ ARCHIWUM</p>
+                            <p className="text-xs text-zinc-500 font-medium tracking-wide">PRZEGLĄDAJ ARCHIWUM PROJEKTÓW</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
@@ -250,138 +242,115 @@ export const ProjectManagerModal: React.FC<Props> = ({
                         </button>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl">
-                            <button onClick={() => setActiveTab('files')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'files' ? 'bg-white dark:bg-zinc-700 text-amber-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
-                                <Search size={18} /> Przeglądarka
-                            </button>
-                            <button onClick={() => setActiveTab('stats')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'stats' ? 'bg-white dark:bg-zinc-700 text-amber-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}>
-                                <BarChart3 size={18} /> Statystyki
-                            </button>
-                        </div>
+                    <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl">
+                        <button className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all bg-white dark:bg-zinc-700 text-amber-600 shadow-sm`}>
+                            <Search size={18} /> Przeglądarka Projektów
+                        </button>
                     </div>
                 </div>
 
                 <div className="flex-1 flex flex-col overflow-hidden">
-                    {activeTab === 'stats' ? (
-                        <ProjectStatistics
-                            statistics={data.statistics}
-                            statsFilters={data.statsFilters}
-                            setStatsFilters={data.setStatsFilters}
-                            activeFilterPop={activeFilterPop}
-                            setActiveFilterPop={setActiveFilterPop}
-                            isScanning={fs.isScanning}
-                            startRecursiveScan={fs.startRecursiveScan}
-                            currentDirHandle={currentDirHandle}
-                            totalFiles={data.statistics.totalFiles}
-                        />
-                    ) : (
-                        <div className="flex-1 flex flex-col min-w-0 bg-zinc-50/30 dark:bg-zinc-900/10">
-                            {/* Toolbar */}
-                            <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800">
-                                <div className="flex items-center gap-2">
-                                    <button onClick={() => fs.navigateToCrumb(0)} className="p-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-500 hover:text-amber-500 transition-colors shadow-sm">
-                                        <Home size={18} />
+                    <div className="flex-1 flex flex-col min-w-0 bg-zinc-50/30 dark:bg-zinc-900/10">
+                        {/* Toolbar */}
+                        <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800">
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => fs.navigateToCrumb(0)} className="p-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-500 hover:text-amber-500 transition-colors shadow-sm">
+                                    <Home size={18} />
+                                </button>
+                                <div className="flex items-center gap-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 shadow-sm overflow-hidden max-w-md">
+                                    {fs.pathStack.map((crumb, idx) => (
+                                        <React.Fragment key={idx}>
+                                            {idx > 0 && <span className="text-zinc-300">/</span>}
+                                            <button onClick={() => fs.navigateToCrumb(idx)} className="text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:text-amber-600 transition-colors truncate px-1">
+                                                {crumb.name}
+                                            </button>
+                                        </React.Fragment>
+                                    ))}
+                                </div>
+                                {fs.pathStack.length > 1 && (
+                                    <button onClick={fs.navigateUp} className="p-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-zinc-500 hover:bg-zinc-200 transition-colors">
+                                        <ArrowUpLeft size={16} />
                                     </button>
-                                    <div className="flex items-center gap-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 shadow-sm overflow-hidden max-w-md">
-                                        {fs.pathStack.map((crumb, idx) => (
-                                            <React.Fragment key={idx}>
-                                                {idx > 0 && <span className="text-zinc-300">/</span>}
-                                                <button onClick={() => fs.navigateToCrumb(idx)} className="text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:text-amber-600 transition-colors truncate px-1">
-                                                    {crumb.name}
-                                                </button>
-                                            </React.Fragment>
-                                        ))}
-                                    </div>
-                                    {fs.pathStack.length > 1 && (
-                                        <button onClick={fs.navigateUp} className="p-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-zinc-500 hover:bg-zinc-200 transition-colors">
-                                            <ArrowUpLeft size={16} />
-                                        </button>
+                                )}
+                            </div>
+
+                            <div className="flex items-center gap-3 flex-1 max-w-xl">
+                                <div className="relative flex-1 group">
+                                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-amber-500 transition-colors" />
+                                    <input
+                                        type="text"
+                                        placeholder="Szukaj projektu, klienta, inżyniera..."
+                                        className="w-full pl-10 pr-4 py-2 text-sm bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all shadow-sm"
+                                        value={data.searchTerm}
+                                        onChange={(e) => data.setSearchTerm(e.target.value)}
+                                    />
+                                    {data.searchTerm && (
+                                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+                                            <button onClick={() => data.setSearchScope(data.searchScope === 'global' ? 'local' : 'global')} className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-colors ${data.searchScope === 'global' ? 'bg-amber-100 text-amber-700' : 'bg-zinc-100 text-zinc-500'}`}>
+                                                {data.searchScope === 'global' ? 'Globalnie' : 'Aktualny'}
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
 
-                                <div className="flex items-center gap-3 flex-1 max-w-xl">
-                                    <div className="relative flex-1 group">
-                                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-amber-500 transition-colors" />
-                                        <input
-                                            type="text"
-                                            placeholder="Szukaj projektu, klienta, inżyniera..."
-                                            className="w-full pl-10 pr-4 py-2 text-sm bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all shadow-sm"
-                                            value={data.searchTerm}
-                                            onChange={(e) => data.setSearchTerm(e.target.value)}
-                                        />
-                                        {data.searchTerm && (
-                                            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-                                                <button onClick={() => data.setSearchScope(data.searchScope === 'global' ? 'local' : 'global')} className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-colors ${data.searchScope === 'global' ? 'bg-amber-100 text-amber-700' : 'bg-zinc-100 text-zinc-500'}`}>
-                                                    {data.searchScope === 'global' ? 'Globalnie' : 'Aktualny'}
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl">
-                                        <button onClick={() => setViewType('folders')} className={`p-1.5 rounded-lg transition-all ${viewType === 'folders' ? 'bg-white dark:bg-zinc-700 text-amber-600 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}><LayoutGrid size={18} /></button>
-                                        <button onClick={() => setViewType('table')} className={`p-1.5 rounded-lg transition-all ${viewType === 'table' ? 'bg-white dark:bg-zinc-700 text-amber-600 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}><TableIcon size={18} /></button>
-                                    </div>
+                                <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl">
+                                    <button onClick={() => setViewType('folders')} className={`p-1.5 rounded-lg transition-all ${viewType === 'folders' ? 'bg-white dark:bg-zinc-700 text-amber-600 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}><LayoutGrid size={18} /></button>
+                                    <button onClick={() => setViewType('table')} className={`p-1.5 rounded-lg transition-all ${viewType === 'table' ? 'bg-white dark:bg-zinc-700 text-amber-600 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}><TableIcon size={18} /></button>
                                 </div>
                             </div>
-
-                            {/* View Content */}
-                            <div className="flex-1 overflow-auto p-6 scroll-smooth custom-scrollbar">
-                                {viewType === 'table' ? (
-                                    <ProjectTableView
-                                        tableData={data.tableData}
-                                        sortConfig={data.sortConfig}
-                                        setSortConfig={data.setSortConfig}
-                                        tableFilters={data.tableFilters}
-                                        setTableFilters={data.setTableFilters}
-                                        expandedGroups={data.expandedGroups}
-                                        setExpandedGroups={data.setExpandedGroups}
-                                        activeFilterPop={activeFilterPop}
-                                        setActiveFilterPop={setActiveFilterPop}
-                                        onLoad={handleLoad}
-                                        onDelete={(item) => setDeleteConfirm(item)}
-                                        deleteConfirm={deleteConfirm}
-                                        setDeleteConfirm={setDeleteConfirm}
-                                        source={source}
-                                    />
-                                ) : (
-                                    <ProjectFolderView
-                                        displayItems={data.displayItems}
-                                        fileMetadata={fs.fileMetadata}
-                                        onNavigate={fs.navigateDown}
-                                        onLoad={handleLoad}
-                                        onDelete={(item) => setDeleteConfirm({ id: item.name, name: item.name, type: source, path: item.path })}
-                                        deleteConfirm={deleteConfirm}
-                                        setDeleteConfirm={setDeleteConfirm}
-                                        isLoading={fs.isLoading}
-                                        source={source}
-                                        currentDirHandle={currentDirHandle}
-                                        connectToFolder={fs.connectToFolder}
-                                        searchScope={data.searchScope}
-                                        searchIndex={fs.searchIndex}
-                                    />
-                                )}
-                            </div>
                         </div>
-                    )}
+
+                        {/* View Content */}
+                        <div className="flex-1 overflow-auto p-6 scroll-smooth custom-scrollbar">
+                            {viewType === 'table' ? (
+                                <ProjectTableView
+                                    tableData={data.tableData}
+                                    sortConfig={data.sortConfig}
+                                    setSortConfig={data.setSortConfig}
+                                    tableFilters={data.tableFilters}
+                                    setTableFilters={data.setTableFilters}
+                                    expandedGroups={data.expandedGroups}
+                                    setExpandedGroups={data.setExpandedGroups}
+                                    activeFilterPop={activeFilterPop}
+                                    setActiveFilterPop={setActiveFilterPop}
+                                    onLoad={handleLoad}
+                                    onDelete={(item) => setDeleteConfirm(item)}
+                                    deleteConfirm={deleteConfirm}
+                                    setDeleteConfirm={setDeleteConfirm}
+                                    source={source}
+                                />
+                            ) : (
+                                <ProjectFolderView
+                                    displayItems={data.displayItems}
+                                    fileMetadata={fs.fileMetadata}
+                                    onNavigate={fs.navigateDown}
+                                    onLoad={handleLoad}
+                                    onDelete={(item) => setDeleteConfirm({ id: item.name, name: item.name, type: source, path: item.path })}
+                                    deleteConfirm={deleteConfirm}
+                                    setDeleteConfirm={setDeleteConfirm}
+                                    isLoading={fs.isLoading}
+                                    source={source}
+                                    currentDirHandle={currentDirHandle}
+                                    connectToFolder={fs.connectToFolder}
+                                    searchScope={data.searchScope}
+                                    searchIndex={fs.searchIndex}
+                                />
+                            )}
+                        </div>
+                    </div>
                 </div>
 
                 {/* Footer Actions */}
                 <div className="px-6 py-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex flex-wrap items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
-                        <div className="flex flex-col">
-                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Suffix Nazwy</span>
-                            <div className="flex gap-2">
-                                <input type="text" placeholder="Np. korekta, v2..." className="px-3 py-1.5 text-sm bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-500/20 w-48 shadow-sm" value={filenameSuffix} onChange={(e) => setFilenameSuffix(e.target.value)} />
-                                <button onClick={() => handleSave()} disabled={fs.isLoading} className="flex items-center gap-2 px-6 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:bg-zinc-300 text-white rounded-xl font-bold transition-all shadow-lg shadow-amber-500/20 active:scale-95">
-                                    <Save size={18} /> ZAPISZ AKTUALNY
-                                </button>
-                            </div>
-                        </div>
+                        <button onClick={() => handleSave()} disabled={fs.isLoading} className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-zinc-300 text-white rounded-xl font-bold transition-all shadow-lg shadow-amber-500/20 active:scale-95">
+                            <Save size={18} /> ZAPISZ AKTUALNY PROJEKT
+                        </button>
                     </div>
                     <div className="flex items-center gap-4 text-xs font-bold uppercase tracking-widest text-zinc-400">
-                        <span>Wersja Systemu: 1.0.8</span>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => fs.navigateToCrumb(0)} className="hover:text-amber-500 transition-colors">Katalog Główny</button>
+                        </div>
                         <div className={`w-2 h-2 rounded-full ${source === 'cloud' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]'}`}></div>
                         <span className={source === 'cloud' ? 'text-green-600' : 'text-blue-600'}>{source === 'cloud' ? 'Cloud Sync Online' : 'Local Disk Mode'}</span>
                     </div>
@@ -426,3 +395,5 @@ export const ProjectManagerModal: React.FC<Props> = ({
         </div>
     );
 };
+
+export default ProjectManagerModal;

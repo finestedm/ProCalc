@@ -184,6 +184,7 @@ export interface TransportItem {
 
   // Multi-truck support
   trucks?: TruckDetail[];
+  isStale?: boolean;
 }
 
 export interface LinkedSource {

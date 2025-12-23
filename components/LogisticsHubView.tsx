@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Truck, ExternalLink, ChevronDown, ChevronRight, RefreshCw, Save, Undo, Redo, Search, Calendar as CalendarIcon, Mail, Map as MapIcon, UserPlus, UserCheck, Lock } from 'lucide-react';
+import { Truck, ExternalLink, ChevronDown, ChevronRight, RefreshCw, Save, Undo, Redo, Search, Calendar as CalendarIcon, Mail, Map as MapIcon, UserPlus, UserCheck, Lock, Trash2, PlusCircle } from 'lucide-react';
 import { DatePickerInput } from './DatePickerInput';
 import { DeliveryMap } from './DeliveryMap';
 import { storageService } from '../services/storage';
 import { SavedCalculation, SavedLogisticsTransport } from '../services/storage/types';
 import { useAuth } from '../contexts/AuthContext';
-import { CalculationData, CalculationMode, TransportItem, TruckDetail, Supplier, Language } from '../types';
+import { CalculationData, CalculationMode, TransportItem, TruckDetail, Supplier, Language, Currency } from '../types';
 import { GanttChart } from './GanttChart';
 import { OrderPreviewModal } from './OrderPreviewModal';
 
@@ -76,6 +76,7 @@ interface HubRow {
     suggestedWeight?: number;
     contactPerson?: string;
     contactEmail?: string;
+    isStale?: boolean;
 }
 
 export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
@@ -92,6 +93,8 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
 
     const [previewSuppliers, setPreviewSuppliers] = useState<Supplier[] | null>(null);
     const [previewProject, setPreviewProject] = useState<CalculationData | null>(null);
+    const [deletedKeys, setDeletedKeys] = useState<Set<string>>(new Set());
+    const [assigningSuppliersKey, setAssigningSuppliersKey] = useState<string | null>(null);
 
     const handleOpenOrderPreview = (row: HubRow) => {
         const item = row.transportData;
@@ -215,6 +218,7 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
 
             // 3. Initialize Local State
             const initialState: Record<string, TransportItem> = {};
+            const validTransportKeys = new Set<string>();
 
             // 3a. Start with what's in the relational DB
             savedTransports.forEach(st => {
@@ -225,6 +229,7 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
             });
 
             // 3b. Add transports from project blobs that aren't in Relational DB yet
+            // AND track which ones are currently valid (present in latest project version)
             projectList.forEach(p => {
                 const pNum = p.project_id || 'BezNumeru';
                 const calc = p.calc as CalculationData;
@@ -234,6 +239,7 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                 if (activeData.transport) {
                     activeData.transport.forEach((t: TransportItem) => {
                         const key = `${pNum}|${t.id}`;
+                        validTransportKeys.add(key);
                         if (!initialState[key]) {
                             const tItem = { ...t };
                             if (!tItem.trucks) tItem.trucks = [];
@@ -246,6 +252,9 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
             setLocalState(initialState);
             setHistory([initialState]);
             setHistoryIndex(0);
+
+            // Store valid keys for stale detection
+            (window as any)._validTransportKeys = validTransportKeys;
 
         } catch (e) {
             console.error("Hub Load Error", e);
@@ -365,6 +374,79 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
         updateState(nextState);
     };
 
+    const handleDeleteTransport = (projectNumber: string, transportId: string) => {
+        const key = `${projectNumber}|${transportId}`;
+        /* [TIP] We don't delete from localState immediately to avoid UI jumps if user undoes, 
+           but for simplicity let's just delete and track in deletedKeys */
+        if (confirm(`Czy na pewno chcesz usunąć ten transport (${transportId})?`)) {
+            const nextState = { ...localState };
+            delete nextState[key];
+            setLocalState(nextState);
+            setDeletedKeys(prev => new Set(prev).add(key));
+
+            const newHistory = history.slice(0, historyIndex + 1);
+            newHistory.push(nextState);
+            setHistory(newHistory);
+            setHistoryIndex(newHistory.length - 1);
+        }
+    };
+
+    const handleAddTransport = (project: SavedCalculation) => {
+        const pNum = project.project_id || 'BezNumeru';
+        const newId = `manual-${Math.random().toString(36).substr(2, 5)}`;
+        const key = `${pNum}|${newId}`;
+
+        const newItem: TransportItem = {
+            id: newId,
+            name: 'Nowy Transport',
+            trucksCount: 1,
+            trucks: [{
+                id: Math.random().toString(36).substr(2, 9),
+                loadingDates: '',
+                deliveryDate: '',
+                driverInfo: '',
+                registrationNumbers: ''
+            }],
+            pickupDate: '',
+            confirmedDeliveryDate: '',
+            isSupplierOrganized: false,
+            isOrmCalc: false,
+            pricePerTruck: 0,
+            totalPrice: 0,
+            currency: Currency.EUR
+        };
+
+        const nextState = { ...localState, [key]: newItem };
+        updateState(nextState);
+        setExpandedGroups(prev => new Set(prev).add(key));
+    };
+
+    const handleToggleSupplierLink = (projectNumber: string, transportId: string, supplierId: string) => {
+        const key = `${projectNumber}|${transportId}`;
+        const current = localState[key];
+        if (!current) return;
+
+        let linked = [...(current.linkedSupplierIds || [])];
+        if (current.supplierId) linked.push(current.supplierId);
+        linked = Array.from(new Set(linked)); // Clean duplicates
+
+        if (linked.includes(supplierId)) {
+            linked = linked.filter(id => id !== supplierId);
+        } else {
+            linked.push(supplierId);
+        }
+
+        const nextState = {
+            ...localState,
+            [key]: {
+                ...current,
+                supplierId: undefined, // Always use linkedSupplierIds for multi-link
+                linkedSupplierIds: linked
+            }
+        };
+        updateState(nextState);
+    };
+
     // --- SAVE LOGIC ---
     const handleSave = async () => {
         setSaving(true);
@@ -385,6 +467,15 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
             });
 
             await Promise.all(tasks);
+
+            // Handle deletions
+            const deleteTasks = Array.from(deletedKeys).map(async (keyStr) => {
+                const [pNum, tId] = (keyStr as string).split('|');
+                await storageService.deleteLogisticsTransport(pNum, tId);
+            });
+            await Promise.all(deleteTasks);
+            setDeletedKeys(new Set());
+
             // Alert removed as per user request
         } catch (e) {
             console.error("Save failed", e);
@@ -479,12 +570,13 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
             allSuppliers.push(...processedSuppliers);
             allTransport.push({
                 ...tItem,
-                name: `[${pNum}] ${tItem.name || 'Transport'}`,
+                name: `[${pNum}] ${project.customer_name || 'Klient'} — ${tItem.name || 'Transport'}`,
                 projectNumber: pNum, // Attach project metadata
                 contactPerson: recipient?.contactPerson,
                 contactEmail: recipient?.email,
                 city: recipient?.city,
-                address: getGeocodingAddress(recipient)
+                address: getGeocodingAddress(recipient),
+                isStale: !(window as any)._validTransportKeys?.has(key)
             } as any);
         });
 
@@ -610,7 +702,8 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                 transportData: tItem,
                 suggestedWeight: calculateSuggestedWeight(calcData, tItem),
                 contactPerson: activeData?.recipient?.contactPerson,
-                contactEmail: activeData?.recipient?.email
+                contactEmail: activeData?.recipient?.email,
+                isStale: !(window as any)._validTransportKeys?.has(key)
             });
         });
 
@@ -954,6 +1047,14 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                                     </div>
                                                 </div>
                                             </td>
+                                            <td className="px-4 py-2 text-right">
+                                                <button
+                                                    onClick={() => handleAddTransport(row.originalProject)}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-lg font-bold text-[9px] uppercase tracking-wider hover:scale-105 active:scale-95 transition-all shadow-lg shadow-zinc-500/10"
+                                                >
+                                                    <PlusCircle size={12} /> Dodaj
+                                                </button>
+                                            </td>
                                         </tr>
                                     );
                                 }
@@ -964,7 +1065,7 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                     const isSuppLayer = row.isSupplierOrganized;
 
                                     return (
-                                        <tr key={row.id} className={`transition-all group border-l-4 ${isSuppLayer
+                                        <tr key={row.id} className={`transition-all group border-l-4 ${row.isStale ? 'opacity-50 grayscale-[0.5]' : ''} ${isSuppLayer
                                             ? 'bg-amber-50/20 dark:bg-amber-900/5 hover:bg-amber-50/40 dark:hover:bg-amber-900/10 border-amber-500'
                                             : 'bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 border-cyan-500'
                                             }`}>
@@ -975,7 +1076,15 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                             </td>
                                             <td className="px-4 py-4 pl-12 relative">
                                                 <div className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-px ${isSuppLayer ? 'bg-amber-300 dark:bg-amber-800' : 'bg-cyan-300 dark:bg-cyan-800'}`}></div>
-                                                <div className="text-[11px] font-black text-zinc-950 dark:text-zinc-50 tracking-tight">{row.projectNumber}</div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="text-[11px] font-black text-zinc-950 dark:text-zinc-50 tracking-tight">{row.projectNumber}</div>
+                                                    {row.isStale && (
+                                                        <span className="text-[8px] font-black bg-white/50 text-zinc-500 border border-zinc-200 px-1 rounded uppercase tracking-tighter">Nieaktualne</span>
+                                                    )}
+                                                    {row.id.includes('|manual-') && (
+                                                        <span className="text-[8px] font-black bg-cyan-100 text-cyan-700 px-1 rounded uppercase tracking-tighter shadow-sm">Logistyka</span>
+                                                    )}
+                                                </div>
                                                 <div className="text-[9px] font-bold text-zinc-400 uppercase truncate max-w-[150px]">{row.customerName}</div>
                                             </td>
                                             <td className="px-4 py-4">
@@ -984,7 +1093,35 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                                     <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${isSuppLayer ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700' : 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700'}`}>
                                                         {isSuppLayer ? 'Dostawca' : 'JH Logistyka'}
                                                     </span>
+                                                    <button
+                                                        onClick={() => setAssigningSuppliersKey(assigningSuppliersKey === row.id ? null : row.id)}
+                                                        className="text-[8px] font-bold text-zinc-400 hover:text-zinc-600 uppercase tracking-tighter border border-zinc-200 px-1 rounded hover:bg-zinc-50 transition-colors"
+                                                    >
+                                                        {assigningSuppliersKey === row.id ? 'Zamknij' : 'Powiąż'}
+                                                    </button>
                                                 </div>
+                                                {assigningSuppliersKey === row.id && (
+                                                    <div className="mt-2 p-2 bg-zinc-50 dark:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-700 animate-fadeInLow">
+                                                        <div className="text-[8px] font-bold text-zinc-400 uppercase mb-1">Dostępni dostawcy:</div>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {(row.originalProject.calc as CalculationData).suppliers?.map(s => {
+                                                                const isLinked = (tItem.linkedSupplierIds || []).includes(s.id) || tItem.supplierId === s.id;
+                                                                return (
+                                                                    <button
+                                                                        key={s.id}
+                                                                        onClick={() => handleToggleSupplierLink(row.projectNumber, row.transportId, s.id)}
+                                                                        className={`text-[8px] px-1.5 py-0.5 rounded border transition-all ${isLinked
+                                                                            ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
+                                                                            : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:border-amber-500/50'
+                                                                            }`}
+                                                                    >
+                                                                        {s.name}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-4 py-4">
                                                 <DatePickerInput
@@ -1026,6 +1163,9 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                             </td>
                                             <td className="px-4 py-4 text-right">
                                                 <div className="flex justify-end gap-1 items-center">
+                                                    <button onClick={() => handleDeleteTransport(row.projectNumber, row.transportId)} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-zinc-400 hover:text-red-500 rounded-lg transition-all border border-transparent active:scale-95" title="Usuń transport">
+                                                        <Trash2 size={16} strokeWidth={2.5} />
+                                                    </button>
                                                     <button onClick={() => handleTakeOverProject(row.originalProject)} className={`p-2 rounded-lg transition-all border active:scale-95 shadow-sm ${row.originalProject.logistics_operator_id ? 'text-purple-600 bg-purple-50 border-purple-100 dark:bg-purple-900/30 dark:border-purple-800' : 'text-zinc-400 hover:text-purple-600 border-transparent hover:bg-purple-50'}`} title={row.originalProject.logistics_operator_id ? "Projekt przejęty" : "Przejmij projekt"}>
                                                         {row.originalProject.logistics_operator_id ? <UserCheck size={16} strokeWidth={2.5} /> : <UserPlus size={16} strokeWidth={2.5} />}
                                                     </button>
