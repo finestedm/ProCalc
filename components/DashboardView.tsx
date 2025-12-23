@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, StickyNote, ArrowRight, Clock, User, Briefcase, RefreshCw, Filter, Bell, MapPin, Truck, ChevronRight, ChevronDown, Shield, Scale, HardDrive, AlertCircle, Check } from 'lucide-react';
+import { Calendar, StickyNote, ArrowRight, Clock, User, Briefcase, RefreshCw, Filter, Bell, MapPin, Truck, ChevronRight, ChevronDown, Shield, Scale, HardDrive, AlertCircle, Check, Mail } from 'lucide-react';
 import { storageService } from '../services/storage';
 import { SavedCalculation } from '../services/storage/types';
 import { useAuth } from '../contexts/AuthContext';
-import { CalculationData, AppState, CalculationMode, Currency, InstallationStage } from '../types';
-import { formatNumber } from '../services/calculationService';
+import { CalculationData, AppState, CalculationMode, Currency, InstallationStage, Supplier } from '../types';
+import { formatNumber, extractActiveData } from '../services/calculationService';
 import { LogisticsHubView } from './LogisticsHubView';
+import { OrderPreviewModal } from './OrderPreviewModal';
 
 interface Props {
     activeProject: CalculationData | null;
@@ -14,6 +15,8 @@ interface Props {
     onShowComparison: () => void;
     onOpenProject: (data: any, stage: string, mode: CalculationMode) => void;
     onBack: () => void;
+    activeTab?: 'DASH' | 'LOGISTICS';
+    onTabChange?: (tab: 'DASH' | 'LOGISTICS') => void;
 }
 
 interface DashboardEvent {
@@ -103,9 +106,10 @@ interface GanttRowProps {
     isExpanded: boolean;
     onToggle: () => void;
     onOpen: () => void;
+    onOpenOrders: () => void;
 }
 
-const GanttRow: React.FC<GanttRowProps> = ({ project, isExpanded, onToggle, onOpen }) => {
+const GanttRow: React.FC<GanttRowProps> = ({ project, isExpanded, onToggle, onOpen, onOpenOrders }) => {
     return (
         <div className="border-b border-zinc-100 dark:border-zinc-800 last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
             <div
@@ -133,13 +137,22 @@ const GanttRow: React.FC<GanttRowProps> = ({ project, isExpanded, onToggle, onOp
                     {project.tasks.length} zadań
                 </div>
 
-                <button
-                    onClick={(e) => { e.stopPropagation(); onOpen(); }}
-                    className="p-1.5 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
-                    title="Otwórz projekt"
-                >
-                    <ArrowRight size={14} />
-                </button>
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onOpenOrders(); }}
+                        className="p-1.5 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-all"
+                        title="Zamówienie (Email)"
+                    >
+                        <Mail size={14} strokeWidth={2.5} />
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onOpen(); }}
+                        className="p-1.5 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all"
+                        title="Otwórz projekt"
+                    >
+                        <ArrowRight size={14} />
+                    </button>
+                </div>
             </div>
 
             {isExpanded && (
@@ -208,7 +221,16 @@ const GanttRow: React.FC<GanttRowProps> = ({ project, isExpanded, onToggle, onOp
     );
 };
 
-export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, onShowProjectManager, onShowComparison, onOpenProject, onBack }) => {
+export const DashboardView: React.FC<Props> = ({
+    activeProject,
+    onNewProject,
+    onShowProjectManager,
+    onShowComparison,
+    onOpenProject,
+    onBack,
+    activeTab = 'DASH',
+    onTabChange
+}) => {
     const { profile } = useAuth();
     const [loading, setLoading] = useState(true);
     const [rawExperiments, setRawExperiments] = useState<SavedCalculation[]>([]);
@@ -223,12 +245,23 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
     const [lockedEdits, setLockedEdits] = useState<LockedEdit[]>([]);
     const [requestActionError, setRequestActionError] = useState<string | null>(null);
     const [logisticsViewMode, setLogisticsViewMode] = useState<'PENDING' | 'PROCESSED'>('PENDING');
-    const [activeHubTab, setActiveHubTab] = useState<'DASH' | 'LOGISTICS'>('DASH');
+
+    // Use prop if available, otherwise local state (fallback)
+    const [localActiveTab, setLocalActiveTab] = useState<'DASH' | 'LOGISTICS'>('DASH');
+    const activeHubTab = onTabChange ? activeTab : localActiveTab;
+    const setActiveHubTab = (tab: 'DASH' | 'LOGISTICS') => {
+        if (onTabChange) onTabChange(tab);
+        else setLocalActiveTab(tab);
+    };
 
     // Gantt State
     const [showDrafts, setShowDrafts] = useState(false);
     const [ganttData, setGanttData] = useState<GanttProject[]>([]);
     const [expandedGanttProjects, setExpandedGanttProjects] = useState<Record<string, boolean>>({});
+
+    // Order Preview State
+    const [previewSuppliers, setPreviewSuppliers] = useState<Supplier[] | null>(null);
+    const [previewProject, setPreviewProject] = useState<CalculationData | null>(null);
 
     useEffect(() => {
         loadData();
@@ -628,6 +661,32 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
         }
     };
 
+    const handleOpenOrderPreview = async (row: SavedCalculation) => {
+        try {
+            const fullProject = await storageService.getCalculationById(row.id);
+            if (!fullProject) return;
+
+            const activeData = extractActiveData(fullProject.calc);
+            if (!activeData) {
+                alert("Nie udało się wyodrębnić danych kalkulacji.");
+                return;
+            }
+
+            const suppliersToPreview = activeData.suppliers.filter((s: Supplier) => s.isIncluded !== false);
+
+            if (suppliersToPreview.length === 0) {
+                alert("Brak dostawców do wyświetlenia w tym projekcie.");
+                return;
+            }
+
+            setPreviewSuppliers(suppliersToPreview);
+            setPreviewProject(activeData);
+        } catch (e: any) {
+            console.error("Failed to open order preview", e);
+            alert("Błąd podczas ładowania danych zamówienia.");
+        }
+    };
+
     // Filter for Logistics Queue
     const logisticsQueue = useMemo(() => {
         if (profile?.role !== 'logistics') return [];
@@ -918,6 +977,13 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
                                                         >
                                                             <Check size={14} /> Gotowe
                                                         </button>
+                                                        <button
+                                                            onClick={() => handleOpenOrderPreview(p as any)}
+                                                            className="p-1.5 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm"
+                                                            title="Zamówienie (Email)"
+                                                        >
+                                                            <Mail size={16} strokeWidth={2.5} />
+                                                        </button>
                                                     </div>
                                                 ) : (
                                                     <button
@@ -1155,6 +1221,7 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
                                                     isExpanded={!!expandedGanttProjects[proj.projectId]}
                                                     onToggle={() => setExpandedGanttProjects(prev => ({ ...prev, [proj.projectId]: !prev[proj.projectId] }))}
                                                     onOpen={() => handleProjectClick(proj.handle)}
+                                                    onOpenOrders={() => handleOpenOrderPreview(proj.handle)}
                                                 />
                                             ))}
                                         </div>
@@ -1207,6 +1274,17 @@ export const DashboardView: React.FC<Props> = ({ activeProject, onNewProject, on
                 <div className="animate-fadeIn">
                     <LogisticsHubView onOpenProject={onOpenProject} />
                 </div>
+            )}
+
+            {previewSuppliers && previewProject && (
+                <OrderPreviewModal
+                    suppliers={previewSuppliers}
+                    data={previewProject}
+                    onClose={() => {
+                        setPreviewSuppliers(null);
+                        setPreviewProject(null);
+                    }}
+                />
             )}
         </div>
     );

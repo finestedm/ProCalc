@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { AppState, CalculationMode, ViewMode, ProjectStage } from '../types';
-import { Calculator as CalcIcon, Scale, LayoutDashboard, Undo2, Redo2, Menu, NotebookPen, FileText, HardDrive, Square, PanelRight, Keyboard, PenLine, Send, Lock, Shield, LogOut, User, Edit } from 'lucide-react';
+import { Calculator as CalcIcon, Scale, LayoutDashboard, Undo2, Redo2, Menu, NotebookPen, FileText, HardDrive, Square, PanelRight, Keyboard, PenLine, Send, Lock, Shield, LogOut, User, Edit, ArrowLeft } from 'lucide-react';
 import { DropdownMenu } from './DropdownMenu';
 import { useAuth } from '../contexts/AuthContext';
 import { ProfileEditModal } from './ProfileEditModal';
@@ -85,7 +85,20 @@ export const Header: React.FC<Props> = ({
 
                 {/* 1. LEFT: Brand */}
                 <div className="flex items-center gap-3 shrink-0">
-                    <div className="w-8 h-8 flex items-center justify-center mr-1">
+                    {appState.viewMode !== ViewMode.DASHBOARD && (
+                        <button
+                            onClick={() => window.history.back()}
+                            className="mr-2 p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                            title="Powrót"
+                        >
+                            <ArrowLeft size={20} />
+                        </button>
+                    )}
+                    <div
+                        className="w-8 h-8 flex items-center justify-center mr-1 cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => setAppState(prev => ({ ...prev, viewMode: ViewMode.DASHBOARD }))}
+                        title="Pulpit"
+                    >
                         <svg viewBox="0 0 24 24" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
                             {/* Red Arrow */}
                             <path d="M12 2L19 9H15V13H9V9H5L12 2Z" fill="#D52B1E" />
@@ -93,7 +106,11 @@ export const Header: React.FC<Props> = ({
                             <path d="M15 13V18C15 20.2 13.2 22 11 22H7V18H11V13H15Z" fill="currentColor" className="text-zinc-900 dark:text-white" />
                         </svg>
                     </div>
-                    <div className="flex flex-col">
+                    <div
+                        className="flex flex-col cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => setAppState(prev => ({ ...prev, viewMode: ViewMode.DASHBOARD }))}
+                        title="Pulpit"
+                    >
                         <h1 className="text-sm font-bold tracking-tight text-zinc-900 dark:text-white uppercase leading-none font-mono">
                             JH WE-Calc<span className="text-zinc-400">.v1</span>
                         </h1>

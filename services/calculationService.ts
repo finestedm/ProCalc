@@ -380,3 +380,26 @@ export const ensureTransportData = (data: CalculationData, truckCapacity: number
     newData.transport = [...newData.transport, ...newTransports];
     return newData;
 };
+// [NEW] Robustly extract CalculationData from potentially wrapped formats
+export const extractActiveData = (rawCalc: any): CalculationData | null => {
+    if (!rawCalc) return null;
+
+    // Case 1: Wrapped in ProjectFile (appState)
+    if (rawCalc.appState) {
+        const mode = rawCalc.appState.mode || CalculationMode.INITIAL;
+        return mode === CalculationMode.FINAL ? rawCalc.appState.final : rawCalc.appState.initial;
+    }
+
+    // Case 2: Wrapped in AppState directly
+    if (rawCalc.initial || rawCalc.final) {
+        const mode = rawCalc.mode || CalculationMode.INITIAL;
+        return mode === CalculationMode.FINAL ? rawCalc.final : rawCalc.initial;
+    }
+
+    // Case 3: CalculationData directly
+    if (rawCalc.recipient || rawCalc.orderingParty || rawCalc.suppliers) {
+        return rawCalc;
+    }
+
+    return null;
+};

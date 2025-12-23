@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Truck, ExternalLink, ChevronDown, ChevronRight, RefreshCw, Save, Undo, Redo, Search, Calendar as CalendarIcon, Mail, Map as MapIcon } from 'lucide-react';
+import { Truck, ExternalLink, ChevronDown, ChevronRight, RefreshCw, Save, Undo, Redo, Search, Calendar as CalendarIcon, Mail, Map as MapIcon, UserPlus, UserCheck, Lock } from 'lucide-react';
 import { DatePickerInput } from './DatePickerInput';
 import { DeliveryMap } from './DeliveryMap';
 import { storageService } from '../services/storage';
@@ -7,8 +7,10 @@ import { SavedCalculation, SavedLogisticsTransport } from '../services/storage/t
 import { useAuth } from '../contexts/AuthContext';
 import { CalculationData, CalculationMode, TransportItem, TruckDetail, Supplier, Language } from '../types';
 import { GanttChart } from './GanttChart';
+import { OrderPreviewModal } from './OrderPreviewModal';
 
 import { toISODateString, toEuropeanDateString } from '../services/dateUtils';
+import { extractActiveData } from '../services/calculationService';
 
 interface Props {
     onOpenProject: (data: any, stage: string, mode: CalculationMode) => void;
@@ -32,6 +34,14 @@ const calculateSuggestedWeight = (data: CalculationData, transport: TransportIte
         }
     });
     return Math.round(totalWeight);
+};
+
+// Helper to extract clean address for map/gantt
+const getGeocodingAddress = (addr: any) => {
+    if (!addr) return null;
+    // Exclude 'name' from geocoding string to avoid confusing the search engine with person names
+    const parts = [addr.street, addr.zip, addr.city].filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : null;
 };
 
 // Flattened row for the datagrid
@@ -64,6 +74,8 @@ interface HubRow {
     transportData: TransportItem; // Reference to full object
     truckData?: TruckDetail; // Reference to specific truck if type=TRUCK
     suggestedWeight?: number;
+    contactPerson?: string;
+    contactEmail?: string;
 }
 
 export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
@@ -78,25 +90,78 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
     // We Map: Key = `${projectNumber}|${transportId}` -> TransportItem
     const [localState, setLocalState] = useState<Record<string, TransportItem>>({});
 
-    const handleSendMail = (row: HubRow) => {
-        const tItem = row.transportData;
-        const calcData = row.originalProject.calc as CalculationData;
-        const recipient = calcData?.recipient;
-        if (!recipient?.email) {
-            alert("Brak adresu email osoby kontaktowej klienta.");
+    const [previewSuppliers, setPreviewSuppliers] = useState<Supplier[] | null>(null);
+    const [previewProject, setPreviewProject] = useState<CalculationData | null>(null);
+
+    const handleOpenOrderPreview = (row: HubRow) => {
+        const item = row.transportData;
+        const activeData = extractActiveData(row.originalProject.calc);
+
+        if (!activeData) {
+            alert("Nie udało się wyodrębnić danych kalkulacji.");
             return;
         }
-        const subject = encodeURIComponent(`Informacja o dostawie - ${row.projectNumber}`);
+
+        // Find suppliers linked to this transport
+        const linkedIds = item.linkedSupplierIds || [];
+        if (item.supplierId) linkedIds.push(item.supplierId);
+
+        const suppliersToPreview = (activeData.suppliers || []).filter(s => linkedIds.includes(s.id));
+
+        if (suppliersToPreview.length === 0) {
+            alert("Ten transport nie jest powiązany z żadnym dostawcą w kalkulacji.");
+            return;
+        }
+
+        setPreviewProject(activeData);
+        setPreviewSuppliers(suppliersToPreview);
+    };
+
+    const handleSendDeliveryConfirmation = (row: HubRow) => {
+        if (!row.contactEmail) {
+            alert("Brak adresu email osoby kontaktowej klienta dla tego projektu.");
+            return;
+        }
+
+        const transportName = row.transportData.name || 'Transport';
+        const subject = encodeURIComponent(`Informacja o dostawie - [${row.projectNumber}] ${transportName}`);
         const body = encodeURIComponent(
-            `Dzień dobry ${recipient.contactPerson || ''},\n\n` +
-            `Informujemy o zbliżającej się dostawie:\n` +
-            `- Ilość naczep: ${tItem.trucksCount || 0}\n` +
-            `- Łączna waga: ${calculateSuggestedWeight(calcData, tItem)} kg\n` +
-            `- Spodziewana data dostawy: ${toEuropeanDateString(tItem.confirmedDeliveryDate || tItem.pickupDate)}\n\n` +
+            `Dzień dobry ${row.contactPerson || ''},\n\n` +
+            `Informujemy o zbliżającej się dostawie dla projektu ${row.projectNumber}:\n` +
+            `- Ilość naczep: ${row.transportData.trucksCount || 0}\n` +
+            `- Łączna waga: ${row.suggestedWeight || 0} kg\n` +
+            `- Spodziewana data dostawy: ${row.deliveryDate || 'Nie ustalono'}\n\n` +
             `Pozdrawiamy,\n` +
             `Zespół Logistyki`
         );
-        window.location.href = `mailto:${recipient.email}?subject=${subject}&body=${body}`;
+        window.location.href = `mailto:${row.contactEmail}?subject=${subject}&body=${body}`;
+    };
+
+    const handleTakeOverProject = async (project: SavedCalculation) => {
+        if (!profile?.id) return;
+        if (project.logistics_operator_id && String(project.logistics_operator_id) === String(profile.id)) {
+            // Already taken over by me - maybe unlock?
+            if (confirm("Jesteś już operatorem tego projektu. Czy chcesz go ODDAĆ (odblokować dla specjalistów)?")) {
+                try {
+                    await storageService.updateLogisticsOperator(project.id, null);
+                    await storageService.lockProject(project.id, false);
+                    loadData();
+                } catch (e) {
+                    alert("Błąd zmiany statusu.");
+                }
+            }
+            return;
+        }
+
+        if (confirm("Czy chcesz przejąć ten projekt? Zostanie on ZABLOKOWANY do edycji dla specjalistów/inżynierów.")) {
+            try {
+                await storageService.updateLogisticsOperator(project.id, profile.id);
+                await storageService.lockProject(project.id, true);
+                loadData();
+            } catch (e) {
+                alert("Błąd przejmowania projektu.");
+            }
+        }
     };
 
     // History for Undo/Redo
@@ -417,7 +482,9 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                 name: `[${pNum}] ${tItem.name || 'Transport'}`,
                 projectNumber: pNum, // Attach project metadata
                 contactPerson: recipient?.contactPerson,
-                contactEmail: recipient?.email
+                contactEmail: recipient?.email,
+                city: recipient?.city,
+                address: getGeocodingAddress(recipient)
             } as any);
         });
 
@@ -462,38 +529,11 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
             const isAssignedToMe = project.logistics_operator_id && currentUserId && String(project.logistics_operator_id) === String(currentUserId);
             if (showOnlyMine && !isAssignedToMe) return;
 
-            // Robust data extraction
-            const rawCalc = project.calc as any;
-            if (!rawCalc) return;
-
-            let activeData: CalculationData | null = null;
-
-            // Case 1: Wrapped in ProjectFile (appState)
-            if (rawCalc.appState) {
-                const mode = rawCalc.appState.mode || 'INITIAL';
-                activeData = mode === 'FINAL' ? rawCalc.appState.final : rawCalc.appState.initial;
-            }
-            // Case 2: Wrapped in AppState directly
-            else if (rawCalc.initial || rawCalc.final) {
-                const mode = rawCalc.mode || 'INITIAL';
-                activeData = mode === 'FINAL' ? rawCalc.final : rawCalc.initial;
-            }
-            // Case 3: CalculationData directly
-            else if (rawCalc.recipient || rawCalc.orderingParty || rawCalc.payer) {
-                activeData = rawCalc;
-            }
-
+            const activeData = extractActiveData(project.calc);
             if (!activeData) return;
 
             // Try different address sources (Recipient is priority, then Ordering Party, then Payer)
-            const getAddr = (addr: any) => {
-                if (!addr) return null;
-                // Exclude 'name' from geocoding string to avoid confusing the search engine with person names
-                const parts = [addr.street, addr.zip, addr.city].filter(Boolean);
-                return parts.length > 0 ? parts.join(', ') : null;
-            };
-
-            const address = getAddr(activeData.recipient);
+            const address = getGeocodingAddress(activeData.recipient);
 
             if (!address) return;
 
@@ -546,6 +586,8 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                 vendor = 'Transport Własny';
             }
 
+            const activeData = extractActiveData(project.calc);
+
             if (!projectGroups[pNum]) projectGroups[pNum] = [];
 
             projectGroups[pNum].push({
@@ -566,7 +608,9 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                 comments: '',
                 originalProject: project,
                 transportData: tItem,
-                suggestedWeight: calculateSuggestedWeight(calcData, tItem)
+                suggestedWeight: calculateSuggestedWeight(calcData, tItem),
+                contactPerson: activeData?.recipient?.contactPerson,
+                contactEmail: activeData?.recipient?.email
             });
         });
 
@@ -982,7 +1026,13 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                             </td>
                                             <td className="px-4 py-4 text-right">
                                                 <div className="flex justify-end gap-1 items-center">
-                                                    <button onClick={() => handleSendMail(row)} className="p-2 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm" title="Wyślij powiadomienie">
+                                                    <button onClick={() => handleTakeOverProject(row.originalProject)} className={`p-2 rounded-lg transition-all border active:scale-95 shadow-sm ${row.originalProject.logistics_operator_id ? 'text-purple-600 bg-purple-50 border-purple-100 dark:bg-purple-900/30 dark:border-purple-800' : 'text-zinc-400 hover:text-purple-600 border-transparent hover:bg-purple-50'}`} title={row.originalProject.logistics_operator_id ? "Projekt przejęty" : "Przejmij projekt"}>
+                                                        {row.originalProject.logistics_operator_id ? <UserCheck size={16} strokeWidth={2.5} /> : <UserPlus size={16} strokeWidth={2.5} />}
+                                                    </button>
+                                                    <button onClick={() => handleOpenOrderPreview(row)} className="p-2 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm" title="Zamówienie (Email)">
+                                                        <Mail size={16} strokeWidth={2.5} />
+                                                    </button>
+                                                    <button onClick={() => handleSendDeliveryConfirmation(row)} className="p-2 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm" title="Potwierdzenie Dostawy (Email)">
                                                         <Mail size={16} strokeWidth={2.5} />
                                                     </button>
                                                     <button onClick={() => handleOpenProjectWithSync(row.originalProject)} className="p-2 hover:bg-cyan-100 dark:hover:bg-cyan-900/40 text-cyan-600 dark:text-cyan-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm" title="Otwórz projekt">
@@ -1036,6 +1086,16 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                     </table>
                 </div>
             </div>
+            {previewSuppliers && previewProject && (
+                <OrderPreviewModal
+                    suppliers={previewSuppliers}
+                    data={previewProject}
+                    onClose={() => {
+                        setPreviewSuppliers(null);
+                        setPreviewProject(null);
+                    }}
+                />
+            )}
         </div>
     );
 };

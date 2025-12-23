@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Supplier, InstallationData, ProjectMeta, SupplierStatus, CustomTimelineItem, ProjectTask, InstallationStage, Dependency, TransportItem } from '../types';
-import { Calendar, ZoomIn, ZoomOut, GripHorizontal, GripVertical, MousePointer2, Truck, Plus, Trash2, PenLine, Layers, ClipboardList, X, CheckSquare, Square, Flag, Wrench, ArrowUp, ArrowDown, RefreshCcw, Link2, Link, Car, Maximize2, Minimize2, ChevronRight, ChevronDown, Combine, ChevronLeft, LayoutGrid, Save, Clock, PanelLeft, Mail } from 'lucide-react';
+import { Calendar, ZoomIn, ZoomOut, GripHorizontal, GripVertical, MousePointer2, Truck, Plus, Trash2, PenLine, Layers, ClipboardList, X, CheckSquare, Square, Flag, Wrench, ArrowUp, ArrowDown, RefreshCcw, Link2, Link, Car, Maximize2, Minimize2, ChevronRight, ChevronDown, Combine, ChevronLeft, LayoutGrid, Save, Clock, PanelLeft, Mail, MapPin } from 'lucide-react';
 import { DropdownMenu } from './DropdownMenu';
 import { toISODateString, toEuropeanDateString, formatDisplayDate, parseLocalISODate } from '../services/dateUtils';
 import { DatePickerInput } from './DatePickerInput';
@@ -276,7 +276,9 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                 trucksCount: t.trucksCount,
                 weight: t.weight,
                 childIds: truckItems.map(ti => ti.id),
-                projectNumber: (t as any).projectNumber // Attach project number
+                projectNumber: (t as any).projectNumber, // Attach project number
+                city: (t as any).city,
+                address: (t as any).address
             });
 
             if (expandedGroups.has(t.id)) {
@@ -601,7 +603,8 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
 
     // --- MOUSE HANDLERS ---
     const handleMouseDownItem = (e: React.MouseEvent, id: string, type: DragType, subType?: string) => {
-        if (readOnly) return;
+        const isLogisticsAction = type === 'DELIVERY';
+        if (readOnly && !(canEditPlanning && isLogisticsAction)) return;
         if (!canEditPlanning && (type === 'DELIVERY' || type === 'STAGE_MOVE' || type === 'STAGE_RESIZE' || type === 'CUSTOM_MOVE' || type === 'CUSTOM_RESIZE' || type === 'RENTAL_MOVE')) {
             return;
         }
@@ -965,23 +968,6 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
         onUpdateTasks(updated);
     };
 
-    const handleSendMail = (item: any) => {
-        if (!item.contactEmail) {
-            alert("Brak adresu email osoby kontaktowej klienta.");
-            return;
-        }
-        const subject = encodeURIComponent(`Informacja o dostawie - ${item.name}`);
-        const body = encodeURIComponent(
-            `Dzień dobry ${item.contactPerson || ''},\n\n` +
-            `Informujemy o zbliżającej się dostawie:\n` +
-            `- Ilość naczep: ${item.trucksCount || 0}\n` +
-            `- Łączna waga: ${Math.round(item.weight || 0)} kg\n` +
-            `- Spodziewana data dostawy: ${toEuropeanDateString(item.end)}\n\n` +
-            `Pozdrawiamy,\n` +
-            `Zespół Logistyki`
-        );
-        window.location.href = `mailto:${item.contactEmail}?subject=${subject}&body=${body}`;
-    };
 
     const handleGridDoubleClick = (e: React.MouseEvent, item: any) => {
         e.preventDefault();
@@ -1668,7 +1654,10 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                                             {item.type === 'CUSTOM' && <PenLine size={12} className="text-zinc-500 shrink-0" />}
 
                                                             {item.type === 'SUPPLIER' || item.type === 'TRANSPORT_GROUP' ? (
-                                                                <div className={`font-bold text-xs truncate ${isChild ? 'text-zinc-500 dark:text-zinc-400' : 'text-zinc-800 dark:text-zinc-200'}`} title={item.name}>{item.name}</div>
+                                                                <div className="flex flex-col min-w-0">
+                                                                    <div className={`font-bold text-xs truncate ${isChild ? 'text-zinc-500 dark:text-zinc-400' : 'text-zinc-800 dark:text-zinc-200'}`} title={item.name}>{item.name}</div>
+                                                                    {item.city && <div className="text-[10px] text-zinc-400 truncate flex items-center gap-1"><MapPin size={8} /> {item.city}</div>}
+                                                                </div>
                                                             ) : (
                                                                 <input
                                                                     type="text"
@@ -1680,15 +1669,6 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                                             )}
                                                         </div>
                                                         <div className="flex items-center gap-1">
-                                                            {isGroup && (
-                                                                <button
-                                                                    onClick={() => handleSendMail(item)}
-                                                                    className="p-1 rounded text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                                                                    title={`Wyślij powiadomienie do: ${item.contactPerson || 'brak osoby'}`}
-                                                                >
-                                                                    <Mail size={12} />
-                                                                </button>
-                                                            )}
                                                             {/* TASK BUTTON */}
                                                             <button
                                                                 onClick={(e) => handleTaskClick(e, item.id, item.type)}
@@ -1847,6 +1827,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                                 <div
                                                     className={`absolute ${item.type === 'TRANSPORT_GROUP' ? 'top-3 h-8 shadow-md' : (item.type === 'TRUCK' ? 'top-1.5 h-6 shadow-sm' : 'top-2 h-5 shadow-sm')} border rounded flex items-center justify-between z-20 select-none overflow-visible ${barColor} ${(item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP' && item.type !== 'TRUCK') ? 'cursor-grab active:cursor-grabbing' : ''}`}
                                                     style={{ left: renderProdLeft, width: renderProdWidth }}
+                                                    title={item.address ? `Adres: ${item.address}` : undefined}
                                                     onMouseDown={(e) => {
                                                         if (item.type !== 'SUPPLIER' && item.type !== 'TRANSPORT_GROUP') {
                                                             const dType = item.type === 'STAGE' ? 'STAGE_MOVE' : 'CUSTOM_MOVE';
@@ -1933,7 +1914,7 @@ export const GanttChart: React.FC<Props> = ({ suppliers, installation, meta, tra
                                                         className={`absolute bottom-4 h-4 rounded shadow-sm flex items-center cursor-ew-resize z-20 select-none group/del overflow-visible ${item.type === 'TRANSPORT_GROUP' ? 'bg-blue-600 border border-blue-700' : 'bg-green-500 border border-green-600'}`}
                                                         style={{ left: renderDelLeft, width: delWidth }}
                                                         onMouseDown={(e) => handleMouseDownItem(e, item.id, 'DELIVERY')}
-                                                        title="Dostawa (Przesuń, aby zmienić)"
+                                                        title={item.address ? `Dostawa: ${item.address}` : "Dostawa (Przesuń, aby zmienić)"}
                                                     >
                                                         <div
                                                             className="absolute -right-1.5 w-3 h-3 bg-white border-2 border-zinc-400 rounded-full cursor-crosshair opacity-0 group-hover/del:opacity-100 hover:bg-amber-400 hover:scale-125 transition-all z-30"

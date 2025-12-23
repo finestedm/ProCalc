@@ -54,6 +54,7 @@ export interface ICalculationStorage {
     getCalculations(): Promise<SavedCalculation[]>;
     getCalculationsMetadata(): Promise<SavedCalculationMetadata[]>;
     getCalculationById(id: string): Promise<SavedCalculation | null>;
+    getProjectHistory(projectId: string): Promise<SavedCalculationMetadata[]>;
     deleteCalculation(id: string): Promise<void>;
     setLockState(id: string, isLocked: boolean): Promise<void>;
     lockProject(projectId: string, isLocked: boolean): Promise<void>;

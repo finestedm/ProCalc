@@ -171,42 +171,22 @@ export class SupabaseStorage implements ICalculationStorage {
     }
 
     async getCalculations(): Promise<any[]> {
-        let data: any[] | null = null;
-        let error: any = null;
-
-        // Try fetching with legacy 'calc' column first
-        const { data: dataWithCalc, error: errorWithCalc } = await this.supabase
+        const { data, error } = await this.supabase
             .from(this.tableName)
-            .select('id, created_at, specialist, specialist_id, engineer, engineer_id, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, logistics_status, logistics_operator_id, project_stage, project_notes, user_id, sales_person_1_id, sales_person_2_id, calc, user:users!user_id(full_name), details:calculations_details(calc)')
+            .select('id, created_at, specialist, specialist_id, engineer, engineer_id, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, logistics_status, logistics_operator_id, project_stage, project_notes, user_id, sales_person_1_id, sales_person_2_id, user:users!user_id(full_name), details:calculations_details(calc)')
             .order('created_at', { ascending: false });
 
-        if (!errorWithCalc) {
-            data = dataWithCalc;
-        } else {
-            // Fallback: If 'calc' column is missing, fetch without it
-            console.warn("Legacy 'calc' column fetch failed, retrying without it:", errorWithCalc.message);
-            const { data: dataWithoutCalc, error: errorWithoutCalc } = await this.supabase
-                .from(this.tableName)
-                .select('id, created_at, specialist, specialist_id, engineer, engineer_id, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, logistics_status, logistics_operator_id, project_stage, project_notes, user_id, sales_person_1_id, sales_person_2_id, user:users!user_id(full_name), details:calculations_details(calc)')
-                .order('created_at', { ascending: false });
-
-            if (errorWithoutCalc) throw new Error(errorWithoutCalc.message);
-            data = dataWithoutCalc;
-        }
+        if (error) throw new Error(error.message);
 
         return (data || []).map((item: any) => {
-            // [MODIFIED] Handle both 1:1 (Object) and 1:N (Array) responses from Supabase
             const details = item.details;
             if (Array.isArray(details)) {
                 if (details.length > 0 && details[0]?.calc) {
                     item.calc = details[0].calc;
                 }
             } else if (details && typeof details === 'object' && details.calc) {
-                // 1:1 relationship case
                 item.calc = details.calc;
             }
-
-            // Fallback: item.calc might already be set from main table
 
             delete item.details;
             return item;
@@ -224,27 +204,13 @@ export class SupabaseStorage implements ICalculationStorage {
     }
 
     async getCalculationById(id: string): Promise<any | null> {
-        let data: any = null;
-
-        // Try fetching with legacy 'calc' column
-        const { data: dataWithCalc, error: errorWithCalc } = await this.supabase
+        const { data, error } = await this.supabase
             .from(this.tableName)
             .select('*, user:users!user_id(full_name), details:calculations_details(calc)')
             .eq('id', id)
             .single();
 
-        if (!errorWithCalc) {
-            data = dataWithCalc;
-        } else {
-            // Fallback
-            const { data: dataWithoutCalc, error: errorWithoutCalc } = await this.supabase
-                .from(this.tableName)
-                .select('id, created_at, specialist, specialist_id, engineer, engineer_id, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, logistics_status, logistics_operator_id, project_stage, project_notes, user_id, sales_person_1_id, sales_person_2_id, user:users!user_id(full_name), details:calculations_details(calc)')
-                .eq('id', id)
-                .single();
-            if (errorWithoutCalc) return null;
-            data = dataWithoutCalc;
-        }
+        if (error) return null;
 
         if (data && (data as any).details && Array.isArray((data as any).details) && (data as any).details.length > 0 && (data as any).details[0].calc) {
             (data as any).calc = (data as any).details[0].calc;
@@ -252,6 +218,18 @@ export class SupabaseStorage implements ICalculationStorage {
         }
 
         return data;
+    }
+
+    async getProjectHistory(projectId: string): Promise<any[]> {
+        if (!projectId || projectId === 'BezNumeru') return [];
+        const { data, error } = await this.supabase
+            .from(this.tableName)
+            .select('id, created_at, specialist, engineer, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, logistics_status, project_stage, project_notes, user_id, user:users!user_id(full_name)')
+            .eq('project_id', projectId)
+            .order('created_at', { ascending: false });
+
+        if (error) throw new Error(error.message);
+        return data || [];
     }
 
     async deleteCalculation(id: string): Promise<void> {

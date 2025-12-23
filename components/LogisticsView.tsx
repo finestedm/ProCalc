@@ -28,13 +28,15 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange, onUpdateTranspo
     const [previewSuppliers, setPreviewSuppliers] = useState<Supplier[] | null>(null);
 
     const onUpdateSupplier = (supplierId: string, updates: Partial<Supplier>) => {
-        if (readOnly) return;
+        const canBypass = profile?.role === 'logistics' || profile?.is_admin;
+        if (readOnly && !canBypass) return;
         const updatedSuppliers = data.suppliers.map(s => s.id === supplierId ? { ...s, ...updates } : s);
         onChange({ suppliers: updatedSuppliers });
     };
 
     const updateInstallation = (updates: Partial<typeof data.installation>) => {
-        if (readOnly) return;
+        const canBypass = profile?.role === 'logistics' || profile?.is_admin;
+        if (readOnly && !canBypass) return;
         onChange({ installation: { ...data.installation, ...updates } });
     };
 
@@ -210,8 +212,8 @@ export const LogisticsView: React.FC<Props> = ({ data, onChange, onUpdateTranspo
                     <select
                         value={supplier.status}
                         onChange={(e) => onUpdateSupplier(supplier.id, { status: e.target.value as SupplierStatus })}
-                        disabled={readOnly}
-                        className={`h-8 px-3 rounded text-[10px] font-bold uppercase outline-none border transition-colors cursor-pointer appearance-none ${getStatusColor(supplier.status)} ${readOnly ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        disabled={readOnly && profile?.role !== 'logistics' && !profile?.is_admin}
+                        className={`h-8 px-3 rounded text-[10px] font-bold uppercase outline-none border transition-colors cursor-pointer appearance-none ${getStatusColor(supplier.status)} ${readOnly && profile?.role !== 'logistics' && !profile?.is_admin ? 'opacity-70 cursor-not-allowed' : ''}`}
                     >
                         <option value={SupplierStatus.TO_ORDER}>Do Zamówienia</option>
                         <option value={SupplierStatus.ORDERED}>Zamówione</option>

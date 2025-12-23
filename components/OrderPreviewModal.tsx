@@ -12,8 +12,10 @@ interface Props {
 export const OrderPreviewModal: React.FC<Props> = ({ suppliers, data, onClose }) => {
     if (!suppliers || suppliers.length === 0) return null;
 
-    const mainSupplier = suppliers[0];
-    const [language, setLanguage] = useState<Language>(mainSupplier.language);
+    const [selectedId, setSelectedId] = useState(suppliers[0].id);
+    const selectedSupplier = suppliers.find(s => s.id === selectedId) || suppliers[0];
+
+    const [language, setLanguage] = useState<Language>(selectedSupplier.language);
 
     // Editable Fields State
     const [placeDate, setPlaceDate] = useState('');
@@ -44,13 +46,13 @@ export const OrderPreviewModal: React.FC<Props> = ({ suppliers, data, onClose })
 
         // Supplier
         setSupplierText([
-            mainSupplier.name,
-            mainSupplier.street || '---',
-            `${mainSupplier.zip || ''} ${mainSupplier.city || ''}`,
-            mainSupplier.nip ? `NIP: ${mainSupplier.nip}` : '',
-            mainSupplier.phone ? `Tel: ${mainSupplier.phone}` : '',
-            mainSupplier.email ? `Email: ${mainSupplier.email}` : '',
-            mainSupplier.contactPerson ? `${isEn ? 'Contact' : 'Kontakt'}: ${mainSupplier.contactPerson}` : ''
+            selectedSupplier.name,
+            selectedSupplier.street || '---',
+            `${selectedSupplier.zip || ''} ${selectedSupplier.city || ''}`,
+            selectedSupplier.nip ? `NIP: ${selectedSupplier.nip}` : '',
+            selectedSupplier.phone ? `Tel: ${selectedSupplier.phone}` : '',
+            selectedSupplier.email ? `Email: ${selectedSupplier.email}` : '',
+            selectedSupplier.contactPerson ? `${isEn ? 'Contact' : 'Kontakt'}: ${selectedSupplier.contactPerson}` : ''
         ].filter(Boolean).join('\n'));
 
         // Delivery
@@ -58,17 +60,14 @@ export const OrderPreviewModal: React.FC<Props> = ({ suppliers, data, onClose })
             data.recipient.name,
             data.recipient.street,
             `${data.recipient.zip} ${data.recipient.city}`,
-            mainSupplier.deliveryDate ? `${isEn ? 'Delivery' : 'Dostawa'}: ${mainSupplier.deliveryDate}` : ''
+            selectedSupplier.deliveryDate ? `${isEn ? 'Delivery' : 'Dostawa'}: ${selectedSupplier.deliveryDate}` : ''
         ].filter(Boolean).join('\n'));
 
         // Notes
-        let combinedNotes = "";
-        suppliers.forEach(s => {
-            if (s.notes) combinedNotes += `${suppliers.length > 1 ? s.customTabName || s.name : ''} ${s.notes}\n`;
-        });
-        setNotes(combinedNotes.trim());
+        let sNotes = selectedSupplier.notes || "";
+        setNotes(sNotes);
 
-    }, [data, mainSupplier, suppliers, language]);
+    }, [data, selectedSupplier, language]);
 
     // Handle Printing
     const handlePrint = () => {
@@ -96,12 +95,7 @@ export const OrderPreviewModal: React.FC<Props> = ({ suppliers, data, onClose })
 
         // Generate items HTML
         let cumulativeIndex = 1;
-        const itemsHtml = suppliers.map(supplier => {
-            const sectionHeader = suppliers.length > 1
-                ? `<tr><td colspan="5" style="background: #f9fafb; font-weight: bold; font-size: 11px; padding: 8px; border-bottom: 2px solid #eee; text-transform: uppercase; color: #555;">Zakładka: ${supplier.customTabName || supplier.name}</td></tr>`
-                : '';
-
-            const rows = supplier.items.map((item) => `
+        const rows = selectedSupplier.items.map((item) => `
             <tr>
                 <td style="text-align: center;">${cumulativeIndex++}</td>
                 <td>${item.itemDescription}</td>
@@ -110,15 +104,13 @@ export const OrderPreviewModal: React.FC<Props> = ({ suppliers, data, onClose })
                 <td style="text-align: right;">${item.weight} kg</td>
             </tr>
           `).join('');
-            return sectionHeader + rows;
-        }).join('');
 
-        const totalGroupWeight = suppliers.reduce((sum, s) => sum + s.items.reduce((is, i) => is + (i.weight * i.quantity), 0), 0);
+        const totalWeight = selectedSupplier.items.reduce((is, i) => is + (i.weight * i.quantity), 0);
 
         const html = `
         <html>
           <head>
-            <title>${L.title} - ${mainSupplier.name}</title>
+            <title>${L.title} - ${selectedSupplier.name}</title>
             <style>
               body { font-family: 'Helvetica', 'Arial', sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; line-height: 1.4; color: #333; }
               .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #F0C80E; padding-bottom: 20px; }
@@ -144,7 +136,7 @@ export const OrderPreviewModal: React.FC<Props> = ({ suppliers, data, onClose })
                 </div>
                 <div class="meta">
                     <p><strong>${L.date}:</strong> ${placeDate}</p>
-                    <p><strong>${L.ref}:</strong> ${mainSupplier.offerNumber || '-'}</p>
+                    <p><strong>${L.ref}:</strong> ${selectedSupplier.offerNumber || '-'}</p>
                     <p><strong>JH Order:</strong> ${orderRef}</p>
                 </div>
             </div>
@@ -175,12 +167,12 @@ export const OrderPreviewModal: React.FC<Props> = ({ suppliers, data, onClose })
                     </tr>
                 </thead>
                 <tbody>
-                    ${itemsHtml}
+                    ${rows}
                 </tbody>
             </table>
             
             <div class="summary">
-                Total Weight: ${totalGroupWeight.toLocaleString()} kg
+                Total Weight: ${totalWeight.toLocaleString()} kg
             </div>
 
             ${notes ? `
@@ -190,7 +182,7 @@ export const OrderPreviewModal: React.FC<Props> = ({ suppliers, data, onClose })
             ` : ''}
             <div class="footer">
                 ${L.footer}<br/>
-                ${L.offerRef}: ${mainSupplier.offerNumber}
+                ${L.offerRef}: ${selectedSupplier.offerNumber}
             </div>
             <script>window.print();</script>
           </body>
@@ -230,6 +222,20 @@ export const OrderPreviewModal: React.FC<Props> = ({ suppliers, data, onClose })
                                 EN
                             </button>
                         </div>
+                        {suppliers.length > 1 && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] uppercase font-bold text-zinc-500">Dostawca:</span>
+                                <select
+                                    className="bg-zinc-700 text-white text-xs font-bold rounded px-2 py-1 outline-none border border-zinc-600 focus:border-amber-400"
+                                    value={selectedId}
+                                    onChange={(e) => setSelectedId(e.target.value)}
+                                >
+                                    {suppliers.map(s => (
+                                        <option key={s.id} value={s.id}>{s.name} ({s.customTabName || 'No tab'})</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                     </div>
                     <div className="flex gap-2">
                         <button
@@ -266,7 +272,7 @@ export const OrderPreviewModal: React.FC<Props> = ({ suppliers, data, onClose })
                                 </div>
                                 <div className="flex justify-end gap-2 items-baseline">
                                     <span className="font-bold text-xs w-20">{isEn ? "Offer Ref" : "Nr Oferty"}:</span>
-                                    <span>{mainSupplier.offerNumber}</span>
+                                    <span>{selectedSupplier.offerNumber}</span>
                                 </div>
                                 <div className="flex justify-end gap-2 items-baseline">
                                     <span className="font-bold text-xs w-20">JH Order:</span>
@@ -319,25 +325,14 @@ export const OrderPreviewModal: React.FC<Props> = ({ suppliers, data, onClose })
                                 </tr>
                             </thead>
                             <tbody>
-                                {suppliers.map((s, sIdx) => (
-                                    <React.Fragment key={s.id}>
-                                        {suppliers.length > 1 && (
-                                            <tr>
-                                                <td colSpan={5} className="bg-zinc-50 p-1 text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-center border-b border-zinc-200">
-                                                    {s.customTabName || s.name}
-                                                </td>
-                                            </tr>
-                                        )}
-                                        {s.items.map((item, idx) => (
-                                            <tr key={item.id} className="border-b border-zinc-100">
-                                                <td className="p-2 text-center text-zinc-500">{idx + 1}</td>
-                                                <td className="p-2">{item.itemDescription}</td>
-                                                <td className="p-2 text-zinc-600 font-mono text-xs">{item.componentNumber}</td>
-                                                <td className="p-2 text-center font-bold">{item.quantity}</td>
-                                                <td className="p-2 text-right text-zinc-500">{item.weight} kg</td>
-                                            </tr>
-                                        ))}
-                                    </React.Fragment>
+                                {selectedSupplier.items.map((item, idx) => (
+                                    <tr key={item.id} className="border-b border-zinc-100">
+                                        <td className="p-2 text-center text-zinc-500">{idx + 1}</td>
+                                        <td className="p-2">{item.itemDescription}</td>
+                                        <td className="p-2 text-zinc-600 font-mono text-xs">{item.componentNumber}</td>
+                                        <td className="p-2 text-center font-bold">{item.quantity}</td>
+                                        <td className="p-2 text-right text-zinc-500">{item.weight} kg</td>
+                                    </tr>
                                 ))}
                             </tbody>
                         </table>
@@ -356,7 +351,7 @@ export const OrderPreviewModal: React.FC<Props> = ({ suppliers, data, onClose })
 
                         <div className="mt-12 pt-6 border-t border-zinc-200 text-center text-xs text-zinc-400">
                             {isEn ? "Please confirm receipt of this order." : "Prosimy o potwierdzenie otrzymania zamówienia."}<br />
-                            {isEn ? "Based on Offer" : "Dotyczy oferty"}: {mainSupplier.offerNumber}
+                            {isEn ? "Based on Offer" : "Dotyczy oferty"}: {selectedSupplier.offerNumber}
                         </div>
 
                     </div>

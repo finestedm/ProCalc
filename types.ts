@@ -409,9 +409,11 @@ export interface AppState {
   manualPrice: number | null; // For Initial Calculation override
   finalManualPrice: number | null; // For Final Calculation override
   globalSettings: GlobalSettings;
+  activeHubTab?: 'DASH' | 'LOGISTICS';
   isLocked?: boolean; // [NEW] Controls editability of Initial Calculation
   activeCalculationId?: string; // [NEW] ID of the cloud-saved calculation
   logisticsStatus?: 'PENDING' | 'PROCESSED' | null; // [NEW] Status for logistics
+  logistics_operator_id?: string | null; // [NEW] User ID of the logistician who took over
 }
 
 export interface HistoryEntry {

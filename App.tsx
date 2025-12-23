@@ -187,7 +187,8 @@ const App: React.FC = () => {
         targetMargin: 20,
         manualPrice: null,
         finalManualPrice: null,
-        globalSettings: { ...DEFAULT_SETTINGS }
+        globalSettings: { ...DEFAULT_SETTINGS },
+        activeHubTab: 'DASH'
     });
 
     const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
@@ -984,6 +985,20 @@ const App: React.FC = () => {
             }
 
             if (isLocalLocked || isRemoteLocked) {
+                // [NEW] Logistics Takeover Check
+                const isLogisticsTakeover = !!appState.logistics_operator_id;
+                const isMyTakeover = appState.logistics_operator_id === profile?.id;
+
+                if (isLogisticsTakeover && !isMyTakeover && !canBypass) {
+                    triggerConfirm(
+                        "Projekt Przejęty przez Logistykę",
+                        "Ten projekt został przypisany do konkretnego logistyka. Tylko osoba przypisana (lub administrator) może zapisywać zmiany.",
+                        () => { },
+                        true
+                    );
+                    return false;
+                }
+
                 console.log("[App] Project is locked. Showing prompt.");
                 // If locked, we MUST ask for reason.
                 setPendingSave({ stage, isLogistics });
@@ -1923,6 +1938,56 @@ const App: React.FC = () => {
         { label: 'Wyloguj Się', icon: <LogOut size={16} />, onClick: () => signOut(), danger: true },
     ];
 
+    // --- BROWSER HISTORY SYNC ---
+    useEffect(() => {
+        const handlePopState = (event: PopStateEvent) => {
+            if (event.state) {
+                // Restore View & Tab
+                setAppState(prev => ({
+                    ...prev,
+                    viewMode: event.state.viewMode || prev.viewMode,
+                    activeHubTab: event.state.activeHubTab || prev.activeHubTab
+                }));
+
+                // [Optional] If we have a projectNumber, we could trigger a reload here 
+                // if the current project is different. But for now, we rely on the fact 
+                // that the state contains the last loaded project.
+            }
+        };
+
+        window.addEventListener('popstate', handlePopState);
+
+        // Initial state
+        if (!window.history.state) {
+            const currentPNum = appState.initial.meta.projectNumber || '';
+            window.history.replaceState({
+                viewMode: appState.viewMode,
+                activeHubTab: appState.activeHubTab,
+                projectNumber: currentPNum
+            }, '');
+        }
+
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
+
+    // Sync viewMode/tab/project changes to history
+    useEffect(() => {
+        const currentState = window.history.state;
+        const currentPNum = appState.initial.meta.projectNumber || '';
+
+        const hasViewChanged = currentState?.viewMode !== appState.viewMode;
+        const hasTabChanged = currentState?.activeHubTab !== appState.activeHubTab;
+        const hasProjectChanged = currentState?.projectNumber !== currentPNum;
+
+        if (hasViewChanged || hasTabChanged || hasProjectChanged) {
+            window.history.pushState({
+                viewMode: appState.viewMode,
+                activeHubTab: appState.activeHubTab,
+                projectNumber: currentPNum
+            }, '');
+        }
+    }, [appState.viewMode, appState.activeHubTab, appState.initial.meta.projectNumber]);
+
     if (!isLoaded) return <div className="min-h-screen bg-black flex items-center justify-center text-zinc-500 font-mono text-sm">Wczytywanie systemu...</div>;
 
     const scrollSpySections = [
@@ -1971,7 +2036,14 @@ const App: React.FC = () => {
 
 
 
-    const isReadOnly = false; // [MODIFIED] User explicitly requested to allow editing even if locked. Lock is handled on Save.
+    const isLogisticsTakeover = !!appState.logistics_operator_id;
+    const isMyTakeover = appState.logistics_operator_id === profile?.id;
+    const canBypassLock = profile?.is_admin || profile?.role === 'logistics' || profile?.role === 'manager';
+
+    // In case of logistics takeover, it's a HARD LOCK for specialists/engineers.
+    // In case of normal lock, it's a soft lock (edit allowed, but asks for reason on save).
+    const isReadOnly = isLogisticsTakeover && !canBypassLock && !isMyTakeover;
+
 
     return (
         <div className="h-screen overflow-hidden bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 transition-colors font-sans flex flex-col">
@@ -2342,6 +2414,8 @@ const App: React.FC = () => {
                                     onShowProjectManager={() => setShowProjectManager(true)}
                                     onShowComparison={() => setShowComparison(true)}
                                     onBack={() => setAppState(prev => ({ ...prev, viewMode: ViewMode.CALCULATOR }))}
+                                    activeTab={appState.activeHubTab}
+                                    onTabChange={(tab) => setAppState(prev => ({ ...prev, activeHubTab: tab }))}
                                     onOpenProject={(data, stage, mode) => {
                                         loadProjectFromObject(data);
                                     }}
