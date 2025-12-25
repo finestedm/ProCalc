@@ -958,6 +958,7 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                             canEditPlanning={profile?.role === 'logistics'}
                             expandedGroupsProp={expandedGroups}
                             onToggleGroup={toggleExpand}
+                            showOrderDate={false}
                         />
                     </div>
                 </div>
@@ -1027,7 +1028,7 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                                 <div className="font-black text-[13px] text-zinc-900 dark:text-white uppercase tracking-tighter leading-none mb-0.5">{row.projectNumber}</div>
                                                 <div className="text-[10px] font-bold text-zinc-400 truncate max-w-[200px] leading-tight uppercase tracking-wide">{row.customerName}</div>
                                             </td>
-                                            <td className="px-4 py-2" colSpan={5}>
+                                            <td className="px-4 py-2" colSpan={6}>
                                                 <div className="flex items-center gap-4">
                                                     <div className="flex items-center gap-2">
                                                         <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
@@ -1040,7 +1041,7 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-2 text-right" colSpan={3}>
+                                            <td className="px-4 py-2 text-right">
                                                 <div className="text-right">
                                                     <div className="text-[12px] font-bold text-zinc-800 dark:text-zinc-200 font-mono bg-white dark:bg-zinc-900 inline-block px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-800 shadow-sm">
                                                         {row.price > 0 ? row.price.toLocaleString() : '-'} {row.currency}
@@ -1048,12 +1049,20 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-2 text-right">
-                                                <button
-                                                    onClick={() => handleAddTransport(row.originalProject)}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-lg font-bold text-[9px] uppercase tracking-wider hover:scale-105 active:scale-95 transition-all shadow-lg shadow-zinc-500/10"
-                                                >
-                                                    <PlusCircle size={12} /> Dodaj
-                                                </button>
+                                                <div className="flex justify-end gap-1 items-center">
+                                                    <button
+                                                        onClick={() => handleAddTransport(row.originalProject)}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-lg font-bold text-[9px] uppercase tracking-wider hover:scale-105 active:scale-95 transition-all shadow-lg shadow-zinc-500/10 mr-2"
+                                                    >
+                                                        <PlusCircle size={12} /> Dodaj
+                                                    </button>
+                                                    <button onClick={() => handleTakeOverProject(row.originalProject)} className={`p-2 rounded-lg transition-all border active:scale-95 shadow-sm ${row.originalProject.logistics_operator_id ? 'text-purple-600 bg-purple-50 border-purple-100 dark:bg-purple-900/30 dark:border-purple-800' : 'text-zinc-400 hover:text-purple-600 border-transparent hover:bg-purple-50'}`} title={row.originalProject.logistics_operator_id ? "Projekt przejęty" : "Przejmij projekt"}>
+                                                        {row.originalProject.logistics_operator_id ? <UserCheck size={16} strokeWidth={2.5} /> : <UserPlus size={16} strokeWidth={2.5} />}
+                                                    </button>
+                                                    <button onClick={() => handleOpenProjectWithSync(row.originalProject)} className="p-2 hover:bg-cyan-100 dark:hover:bg-cyan-900/40 text-cyan-600 dark:text-cyan-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm" title="Otwórz projekt">
+                                                        <ExternalLink size={16} strokeWidth={2.5} />
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -1166,17 +1175,11 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                                     <button onClick={() => handleDeleteTransport(row.projectNumber, row.transportId)} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-zinc-400 hover:text-red-500 rounded-lg transition-all border border-transparent active:scale-95" title="Usuń transport">
                                                         <Trash2 size={16} strokeWidth={2.5} />
                                                     </button>
-                                                    <button onClick={() => handleTakeOverProject(row.originalProject)} className={`p-2 rounded-lg transition-all border active:scale-95 shadow-sm ${row.originalProject.logistics_operator_id ? 'text-purple-600 bg-purple-50 border-purple-100 dark:bg-purple-900/30 dark:border-purple-800' : 'text-zinc-400 hover:text-purple-600 border-transparent hover:bg-purple-50'}`} title={row.originalProject.logistics_operator_id ? "Projekt przejęty" : "Przejmij projekt"}>
-                                                        {row.originalProject.logistics_operator_id ? <UserCheck size={16} strokeWidth={2.5} /> : <UserPlus size={16} strokeWidth={2.5} />}
-                                                    </button>
                                                     <button onClick={() => handleOpenOrderPreview(row)} className="p-2 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm" title="Zamówienie (Email)">
                                                         <Mail size={16} strokeWidth={2.5} />
                                                     </button>
                                                     <button onClick={() => handleSendDeliveryConfirmation(row)} className="p-2 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm" title="Potwierdzenie Dostawy (Email)">
                                                         <Mail size={16} strokeWidth={2.5} />
-                                                    </button>
-                                                    <button onClick={() => handleOpenProjectWithSync(row.originalProject)} className="p-2 hover:bg-cyan-100 dark:hover:bg-cyan-900/40 text-cyan-600 dark:text-cyan-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm" title="Otwórz projekt">
-                                                        <ExternalLink size={16} strokeWidth={2.5} />
                                                     </button>
                                                 </div>
                                             </td>

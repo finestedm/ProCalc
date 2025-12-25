@@ -6,6 +6,7 @@ import { DropdownMenu } from './DropdownMenu';
 import { useAuth } from '../contexts/AuthContext';
 import { ProfileEditModal } from './ProfileEditModal';
 import { RequestAccessModal } from './RequestAccessModal';
+import { NotificationCenter } from './NotificationCenter';
 
 interface Props {
     appState: AppState;
@@ -23,7 +24,8 @@ interface Props {
     handleImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onToggleSidebar?: () => void;
     showUndoRedo?: boolean;
-    onToggleLock?: () => void; // [NEW]
+    onToggleLock?: () => void;
+    onShowHistory?: () => void;
 }
 
 export const Header: React.FC<Props> = ({
@@ -42,7 +44,9 @@ export const Header: React.FC<Props> = ({
     handleImport,
     onToggleSidebar,
     showUndoRedo = true,
-    onToggleLock
+
+    onToggleLock,
+    onShowHistory
 }) => {
     const { profile, signOut } = useAuth();
     const [showProfileEdit, setShowProfileEdit] = useState(false);
@@ -155,7 +159,11 @@ export const Header: React.FC<Props> = ({
                     {appState.viewMode === ViewMode.CALCULATOR && (
                         <div className="flex items-center gap-3">
                             {/* Stage Badge */}
-                            <div className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wider select-none ${stageConfig.color}`}>
+                            <div
+                                onClick={onShowHistory}
+                                className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wider select-none cursor-pointer hover:opacity-80 transition-opacity ${stageConfig.color}`}
+                                title="Kliknij, aby zobaczyć historię wersji"
+                            >
                                 {stageConfig.icon}
                                 {stageConfig.label}
                             </div>
@@ -197,7 +205,12 @@ export const Header: React.FC<Props> = ({
                             >
                                 <PanelRight size={18} />
                             </button>
+
                         )}
+
+                        {/* Notification Center */}
+                        <NotificationCenter />
+                        <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block"></div>
 
                         <div className="hidden sm:flex items-center gap-1">
                             {/* [NEW] Lock/Unlock Button - Subtler, only for certain roles */}
@@ -276,17 +289,19 @@ export const Header: React.FC<Props> = ({
                 </div>
             </div>
 
-            {appState.activeCalculationId && (
-                <RequestAccessModal
-                    isOpen={showAccessRequest}
-                    onClose={() => setShowAccessRequest(false)}
-                    calculationId={appState.activeCalculationId}
-                    projectNumber={projectNumber || 'Bez Projektu'}
-                    onSuccess={() => {
-                        // Maybe show a global checkmark?
-                    }}
-                />
-            )}
+            {
+                appState.activeCalculationId && (
+                    <RequestAccessModal
+                        isOpen={showAccessRequest}
+                        onClose={() => setShowAccessRequest(false)}
+                        calculationId={appState.activeCalculationId}
+                        projectNumber={projectNumber || 'Bez Projektu'}
+                        onSuccess={() => {
+                            // Maybe show a global checkmark?
+                        }}
+                    />
+                )
+            }
         </header >
     );
 };

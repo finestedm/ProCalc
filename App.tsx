@@ -51,6 +51,7 @@ import { DashboardView } from './components/DashboardView';
 import { ProfileEditModal } from './components/ProfileEditModal';
 import { UnlockRequestModal } from './components/UnlockRequestModal';
 import { RestoreSessionModal } from './components/RestoreSessionModal';
+import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { fetchEurRate } from './services/currencyService';
 import { generateDiff } from './services/diffService';
 import { storageService } from './services/storage';
@@ -208,6 +209,7 @@ const App: React.FC = () => {
     const [showScenarioManager, setShowScenarioManager] = useState(false);
     const [showUnlockModal, setShowUnlockModal] = useState(false);
     const [showRestoreModal, setShowRestoreModal] = useState(false);
+    const [showVersionHistory, setShowVersionHistory] = useState(false);
     const [lastSessionData, setLastSessionData] = useState<any>(null);
     const [pendingSave, setPendingSave] = useState<{ stage: ProjectStage, reason?: string, isLogistics?: boolean } | null>(null);
 
@@ -2140,8 +2142,14 @@ const App: React.FC = () => {
                         handleImport={handleImport}
                         onToggleSidebar={() => setShowMobileSidebar(!showMobileSidebar)}
                         onToggleLock={handleToggleLock}
+                        onShowHistory={() => {
+                            if (!appState.initial.meta.projectNumber) {
+                                showSnackbar("Wersjonowanie dostępne tylko dla zapisanych projektów z numerem.");
+                                return;
+                            }
+                            setShowVersionHistory(true);
+                        }}
                     />
-
                     {/* Main Layout - Modified to support Bottom Summary */}
                     <main ref={mainScrollRef} className="flex-1 overflow-y-auto w-full grid grid-cols-1 xl:grid-cols-12 items-start relative gap-0 scroll-smooth">
 
@@ -2701,6 +2709,21 @@ const App: React.FC = () => {
                         }}
                     />
                 </>
+            )}
+
+            {/* VERSION HISTORY MODAL */}
+            {showVersionHistory && (
+                <VersionHistoryModal
+                    isOpen={showVersionHistory}
+                    onClose={() => setShowVersionHistory(false)}
+                    projectId={appState.initial.meta.projectNumber || 'BezNumeru'}
+                    currentVersion={appState}
+                    onLoadVersion={(data) => {
+                        applyLoadedData(data);
+                        setShowVersionHistory(false);
+                        showSnackbar("Wczytano wersję historyczną.");
+                    }}
+                />
             )}
         </div>
     );
