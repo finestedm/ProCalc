@@ -29,7 +29,7 @@ export enum ViewMode {
   DASHBOARD = 'DASHBOARD'
 }
 
-export type ProjectStage = 'DRAFT' | 'OPENING' | 'FINAL';
+export type ProjectStage = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'OPENING' | 'FINAL';
 
 export interface AddressData {
   name: string;
@@ -395,6 +395,15 @@ export interface CalculationScenario {
   paymentTerms: PaymentTerms;
 }
 
+// [NEW] Approval Request Context
+export interface ApprovalRequest {
+  requesterId?: string;
+  requesterName?: string;
+  requestDate: string;
+  reasons: string[];
+  message?: string;
+}
+
 export interface AppState {
   initial: CalculationData;
   final: CalculationData;
@@ -402,6 +411,7 @@ export interface AppState {
   activeScenarioId: string; // ID of the currently active initial scenario
   mode: CalculationMode;
   stage: ProjectStage; // Added Stage Tracking
+  approvalRequest?: ApprovalRequest; // [NEW] Store approval context
   viewMode: ViewMode;
   exchangeRate: number;
   offerCurrency: Currency;

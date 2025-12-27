@@ -1,12 +1,14 @@
 
 import React, { useState } from 'react';
 import { AppState, CalculationMode, ViewMode, ProjectStage } from '../types';
-import { Calculator as CalcIcon, Scale, LayoutDashboard, Undo2, Redo2, Menu, NotebookPen, FileText, HardDrive, Square, PanelRight, Keyboard, PenLine, Send, Lock, Shield, LogOut, User, Edit, ArrowLeft } from 'lucide-react';
+import { Calculator as CalcIcon, Scale, LayoutDashboard, Undo2, Redo2, Menu, NotebookPen, FileText, HardDrive, Square, PanelRight, Keyboard, PenLine, Send, Lock, Shield, LogOut, User, Edit, ArrowLeft, CheckCircle, AlertCircle, PlayCircle, Clock, Archive, History, FilePlus } from 'lucide-react';
 import { DropdownMenu } from './DropdownMenu';
 import { useAuth } from '../contexts/AuthContext';
 import { ProfileEditModal } from './ProfileEditModal';
 import { RequestAccessModal } from './RequestAccessModal';
 import { NotificationCenter } from './NotificationCenter';
+import { STAGE_LABELS, STAGE_COLORS, lifecycleService } from '../services/lifecycleService';
+import { ApprovalRequestModal } from './ApprovalRequestModal';
 
 interface Props {
     appState: AppState;
@@ -26,6 +28,7 @@ interface Props {
     showUndoRedo?: boolean;
     onToggleLock?: () => void;
     onShowHistory?: () => void;
+    onAction?: (action: string, meta?: any) => void;
 }
 
 export const Header: React.FC<Props> = ({
@@ -46,11 +49,143 @@ export const Header: React.FC<Props> = ({
     showUndoRedo = true,
 
     onToggleLock,
-    onShowHistory
+    onShowHistory,
+    onAction
 }) => {
     const { profile, signOut } = useAuth();
     const [showProfileEdit, setShowProfileEdit] = useState(false);
     const [showAccessRequest, setShowAccessRequest] = useState(false);
+
+    // Lifecycle Logic
+    const [showLifecycleMenu, setShowLifecycleMenu] = useState(false);
+    const [showApprovalModal, setShowApprovalModal] = useState(false);
+    const [approvalValidationResult, setApprovalValidationResult] = useState<any>({ approved: false, reasons: [] });
+
+    const stage = appState.stage || 'DRAFT';
+    const canApprove = profile?.is_admin || profile?.role === 'manager';
+
+    const renderLifecycleActions = () => {
+        if (!onAction) return null;
+
+        switch (stage) {
+            case 'DRAFT':
+                return (
+                    <button
+                        onClick={() => {
+                            const result = lifecycleService.evaluateAutoApproval(
+                                appState.initial,
+                                appState.exchangeRate,
+                                appState.offerCurrency,
+                                appState.targetMargin,
+                                appState.manualPrice
+                            );
+                            setApprovalValidationResult(result);
+                            setShowApprovalModal(true);
+                            setShowLifecycleMenu(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-bold text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded transition-colors"
+                    >
+                        <Clock size={14} />
+                        Wyślij do Akceptacji
+                    </button>
+                );
+            case 'PENDING_APPROVAL':
+                if (canApprove) {
+                    return (
+
+                        <div className="flex flex-col gap-2 p-1">
+                            {appState.approvalRequest && (
+                                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-2 mb-1">
+                                    <div className="text-[10px] uppercase font-bold text-amber-600 mb-1 flex justify-between items-center">
+                                        <span>Zgłoszenie: {appState.approvalRequest.requesterName || 'Użytkownik'}</span>
+                                        <span>{new Date(appState.approvalRequest.requestDate).toLocaleDateString()}</span>
+                                    </div>
+                                    {appState.approvalRequest.reasons.length > 0 && (
+                                        <div className="text-[10px] text-red-600 dark:text-red-400 font-bold mb-1">
+                                            {appState.approvalRequest.reasons.join(', ')}
+                                        </div>
+                                    )}
+                                    {appState.approvalRequest.message && (
+                                        <div className="text-[10px] text-zinc-600 dark:text-zinc-400 italic bg-white dark:bg-black/20 p-1.5 rounded border border-amber-100 dark:border-amber-900/50">
+                                            "{appState.approvalRequest.message}"
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            <button
+                                onClick={() => { onAction('APPROVE'); setShowLifecycleMenu(false); }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-bold text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded transition-colors"
+                            >
+                                <CheckCircle size={14} />
+                                Zatwierdź Projekt
+                            </button>
+                            <button
+                                onClick={() => { onAction('REJECT'); setShowLifecycleMenu(false); }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                            >
+                                <AlertCircle size={14} />
+                                Odrzuć (Do Poprawy)
+                            </button>
+                        </div>
+                    );
+                }
+                return <div className="px-3 py-2 text-xs text-zinc-500 italic">Oczekiwanie na Managera</div>;
+
+            case 'APPROVED':
+                return (
+                    <button
+                        onClick={() => { onAction('START_REALIZATION'); setShowLifecycleMenu(false); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-bold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                    >
+                        <PlayCircle size={14} />
+                        Przekaż do Realizacji
+                    </button>
+                );
+
+            case 'OPENING':
+                const isLogisticsRole = profile?.role === 'logistics' || profile?.is_admin;
+                return (
+                    <div className="flex flex-col gap-2 p-1">
+                        {isLogisticsRole && (
+                            <button
+                                onClick={() => {
+                                    const result = lifecycleService.evaluateAutoApproval(
+                                        appState.initial,
+                                        appState.exchangeRate,
+                                        appState.offerCurrency,
+                                        appState.targetMargin,
+                                        appState.manualPrice
+                                    );
+                                    setApprovalValidationResult(result);
+                                    setShowApprovalModal(true);
+                                    setShowLifecycleMenu(false);
+                                }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-bold text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded transition-colors"
+                            >
+                                <Clock size={14} />
+                                Wyślij do Akceptacji
+                            </button>
+                        )}
+                        {canApprove && (
+                            <button
+                                onClick={() => { onAction('FINISH'); setShowLifecycleMenu(false); }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-bold text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded transition-colors text-ellipsis overflow-hidden whitespace-nowrap"
+                            >
+                                <Archive size={14} />
+                                Zakończ
+                            </button>
+                        )}
+                        {!isLogisticsRole && !canApprove && (
+                            <div className="px-3 py-2 text-xs text-zinc-500 italic">W Realizacji (Logistyka)</div>
+                        )}
+                    </div>
+                );
+
+            default:
+                return null;
+        }
+    };
 
     const handleLogout = async () => {
         await signOut();
@@ -158,15 +293,61 @@ export const Header: React.FC<Props> = ({
                     {/* Stage Indicator & Mode Switcher */}
                     {appState.viewMode === ViewMode.CALCULATOR && (
                         <div className="flex items-center gap-3">
-                            {/* Stage Badge */}
-                            <div
-                                onClick={onShowHistory}
-                                className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wider select-none cursor-pointer hover:opacity-80 transition-opacity ${stageConfig.color}`}
-                                title="Kliknij, aby zobaczyć historię wersji"
-                            >
-                                {stageConfig.icon}
-                                {stageConfig.label}
+                            {/* LIFECYCLE BADGE WITH POPOVER */}
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowLifecycleMenu(!showLifecycleMenu)}
+                                    className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-transparent shadow-sm hover:shadow text-[10px] font-bold uppercase tracking-wider select-none cursor-pointer transition-all ${stageConfig.color}`}
+                                    title="Kliknij, aby zarządzać statusem"
+                                >
+                                    {stageConfig.icon}
+                                    {stageConfig.label}
+                                </button>
+
+                                {/* POPOVER MENU */}
+                                {showLifecycleMenu && (
+                                    <>
+                                        <div
+                                            className="fixed inset-0 z-40"
+                                            onClick={() => setShowLifecycleMenu(false)}
+                                        ></div>
+                                        <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-2xl z-50 p-1 animate-in fade-in zoom-in-95 origin-top-right">
+                                            <div className="px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 mb-1">
+                                                <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Status Projektu</div>
+                                                <div className="text-sm font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2 mt-0.5">
+                                                    <div className={`w-2 h-2 rounded-full ${stageConfig.color.replace('text-white', '').replace('bg-', 'bg-')}`}></div>
+                                                    {stageConfig.label}
+                                                </div>
+                                            </div>
+
+                                            {/* Actions */}
+                                            <div className="py-1 space-y-0.5">
+                                                {renderLifecycleActions()}
+                                            </div>
+
+                                            <div className="border-t border-zinc-100 dark:border-zinc-800 my-1"></div>
+
+                                            {/* History Link */}
+                                            <button
+                                                onClick={() => { onShowHistory(); setShowLifecycleMenu(false); }}
+                                                className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded transition-colors"
+                                            >
+                                                <History size={14} />
+                                                Historia i Wersje
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
                             </div>
+
+                            <ApprovalRequestModal
+                                isOpen={showApprovalModal}
+                                onClose={() => setShowApprovalModal(false)}
+                                autoValidation={approvalValidationResult}
+                                onConfirm={(message, forceManual) => {
+                                    if (onAction) onAction('REQUEST_APPROVAL', { message, forceManual });
+                                }}
+                            />
 
                             <div className="hidden lg:flex items-center border border-zinc-200 dark:border-zinc-800 rounded overflow-hidden h-8">
                                 <button

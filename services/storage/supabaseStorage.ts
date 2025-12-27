@@ -212,12 +212,19 @@ export class SupabaseStorage implements ICalculationStorage {
 
         if (error) return null;
 
-        if (data && (data as any).details && Array.isArray((data as any).details) && (data as any).details.length > 0 && (data as any).details[0].calc) {
-            (data as any).calc = (data as any).details[0].calc;
-            delete (data as any).details;
+        const item = data as any;
+        if (item.details) {
+            if (Array.isArray(item.details)) {
+                if (item.details.length > 0 && item.details[0]?.calc) {
+                    item.calc = item.details[0].calc;
+                }
+            } else if (typeof item.details === 'object' && (item.details as any).calc) {
+                item.calc = (item.details as any).calc;
+            }
+            delete item.details;
         }
 
-        return data;
+        return item;
     }
 
     async getProjectHistory(projectId: string): Promise<any[]> {

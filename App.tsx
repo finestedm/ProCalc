@@ -52,6 +52,8 @@ import { ProfileEditModal } from './components/ProfileEditModal';
 import { UnlockRequestModal } from './components/UnlockRequestModal';
 import { RestoreSessionModal } from './components/RestoreSessionModal';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
+import { lifecycleService } from './services/lifecycleService';
+import { notificationService } from './services/notificationService';
 import { fetchEurRate } from './services/currencyService';
 import { generateDiff } from './services/diffService';
 import { storageService } from './services/storage';
@@ -283,7 +285,25 @@ const App: React.FC = () => {
     const lastSnapshot = useRef<AppState>(appState);
     const isUndoRedoOperation = useRef(false);
     const historyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastSavedSnapshot = useRef<string | null>(null);
     const projectInputRef = useRef<HTMLInputElement>(null);
+
+    // Initial snapshot for dirty-check logic
+    useEffect(() => {
+        if (!lastSavedSnapshot.current) {
+            lastSavedSnapshot.current = JSON.stringify({
+                initial: appState.initial,
+                final: appState.final,
+                scenarios: appState.scenarios,
+                exchangeRate: appState.exchangeRate,
+                offerCurrency: appState.offerCurrency,
+                targetMargin: appState.targetMargin,
+                manualPrice: appState.manualPrice,
+                finalManualPrice: appState.finalManualPrice,
+                globalSettings: appState.globalSettings
+            });
+        }
+    }, []);
 
     const getHistoryState = (state: AppState) => {
         const { viewMode, ...dataState } = state;
@@ -957,8 +977,13 @@ const App: React.FC = () => {
     };
 
     const handleSmartSave = async (stage: ProjectStage, reasonArg?: string | any, isLogistics?: boolean, stateOverride?: AppState): Promise<boolean> => {
-        // VALIDATION: Installation Type is required for ANY save
-        if (!appState.initial.meta.installationType) {
+        // Bypass data check for manual approval requests from logistics
+        const isApprovalRequest = stage === 'PENDING_APPROVAL';
+        const isLogisticsRole = profile?.role === 'logistics' || profile?.is_admin;
+        const skipValidation = isApprovalRequest && isLogisticsRole;
+
+        // VALIDATION: Installation Type is required for ANY save (unless skipping for logistics approval)
+        if (!appState.initial.meta.installationType && !skipValidation) {
             triggerConfirm(
                 "Wymagane Dane",
                 "Aby zapisać projekt, musisz wybrać 'Typ Projektu' w Szczegółach Projektu.",
@@ -976,7 +1001,25 @@ const App: React.FC = () => {
         // Ensure we only treat a STRING as a valid reason.
         const reason = typeof reasonArg === 'string' ? reasonArg : undefined;
 
-        if (!reason) {
+        // --- DIRTY CHECK ---
+        const currentDataToCompare = {
+            initial: stateOverride?.initial || appState.initial,
+            final: stateOverride?.final || appState.final,
+            scenarios: stateOverride?.scenarios || appState.scenarios,
+            exchangeRate: stateOverride?.exchangeRate || appState.exchangeRate,
+            offerCurrency: stateOverride?.offerCurrency || appState.offerCurrency,
+            targetMargin: stateOverride?.targetMargin || appState.targetMargin,
+            manualPrice: stateOverride?.manualPrice || appState.manualPrice,
+            finalManualPrice: stateOverride?.finalManualPrice || appState.finalManualPrice,
+            globalSettings: stateOverride?.globalSettings || appState.globalSettings
+        };
+        const currentSnapshot = JSON.stringify(currentDataToCompare);
+        const isDataIdentical = lastSavedSnapshot.current === currentSnapshot;
+
+        // [NEW] Bypass lock check for approval actions - the action itself is the reason.
+        const isApprovalAction = stage === 'PENDING_APPROVAL' || stage === 'APPROVED';
+
+        if (!reason && !isDataIdentical && !isApprovalAction) {
             // CHECK LOCAL STATE FIRST (Faster/Safer) or REMOTE
             const isLocalLocked = appState.isLocked === true;
             let isRemoteLocked = false;
@@ -1021,6 +1064,13 @@ const App: React.FC = () => {
         if (isLogistics) {
             newState.logisticsStatus = 'PENDING';
             newState.isLocked = true; // [NEW] Auto-lock on send
+        }
+
+        // [NEW] Logistics Queue Reset:
+        // If data changed AND it was already PROCESSED AND it's NOT a logistics/admin user who is saving
+        const isLogisticsRoleToReset = profile?.role === 'logistics' || profile?.is_admin;
+        if (!isDataIdentical && sourceState.logisticsStatus === 'PROCESSED' && !isLogisticsRoleToReset) {
+            newState.logisticsStatus = 'PENDING';
         }
 
         // If we have a reason, maybe append to notes?
@@ -1077,6 +1127,9 @@ const App: React.FC = () => {
 
                 // Update state with the new cloud ID
                 setAppState(prev => ({ ...prev, activeCalculationId: newId }));
+
+                // Update snapshot to current data after successful save
+                lastSavedSnapshot.current = currentSnapshot;
                 return true;
             } catch (e: any) {
                 console.error("Cloud save failed", e);
@@ -1775,6 +1828,19 @@ const App: React.FC = () => {
                     activeCalculationId: parsed.id || parsed.appState.activeCalculationId // Restore cloud ID
                 });
 
+                // Set initial snapshot on load
+                lastSavedSnapshot.current = JSON.stringify({
+                    initial: parsed.appState.initial,
+                    final: parsed.appState.final,
+                    scenarios: parsed.appState.scenarios,
+                    exchangeRate: parsed.appState.exchangeRate,
+                    offerCurrency: parsed.appState.offerCurrency,
+                    targetMargin: parsed.appState.targetMargin,
+                    manualPrice: parsed.appState.manualPrice,
+                    finalManualPrice: parsed.appState.finalManualPrice,
+                    globalSettings: parsed.appState.globalSettings
+                });
+
                 if (parsed.historyLog) setHistoryLog(parsed.historyLog);
                 if (parsed.past) setPast(parsed.past);
                 if (parsed.future) setFuture(parsed.future);
@@ -1852,7 +1918,9 @@ const App: React.FC = () => {
                 ...prev,
                 offerCurrency: qsData.currency,
                 initial: newInit,
-                final: newFinal
+                final: newFinal,
+                stage: 'DRAFT', // Reset stage on Quick Start
+                isLocked: false // Reset lock
             };
         });
         setShowQuickStart(false);
@@ -1892,7 +1960,7 @@ const App: React.FC = () => {
                 // Reset Scenarios
                 const defaultScenario = extractScenarioData(init, 'default', 'Wariant Główny');
 
-                setAppState({
+                const newState = {
                     initial: init,
                     final: fin,
                     scenarios: [defaultScenario],
@@ -1907,6 +1975,20 @@ const App: React.FC = () => {
                     manualPrice: null,
                     finalManualPrice: null,
                     globalSettings: appState.globalSettings
+                };
+                setAppState(newState);
+
+                // Reset snapshot for new project
+                lastSavedSnapshot.current = JSON.stringify({
+                    initial: newState.initial,
+                    final: newState.final,
+                    scenarios: newState.scenarios,
+                    exchangeRate: newState.exchangeRate,
+                    offerCurrency: newState.offerCurrency,
+                    targetMargin: newState.targetMargin,
+                    manualPrice: newState.manualPrice,
+                    finalManualPrice: newState.finalManualPrice,
+                    globalSettings: newState.globalSettings
                 });
                 setPast([]);
                 setFuture([]);
@@ -2048,6 +2130,148 @@ const App: React.FC = () => {
     // In case of normal lock, it's a soft lock (edit allowed, but asks for reason on save).
     const isReadOnly = isLogisticsTakeover && !canBypassLock && !isMyTakeover;
 
+    const handleLifecycleAction = async (action: string, meta?: { message?: string, forceManual?: boolean, projectState?: AppState }) => {
+        const { message, forceManual, projectState } = meta || {};
+        const sourceState = projectState || appState;
+
+        let newStage = sourceState.stage;
+        let lockState = sourceState.isLocked;
+        let reasonText = '';
+
+        if (action === 'REQUEST_APPROVAL') {
+            const result = lifecycleService.evaluateAutoApproval(
+                sourceState.initial,
+                sourceState.exchangeRate,
+                sourceState.offerCurrency,
+                sourceState.targetMargin,
+                sourceState.manualPrice
+            );
+
+            // AUTO-APPROVE Logic
+            if (result.approved && !forceManual) {
+                newStage = 'APPROVED';
+                lockState = true;
+            } else {
+                newStage = 'PENDING_APPROVAL';
+                lockState = true;
+                reasonText = forceManual ? "Wymuszono ręczną akceptację." : `Niezgodność: ${result.reasons.join(', ')}`;
+            }
+        } else if (action === 'APPROVE') {
+            newStage = 'APPROVED';
+            lockState = true;
+        } else if (action === 'REJECT') {
+            newStage = 'DRAFT';
+            lockState = false;
+        } else if (action === 'START_REALIZATION') {
+            newStage = 'OPENING';
+            lockState = true;
+        } else if (action === 'FINISH') {
+            newStage = 'FINAL';
+            lockState = true;
+        }
+
+        // 1. Calculate the target state
+        const updatedAppState = { ...sourceState, stage: newStage, isLocked: lockState };
+        const nowStr = new Date().toLocaleString();
+        const userName = profile?.full_name || 'Użytkownik';
+
+        if (action === 'REQUEST_APPROVAL') {
+            const result = lifecycleService.evaluateAutoApproval(
+                sourceState.initial,
+                sourceState.exchangeRate,
+                sourceState.offerCurrency,
+                sourceState.targetMargin,
+                sourceState.manualPrice
+            );
+
+            updatedAppState.approvalRequest = {
+                requesterId: user?.id,
+                requesterName: userName,
+                requestDate: new Date().toISOString(),
+                reasons: forceManual ? ["Wymuszono ręcznie"] : (result.reasons || []),
+                message: message
+            };
+
+            // LOG: Request
+            const logEntry = `[${nowStr}] PROŚBA O AKCEPTACJĘ (${userName}): ${reasonText || 'Wymuszono ręcznie'}${message ? ` | Wiadomość: ${message}` : ''}\n`;
+            updatedAppState.initial.projectNotes = (updatedAppState.initial.projectNotes || '') + logEntry;
+
+        } else if (action === 'APPROVE') {
+            updatedAppState.approvalRequest = undefined;
+            // LOG: Approval
+            const logEntry = `[${nowStr}] ZATWIERDZONO PROJEKT (${userName})\n`;
+            updatedAppState.initial.projectNotes = (updatedAppState.initial.projectNotes || '') + logEntry;
+
+        } else if (action === 'REJECT' || newStage === 'DRAFT') {
+            updatedAppState.approvalRequest = undefined;
+            // LOG: Rejection
+            if (action === 'REJECT') {
+                const logEntry = `[${nowStr}] ODRZUCONO PROJEKT / PRZYWRÓCONO DO EDYCJI (${userName})\n`;
+                updatedAppState.initial.projectNotes = (updatedAppState.initial.projectNotes || '') + logEntry;
+            }
+        }
+
+        // 2. SAVE FIRST
+        const pNum = updatedAppState.initial.meta.projectNumber;
+        const shouldSave = pNum || action === 'REQUEST_APPROVAL';
+
+        if (shouldSave) {
+            try {
+                // If Project Number exists, sync lock status
+                if (pNum && lockState !== sourceState.isLocked) {
+                    await storageService.lockProject(pNum, lockState);
+                }
+
+                // Persist the full calculation state
+                const saveSuccess = await handleSmartSave(newStage, undefined, false, updatedAppState);
+
+                if (!saveSuccess) {
+                    showSnackbar("Błąd zapisu. Akcja została anulowana.");
+                    return;
+                }
+
+                // 3. NOTIFY ONLY AFTER SUCCESSFUL SAVE
+                if (action === 'REQUEST_APPROVAL') {
+                    if (newStage === 'APPROVED') {
+                        showSnackbar("Projekt automatycznie ZATWIERDZONY!");
+                        if (user?.id) {
+                            notificationService.sendNotification(user.id, "Auto-Akceptacja", `Projekt ${updatedAppState.initial.meta.projectNumber || 'Nowy'} został zatwierdzony automatycznie.`, 'success');
+                        }
+                    } else {
+                        showSnackbar(`Wysłano do akceptacji. ${reasonText}`);
+
+                        const pNumForNotify = updatedAppState.initial.meta.projectNumber || 'BezNumeru';
+                        const cName = updatedAppState.initial.orderingParty?.name || 'Nieznany Klient';
+                        const notificationTitle = `Prośba o akceptację: ${pNumForNotify} | ${cName}`;
+                        const notificationBody = `Użytkownik ${profile?.full_name || 'Nieznany'} prosi o zatwierdzenie projektu dla klienta: ${cName}.\nPowód: ${reasonText}\nWiadomość: ${message || 'Brak'}`;
+
+                        notificationService.notifyRole('manager', notificationTitle, notificationBody, 'warning');
+                        if (user?.id) notificationService.sendNotification(user.id, "Wysłano", `Projekt ${pNumForNotify} dla ${cName} oczekuje na akceptację.`, 'info');
+                    }
+                } else if (action === 'APPROVE') {
+                    showSnackbar("Projekt został zatwierdzony.");
+                } else if (action === 'REJECT') {
+                    showSnackbar("Odrzucono projekt. Przywrócono do edycji.");
+                } else if (action === 'START_REALIZATION') {
+                    showSnackbar("Przekazano do Realizacji.");
+                } else if (action === 'FINISH') {
+                    showSnackbar("Projekt zakończony.");
+                }
+
+                // 4. Update local state
+                setAppState(updatedAppState);
+
+            } catch (e) {
+                console.error("Lifecycle save failed", e);
+                showSnackbar("Błąd krytyczny podczas zmiany statusu.");
+            }
+        } else {
+            // Local fallback
+            setAppState(updatedAppState);
+            showSnackbar("Status zaktualizowany lokalnie.");
+        }
+    };
+
 
     return (
         <div className="h-screen overflow-hidden bg-zinc-100 dark:bg-black text-zinc-900 dark:text-zinc-100 transition-colors font-sans flex flex-col">
@@ -2149,7 +2373,10 @@ const App: React.FC = () => {
                             }
                             setShowVersionHistory(true);
                         }}
+                        onAction={handleLifecycleAction}
+                        profile={profile}
                     />
+
                     {/* Main Layout - Modified to support Bottom Summary */}
                     <main ref={mainScrollRef} className="flex-1 overflow-y-auto w-full grid grid-cols-1 xl:grid-cols-12 items-start relative gap-0 scroll-smooth">
 
@@ -2426,6 +2653,7 @@ const App: React.FC = () => {
                                     onBack={() => setAppState(prev => ({ ...prev, viewMode: ViewMode.CALCULATOR }))}
                                     activeTab={appState.activeHubTab}
                                     onTabChange={(tab) => setAppState(prev => ({ ...prev, activeHubTab: tab }))}
+                                    onAction={handleLifecycleAction}
                                     onOpenProject={(data, stage, mode) => {
                                         loadProjectFromObject(data);
                                     }}

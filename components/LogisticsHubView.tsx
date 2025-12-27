@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Truck, ExternalLink, ChevronDown, ChevronRight, RefreshCw, Save, Undo, Redo, Search, Calendar as CalendarIcon, Mail, Map as MapIcon, UserPlus, UserCheck, Lock, Trash2, PlusCircle } from 'lucide-react';
+import { Truck, ExternalLink, ChevronDown, ChevronRight, RefreshCw, Save, Undo, Redo, Search, Calendar as CalendarIcon, Mail, Map as MapIcon, UserPlus, UserCheck, Lock, Trash2, PlusCircle, Clock, Send } from 'lucide-react';
 import { DatePickerInput } from './DatePickerInput';
 import { DeliveryMap } from './DeliveryMap';
 import { storageService } from '../services/storage';
@@ -14,6 +14,7 @@ import { extractActiveData } from '../services/calculationService';
 
 interface Props {
     onOpenProject: (data: any, stage: string, mode: CalculationMode) => void;
+    onAction?: (action: string, meta?: any) => void;
 }
 
 // Helper to calculate suggested weight
@@ -59,6 +60,7 @@ interface HubRow {
     customerName: string;
     vendorName: string;
     isSupplierOrganized: boolean;
+    stage?: string; // [NEW]
 
     // Editable Fields (Synced to TransportItem or TruckDetail)
     loadingDate: string; // Unified field (loadingDates or similar)
@@ -79,7 +81,7 @@ interface HubRow {
     isStale?: boolean;
 }
 
-export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
+export const LogisticsHubView: React.FC<Props> = ({ onOpenProject, onAction }) => {
     const { profile } = useAuth();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -156,6 +158,11 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
             return;
         }
 
+        if (profile.role === 'manager' && !profile.is_admin && profile.role !== 'logistics') {
+            alert("Tylko pracownicy działu logistyki mogą przejmować projekty.");
+            return;
+        }
+
         if (confirm("Czy chcesz przejąć ten projekt? Zostanie on ZABLOKOWANY do edycji dla specjalistów/inżynierów.")) {
             try {
                 await storageService.updateLogisticsOperator(project.id, profile.id);
@@ -204,7 +211,8 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
 
                 // [MODIFIED] Prefer DB column for stage source of truth
                 const stage = p.project_stage || fullFile.stage || fullFile.appState?.stage;
-                if (stage !== 'OPENING') return;
+                // User Request: Logistics should see projects pending approval too
+                if (stage !== 'OPENING' && stage !== 'PENDING_APPROVAL') return;
 
                 if (!latestProjectsMap[pid] || new Date(p.created_at) > new Date(latestProjectsMap[pid].created_at)) {
                     latestProjectsMap[pid] = p;
@@ -729,7 +737,8 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                 type: 'PROJECT',
                 vendorName: `${transports.length} transport(y)`,
                 price: transports.reduce((sum, t) => sum + (t.transportData.confirmedPrice || t.transportData.totalPrice), 0),
-                suggestedWeight: transports.reduce((sum, t) => sum + (t.suggestedWeight || 0), 0)
+                suggestedWeight: transports.reduce((sum, t) => sum + (t.suggestedWeight || 0), 0),
+                stage: firstT.originalProject.project_stage || (firstT.originalProject.calc as any).stage || 'OPENING' // Add stage to row
             });
 
             if (!isCollapsed) {
@@ -1026,7 +1035,21 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                                             </td>
                                             <td className="px-4 py-2">
                                                 <div className="font-black text-[13px] text-zinc-900 dark:text-white uppercase tracking-tighter leading-none mb-0.5">{row.projectNumber}</div>
-                                                <div className="text-[10px] font-bold text-zinc-400 truncate max-w-[200px] leading-tight uppercase tracking-wide">{row.customerName}</div>
+                                                <div className="text-[10px] font-bold text-zinc-400 truncate max-w-[200px] leading-tight uppercase tracking-wide mb-1">{row.customerName}</div>
+                                                {/* Status Badge */}
+                                                {row.stage === 'PENDING_APPROVAL' ? (
+                                                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 border border-amber-200 dark:border-amber-800">
+                                                        <Clock size={10} strokeWidth={3} /> Do Akceptacji
+                                                    </span>
+                                                ) : row.stage === 'OPENING' ? (
+                                                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 border border-blue-200 dark:border-blue-800">
+                                                        <Truck size={10} strokeWidth={3} /> W Realizacji
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-gray-100 dark:bg-zinc-800 text-gray-500 border border-gray-200 dark:border-zinc-700">
+                                                        {row.stage || 'DRAFT'}
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-4 py-2" colSpan={6}>
                                                 <div className="flex items-center gap-4">
@@ -1239,6 +1262,7 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject }) => {
                     }}
                 />
             )}
+
         </div>
     );
 };

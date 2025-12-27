@@ -267,6 +267,7 @@ export const SummarySection: React.FC<Props> = ({ appState, onUpdateState, data,
                                                 type="number"
                                                 min="0"
                                                 value={paymentTerms.finalPaymentDays}
+                                                onChange={(e) => updatePaymentTerms({ finalPaymentDays: parseInt(e.target.value) || 0 })}
                                                 disabled={readOnly}
                                                 className={`w-8 bg-transparent text-right outline-none text-zinc-500 focus:text-amber-500 transition-colors ${readOnly ? 'opacity-50' : ''}`}
                                             />

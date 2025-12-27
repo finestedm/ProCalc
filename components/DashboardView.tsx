@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, StickyNote, ArrowRight, Clock, User, Briefcase, RefreshCw, Filter, Bell, MapPin, Truck, ChevronRight, ChevronDown, Shield, Scale, HardDrive, AlertCircle, Check, Mail } from 'lucide-react';
+import { Calendar, StickyNote, ArrowRight, Clock, User, Briefcase, RefreshCw, Filter, Bell, MapPin, Truck, ChevronRight, ChevronDown, Shield, Scale, HardDrive, AlertCircle, Check, Mail, CheckCircle, Send, ShieldCheck } from 'lucide-react';
 import { storageService } from '../services/storage';
 import { SavedCalculation } from '../services/storage/types';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,6 +9,8 @@ import { LogisticsHubView } from './LogisticsHubView';
 import { OrderPreviewModal } from './OrderPreviewModal';
 import { ProjectStatistics } from './ProjectStatistics';
 import { useProjectData } from '../hooks/useProjectData';
+import { lifecycleService } from '../services/lifecycleService';
+import { ApprovalRequestModal } from './ApprovalRequestModal';
 
 interface Props {
     activeProject: CalculationData | null;
@@ -17,6 +19,7 @@ interface Props {
     onShowComparison: () => void;
     onOpenProject: (data: any, stage: string, mode: CalculationMode) => void;
     onBack: () => void;
+    onAction?: (action: string, meta?: any) => void;
     activeTab?: 'DASH' | 'LOGISTICS' | 'STATS';
     onTabChange?: (tab: 'DASH' | 'LOGISTICS' | 'STATS') => void;
 }
@@ -223,6 +226,21 @@ const GanttRow: React.FC<GanttRowProps> = ({ project, isExpanded, onToggle, onOp
     );
 };
 
+const getLatestVersions = (projects: any[]): any[] => {
+    const groups: Record<string, any> = {};
+
+    projects.forEach(p => {
+        let key = p.project_id || `ID_${p.id}`;
+        if (key === 'BezNumeru') key = `ID_${p.id}`;
+
+        if (!groups[key] || new Date(p.created_at).getTime() > new Date(groups[key].created_at).getTime()) {
+            groups[key] = p;
+        }
+    });
+
+    return Object.values(groups);
+};
+
 export const DashboardView: React.FC<Props> = ({
     activeProject,
     onNewProject,
@@ -230,6 +248,7 @@ export const DashboardView: React.FC<Props> = ({
     onShowComparison,
     onOpenProject,
     onBack,
+    onAction,
     activeTab = 'DASH',
     onTabChange
 }) => {
@@ -245,9 +264,21 @@ export const DashboardView: React.FC<Props> = ({
     const [managerInsights, setManagerInsights] = useState<ManagerInsights | null>(null);
     const [accessRequests, setAccessRequests] = useState<any[]>([]);
     const [lockedEdits, setLockedEdits] = useState<LockedEdit[]>([]);
+    const [dashFeedTab, setDashFeedTab] = useState<'ACTIVITY' | 'MY_EDITS' | 'APPROVALS'>('ACTIVITY');
+
+    const pendingApprovals = useMemo(() => {
+        if (profile?.role !== 'manager' && !profile?.is_admin) return [];
+        return getLatestVersions(rawExperiments)
+            .filter((p: any) => p.project_stage === 'PENDING_APPROVAL')
+            .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }, [rawExperiments, profile]);
     const [requestActionError, setRequestActionError] = useState<string | null>(null);
     const [logisticsViewMode, setLogisticsViewMode] = useState<'PENDING' | 'PROCESSED'>('PENDING');
-    const [dashFeedTab, setDashFeedTab] = useState<'ACTIVITY' | 'MY_EDITS'>('ACTIVITY');
+
+    // Approval Modal State
+    const [showApprovalModal, setShowApprovalModal] = useState(false);
+    const [approvalProject, setApprovalProject] = useState<any>(null);
+    const [approvalValidation, setApprovalValidation] = useState<any>(null);
 
     // Use prop if available, otherwise local state (fallback)
     const [localActiveTab, setLocalActiveTab] = useState<'DASH' | 'LOGISTICS' | 'STATS'>('DASH');
@@ -361,20 +392,6 @@ export const DashboardView: React.FC<Props> = ({
 
     // Build Gantt effect removed - now handled in loadData sequentially
 
-    const getLatestVersions = (projects: any[]): any[] => {
-        const groups: Record<string, any> = {};
-
-        projects.forEach(p => {
-            let key = p.project_id || `ID_${p.id}`;
-            if (key === 'BezNumeru') key = `ID_${p.id}`;
-
-            if (!groups[key] || new Date(p.created_at).getTime() > new Date(groups[key].created_at).getTime()) {
-                groups[key] = p;
-            }
-        });
-
-        return Object.values(groups);
-    };
 
     const buildGanttData = (metadata: any[], allStages: any[]) => {
         const uniqueLatest = getLatestVersions(metadata);
@@ -725,19 +742,55 @@ export const DashboardView: React.FC<Props> = ({
         }
     };
 
-    // Filter for Logistics Queue
-    const logisticsQueue = useMemo(() => {
-        if (profile?.role !== 'logistics') return [];
-        // Flatten all versions, get meaningful ones (e.g. latest of each project that needs action)
-        // Or show ALL items that are PENDING?
-        // Usually we want the Latest version to be the one we act on.
-        const allLatest = getLatestVersions(rawExperiments); // Assuming rawExperiments has filtered data?
-        // Wait, rawExperiments is filtered by "My Projects". Logistics sees ALL PENDING usually.
-        // We need to ensure `rawExperiments` for Logistics includes EVERYTHING or we fetch separately.
-        // In loadData, I changed "Manager sees everything". Logistics should also see everything likely.
+    // Filter for Logistics Queue - Split into Pending Approval and Others
+    const categorizedLogisticsQueue = useMemo(() => {
+        if (profile?.role !== 'logistics') return { awaitingApproval: [], others: [] };
 
-        return allLatest.filter(p => p.logistics_status === logisticsViewMode);
+        const allLatest = getLatestVersions(rawExperiments);
+        const filtered = allLatest.filter(p => p.logistics_status === logisticsViewMode);
+
+        return {
+            awaitingApproval: filtered.filter(p => p.project_stage === 'PENDING_APPROVAL'),
+            others: filtered.filter(p => p.project_stage !== 'PENDING_APPROVAL')
+        };
     }, [rawExperiments, logisticsViewMode, profile]);
+
+    const handleRequestApprovalTrigger = async (project: any) => {
+        try {
+            const fullProject = await storageService.getCalculationById(project.id);
+            if (!fullProject || !fullProject.calc) throw new Error("Could not load project data");
+
+            const fullFile = fullProject.calc as any;
+            const appState = fullFile.appState as AppState;
+
+            if (!appState) throw new Error("Invalid project state");
+
+            const validation = lifecycleService.evaluateAutoApproval(
+                appState.initial,
+                appState.exchangeRate,
+                appState.offerCurrency,
+                appState.targetMargin,
+                appState.manualPrice
+            );
+
+            setApprovalProject(appState);
+            setApprovalValidation(validation);
+            setShowApprovalModal(true);
+        } catch (e) {
+            console.error("Failed to prepare approval request", e);
+            alert("Nie udało się przygotować prośby o akceptację.");
+        }
+    };
+
+    const handleConfirmApproval = (message: string, forceManual: boolean) => {
+        if (!onAction) return;
+        onAction('REQUEST_APPROVAL', {
+            message,
+            forceManual,
+            projectState: approvalProject
+        });
+        setShowApprovalModal(false);
+    };
 
     if (loading) {
         return (
@@ -856,12 +909,20 @@ export const DashboardView: React.FC<Props> = ({
                                     >
                                         <Bell size={16} /> Powiadomienia
                                     </button>
-                                    {(profile?.role === 'engineer' || profile?.role === 'specialist') && (
+                                    {(profile?.role === 'engineer' || profile?.role === 'specialist' || profile?.role === 'logistics' || profile?.role === 'manager') && (
                                         <button
                                             onClick={() => setDashFeedTab('MY_EDITS')}
                                             className={`flex items-center gap-2 text-sm font-bold transition-all ${dashFeedTab === 'MY_EDITS' ? 'text-blue-600 border-b-2 border-blue-600 pb-2' : 'text-zinc-400 hover:text-zinc-600'}`}
                                         >
                                             <Clock size={16} /> Moje Edycje
+                                        </button>
+                                    )}
+                                    {(profile?.role === 'manager' || profile?.is_admin) && (
+                                        <button
+                                            onClick={() => setDashFeedTab('APPROVALS')}
+                                            className={`flex items-center gap-2 text-sm font-bold transition-all ${dashFeedTab === 'APPROVALS' ? 'text-amber-600 border-b-2 border-amber-600 pb-2' : 'text-zinc-400 hover:text-zinc-600'}`}
+                                        >
+                                            <ShieldCheck size={16} /> Do Akceptacji {pendingApprovals.length > 0 && <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full ml-1">{pendingApprovals.length}</span>}
                                         </button>
                                     )}
                                 </div>
@@ -901,6 +962,48 @@ export const DashboardView: React.FC<Props> = ({
                                         ))}
                                     </div>
                                 )
+                            ) : dashFeedTab === 'APPROVALS' ? (
+                                <div className="space-y-3">
+                                    {pendingApprovals.length === 0 ? (
+                                        <p className="text-zinc-400 text-sm py-4 italic">Brak projektów oczekujących na Twoją akceptację.</p>
+                                    ) : (
+                                        pendingApprovals.map((p: any) => (
+                                            <div key={p.id} className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-200 dark:border-amber-800/50 group">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="p-2 rounded-lg bg-amber-100 text-amber-600">
+                                                        <Clock size={20} />
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`font-bold ${p.project_id === 'BezNumeru' ? 'text-amber-600 text-[10px]' : 'text-zinc-900 dark:text-white'}`}>
+                                                                {p.project_id === 'BezNumeru' ? '⚠️ BRAK NUMERU' : p.project_id}
+                                                            </span>
+                                                            <span className="text-[8px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase flex items-center gap-1">
+                                                                <Clock size={8} /> Do akceptacji
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-xs text-zinc-600 dark:text-zinc-400 font-medium">{p.customer_name}</p>
+                                                        <p className="text-[10px] text-zinc-500 mt-1">Przesłane przez: <span className="font-bold text-zinc-700 dark:text-zinc-300">{p.user?.full_name || p.specialist || 'Nieznany'}</span></p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-4">
+                                                    <div className="text-right hidden sm:block">
+                                                        <p className="text-[10px] text-zinc-400 font-mono italic">
+                                                            {p.project_notes && p.project_notes.substring(0, 30)}
+                                                            {p.project_notes && p.project_notes.length > 30 ? '...' : ''}
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleProjectClick(p)}
+                                                        className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 transition-colors shadow-sm active:scale-95"
+                                                    >
+                                                        Otwórz i oceń
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
                             ) : (
                                 <div className="space-y-2">
                                     {recentProjects.length === 0 ? (
@@ -923,6 +1026,21 @@ export const DashboardView: React.FC<Props> = ({
                                                             {p.latestOperatorId && (
                                                                 <span className="text-[8px] bg-blue-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase flex items-center gap-1">
                                                                     <Truck size={8} /> Logistyka
+                                                                </span>
+                                                            )}
+                                                            {p.project_stage === 'PENDING_APPROVAL' && (
+                                                                <span className="text-[8px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase flex items-center gap-1">
+                                                                    <Clock size={8} /> Do akceptacji
+                                                                </span>
+                                                            )}
+                                                            {p.project_stage === 'OPENING' && (
+                                                                <span className="text-[8px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase flex items-center gap-1">
+                                                                    <Truck size={8} /> W Realizacji
+                                                                </span>
+                                                            )}
+                                                            {p.project_stage === 'APPROVED' && (
+                                                                <span className="text-[8px] bg-blue-600 text-white px-1.5 py-0.5 rounded-full font-black uppercase flex items-center gap-1">
+                                                                    <CheckCircle size={8} /> Zatwierdzony
                                                                 </span>
                                                             )}
                                                         </div>
@@ -1027,90 +1145,178 @@ export const DashboardView: React.FC<Props> = ({
                                 </div>
                             </div>
 
-                            {logisticsQueue.length === 0 ? (
+                            {(categorizedLogisticsQueue.awaitingApproval.length === 0 && categorizedLogisticsQueue.others.length === 0) ? (
                                 <div className="text-center py-12 text-zinc-400">
                                     <Truck size={48} className="mx-auto mb-3 opacity-20" />
                                     <p>Brak projektów w tej kategorii.</p>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {logisticsQueue.map(p => (
-                                        <div key={p.id} className="bg-white dark:bg-zinc-800 rounded-lg p-5 border border-blue-100 dark:border-blue-900/30 shadow-sm hover:shadow-md transition-all group">
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div>
-                                                    <span className="text-[10px] uppercase font-bold text-blue-500 tracking-wider">
-                                                        {p.project_id || 'Nowy'}
-                                                    </span>
-                                                    <h3 className="font-bold text-zinc-900 dark:text-white text-lg leading-tight">
-                                                        {p.customer_name || 'Nieznany klient'}
-                                                    </h3>
-                                                    <p className="text-xs text-zinc-500 mt-1">
-                                                        Handlowiec: {p.engineer}
-                                                    </p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <span className="text-xs font-mono text-zinc-400 block mb-1">
-                                                        {new Date(p.created_at).toLocaleDateString()}
-                                                    </span>
-                                                    {p.project_stage && (
-                                                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-100 dark:bg-zinc-700">
-                                                            {p.project_stage}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
+                                <div className="space-y-8">
+                                    {/* AWAITING APPROVAL SECTION */}
+                                    {categorizedLogisticsQueue.awaitingApproval.length > 0 && (
+                                        <div>
+                                            <h3 className="text-xs font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-4 flex items-center gap-2">
+                                                <Clock size={14} /> Oczekuje na akceptację ({categorizedLogisticsQueue.awaitingApproval.length})
+                                            </h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                {categorizedLogisticsQueue.awaitingApproval.map(p => (
+                                                    <div key={p.id} className="bg-white dark:bg-zinc-800 rounded-lg p-5 border border-amber-200 dark:border-amber-900/30 shadow-sm hover:shadow-md transition-all group">
+                                                        <div className="flex justify-between items-start mb-3">
+                                                            <div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-[10px] uppercase font-bold text-blue-500 tracking-wider">
+                                                                        {p.project_id || 'Nowy'}
+                                                                    </span>
+                                                                    <span className="text-[8px] bg-amber-500 text-white px-1.5 py-0.5 rounded font-black uppercase">Oczekuje</span>
+                                                                </div>
+                                                                <h3 className="font-bold text-zinc-900 dark:text-white text-lg leading-tight mt-1">
+                                                                    {p.customer_name || 'Nieznany klient'}
+                                                                </h3>
+                                                                <p className="text-xs text-zinc-500 mt-1">
+                                                                    Handlowiec: {p.engineer}
+                                                                </p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <span className="text-xs font-mono text-zinc-400 block mb-1">
+                                                                    {new Date(p.created_at).toLocaleDateString()}
+                                                                </span>
+                                                            </div>
+                                                        </div>
 
-                                            <div className="border-t border-zinc-100 dark:border-zinc-700 my-3 pt-3 flex justify-between items-center">
-                                                <button
-                                                    onClick={() => handleProjectClick(p)}
-                                                    className="text-sm font-bold text-zinc-600 hover:text-blue-500 flex items-center gap-1"
-                                                >
-                                                    Podgląd <ArrowRight size={14} />
-                                                </button>
+                                                        <div className="border-t border-zinc-100 dark:border-zinc-700 my-3 pt-3 flex justify-between items-center">
+                                                            <button
+                                                                onClick={() => handleProjectClick(p)}
+                                                                className="text-sm font-bold text-zinc-600 hover:text-blue-500 flex items-center gap-1"
+                                                            >
+                                                                Podgląd <ArrowRight size={14} />
+                                                            </button>
 
-                                                {logisticsViewMode === 'PENDING' ? (
-                                                    <div className="flex items-center gap-2">
-                                                        {p.logistics_operator_id === profile?.id ? (
-                                                            <button
-                                                                onClick={() => handleLogisticsOperatorToggle(p.id, null)}
-                                                                className="px-3 py-1.5 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-red-500 hover:border-red-500/30 rounded text-[10px] font-black uppercase tracking-wider transition-all"
-                                                                title="Zrezygnuj z przypisania"
-                                                            >
-                                                                Zrezygnuj
-                                                            </button>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => handleLogisticsOperatorToggle(p.id, profile?.id || null)}
-                                                                className="px-3 py-1.5 bg-white dark:bg-zinc-800 border border-blue-500/30 text-blue-600 hover:bg-blue-500 hover:text-white rounded text-[10px] font-black uppercase tracking-wider transition-all shadow-sm"
-                                                            >
-                                                                Przypisz
-                                                            </button>
-                                                        )}
-                                                        <button
-                                                            onClick={() => handleLogisticsStatusToggle(p.id, 'PROCESSED')}
-                                                            className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-bold transition-colors flex items-center gap-2"
-                                                        >
-                                                            <Check size={14} /> Gotowe
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleOpenOrderPreview(p as any)}
-                                                            className="p-1.5 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm"
-                                                            title="Zamówienie (Email)"
-                                                        >
-                                                            <Mail size={16} strokeWidth={2.5} />
-                                                        </button>
+                                                            {logisticsViewMode === 'PENDING' ? (
+                                                                <div className="flex items-center gap-2">
+                                                                    <button
+                                                                        disabled
+                                                                        className="p-1.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-400 rounded-lg border border-transparent cursor-not-allowed opacity-50"
+                                                                        title="Czeka na akceptację kierownika"
+                                                                    >
+                                                                        <Send size={16} strokeWidth={2.5} />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleOpenOrderPreview(p as any)}
+                                                                        className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm"
+                                                                        title="Zamówienie (Email)"
+                                                                    >
+                                                                        <Mail size={16} strokeWidth={2.5} />
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => handleLogisticsStatusToggle(p.id, 'PENDING')}
+                                                                    className="px-3 py-1.5 bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 text-zinc-700 dark:text-zinc-300 rounded text-xs font-bold transition-colors flex items-center gap-2"
+                                                                >
+                                                                    Przywróć
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                ) : (
-                                                    <button
-                                                        onClick={() => handleLogisticsStatusToggle(p.id, 'PENDING')}
-                                                        className="px-3 py-1.5 bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 text-zinc-700 dark:text-zinc-300 rounded text-xs font-bold transition-colors flex items-center gap-2"
-                                                    >
-                                                        Przywróć do Kolejki
-                                                    </button>
-                                                )}
+                                                ))}
                                             </div>
                                         </div>
-                                    ))}
+                                    )}
+
+                                    {/* OTHERS SECTION */}
+                                    <div>
+                                        {categorizedLogisticsQueue.awaitingApproval.length > 0 && (
+                                            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 dark:text-zinc-400 mb-4 flex items-center gap-2">
+                                                <CheckCircle size={14} /> Nie wymaga akceptacji / Zaakceptowane ({categorizedLogisticsQueue.others.length})
+                                            </h3>
+                                        )}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                            {categorizedLogisticsQueue.others.map(p => (
+                                                <div key={p.id} className="bg-white dark:bg-zinc-800 rounded-lg p-5 border border-blue-100 dark:border-blue-900/30 shadow-sm hover:shadow-md transition-all group">
+                                                    <div className="flex justify-between items-start mb-3">
+                                                        <div>
+                                                            <span className="text-[10px] uppercase font-bold text-blue-500 tracking-wider">
+                                                                {p.project_id || 'Nowy'}
+                                                            </span>
+                                                            <h3 className="font-bold text-zinc-900 dark:text-white text-lg leading-tight mt-1">
+                                                                {p.customer_name || 'Nieznany klient'}
+                                                            </h3>
+                                                            <p className="text-xs text-zinc-500 mt-1">
+                                                                Handlowiec: {p.engineer}
+                                                            </p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <span className="text-xs font-mono text-zinc-400 block mb-1">
+                                                                {new Date(p.created_at).toLocaleDateString()}
+                                                            </span>
+                                                            {p.project_stage && (
+                                                                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${p.project_stage === 'APPROVED' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-zinc-100 dark:bg-zinc-700'}`}>
+                                                                    {p.project_stage}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="border-t border-zinc-100 dark:border-zinc-700 my-3 pt-3 flex justify-between items-center">
+                                                        <button
+                                                            onClick={() => handleProjectClick(p)}
+                                                            className="text-sm font-bold text-zinc-600 hover:text-blue-500 flex items-center gap-1"
+                                                        >
+                                                            Podgląd <ArrowRight size={14} />
+                                                        </button>
+
+                                                        {logisticsViewMode === 'PENDING' ? (
+                                                            <div className="flex items-center gap-2">
+                                                                {p.logistics_operator_id === profile?.id ? (
+                                                                    <button
+                                                                        onClick={() => handleLogisticsOperatorToggle(p.id, null)}
+                                                                        className="px-3 py-1.5 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-red-500 hover:border-red-500/30 rounded text-[10px] font-black uppercase tracking-wider transition-all"
+                                                                        title="Zrezygnuj z przypisania"
+                                                                    >
+                                                                        Zrezygnuj
+                                                                    </button>
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={() => handleLogisticsOperatorToggle(p.id, profile?.id || null)}
+                                                                        className="px-3 py-1.5 bg-white dark:bg-zinc-800 border border-blue-500/30 text-blue-600 hover:bg-blue-500 hover:text-white rounded text-[10px] font-black uppercase tracking-wider transition-all shadow-sm"
+                                                                    >
+                                                                        Przypisz
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    onClick={() => handleLogisticsStatusToggle(p.id, 'PROCESSED')}
+                                                                    className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-bold transition-colors flex items-center gap-2"
+                                                                >
+                                                                    <Check size={14} /> Gotowe
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleRequestApprovalTrigger(p)}
+                                                                    className="p-1.5 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm"
+                                                                    title="Wyślij do akceptacji"
+                                                                >
+                                                                    <Send size={16} strokeWidth={2.5} />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleOpenOrderPreview(p as any)}
+                                                                    className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm"
+                                                                    title="Zamówienie (Email)"
+                                                                >
+                                                                    <Mail size={16} strokeWidth={2.5} />
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => handleLogisticsStatusToggle(p.id, 'PENDING')}
+                                                                className="px-3 py-1.5 bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 text-zinc-700 dark:text-zinc-300 rounded text-xs font-bold transition-colors flex items-center gap-2"
+                                                            >
+                                                                Przywróć do Kolejki
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -1123,6 +1329,26 @@ export const DashboardView: React.FC<Props> = ({
                                 <Shield className="text-purple-500" size={24} />
                                 <h2 className="text-xl font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider font-mono">Panel Zarządzania</h2>
                             </div>
+
+                            {(profile?.role === 'manager' || profile?.is_admin) && pendingApprovals.length > 0 && (
+                                <div className="bg-amber-50 dark:bg-amber-900/10 border-2 border-amber-200 dark:border-amber-800 rounded-xl p-4 mb-6 flex items-center justify-between shadow-sm animate-fadeIn">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-10 h-10 bg-amber-500 text-white rounded-lg flex items-center justify-center">
+                                            <Clock size={20} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-bold text-amber-900 dark:text-amber-100">Oczekujące Akceptacje</h3>
+                                            <p className="text-[10px] text-amber-700 dark:text-amber-300">Masz {pendingApprovals.length} projekt(y) oczekujące na Twoje zatwierdzenie.</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setDashFeedTab('APPROVALS')}
+                                        className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 transition-colors shadow-sm active:scale-95"
+                                    >
+                                        Przejdź do listy
+                                    </button>
+                                </div>
+                            )}
 
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                 {/* 1. PIPELINE SUMMARY */}
@@ -1387,7 +1613,7 @@ export const DashboardView: React.FC<Props> = ({
 
             {activeHubTab === 'LOGISTICS' && (
                 <div className="animate-fadeIn">
-                    <LogisticsHubView onOpenProject={onOpenProject} />
+                    <LogisticsHubView onOpenProject={onOpenProject} onAction={onAction} />
                 </div>
             )}
 
@@ -1399,6 +1625,15 @@ export const DashboardView: React.FC<Props> = ({
                         setPreviewSuppliers(null);
                         setPreviewProject(null);
                     }}
+                />
+            )}
+
+            {showApprovalModal && approvalValidation && (
+                <ApprovalRequestModal
+                    isOpen={showApprovalModal}
+                    onClose={() => setShowApprovalModal(false)}
+                    onConfirm={handleConfirmApproval}
+                    autoValidation={approvalValidation}
                 />
             )}
         </div>

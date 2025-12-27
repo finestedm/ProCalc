@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { Currency } from '../types';
 import { Zap, X, ArrowRight, User, Briefcase, Layers, FileText, Globe } from 'lucide-react';
-import { SALES_PEOPLE, SUPPORT_PEOPLE } from '../services/employeesDatabase';
+import { supabase } from '../services/supabaseClient';
 import { INSTALLATION_TYPES } from '../services/optionsDatabase';
 
 interface QuickStartData {
@@ -20,6 +19,8 @@ interface Props {
     onApply: (data: QuickStartData) => void;
     defaultSalesPerson?: string;
     defaultSupportPerson?: string;
+    currentUserRole?: string;
+    currentUserName?: string | null;
 }
 
 export const QuickStartModal: React.FC<Props> = ({
@@ -30,7 +31,7 @@ export const QuickStartModal: React.FC<Props> = ({
     defaultSupportPerson = '',
     currentUserRole,
     currentUserName
-}: Props & { currentUserRole?: string, currentUserName?: string | null }) => {
+}) => {
     const [data, setData] = useState<QuickStartData>({
         projectNumber: '',
         clientName: '',
@@ -39,6 +40,46 @@ export const QuickStartModal: React.FC<Props> = ({
         installationType: '',
         currency: Currency.EUR
     });
+
+    const [salesPeople, setSalesPeople] = useState<string[]>([]);
+    const [supportPeople, setSupportPeople] = useState<string[]>([]);
+
+    // Fetch users on mount
+    useEffect(() => {
+        const fetchUsers = async () => {
+            try {
+                const { data: users, error } = await supabase
+                    .from('users')
+                    .select('full_name, role');
+
+                if (error) throw error;
+
+                if (users) {
+                    const sales = users
+                        .filter(u => ['manager', 'admin', 'engineer'].includes(u.role))
+                        .map(u => u.full_name)
+                        .filter(Boolean)
+                        .sort();
+
+                    const support = users
+                        .filter(u => ['manager', 'admin', 'specialist'].includes(u.role))
+                        .map(u => u.full_name)
+                        .filter(Boolean)
+                        .sort();
+
+                    setSalesPeople(prev => [...new Set([...prev, ...sales])]);
+                    setSupportPeople(prev => [...new Set([...prev, ...support])]);
+                }
+            } catch (err) {
+                console.error('Error fetching users for QuickStart:', err);
+                // Fallback handled by empty lists or manual typing
+            }
+        };
+
+        if (isOpen) {
+            fetchUsers();
+        }
+    }, [isOpen]);
 
     // Reset defaults when opening
     useEffect(() => {
@@ -168,7 +209,7 @@ export const QuickStartModal: React.FC<Props> = ({
                                 onChange={e => setData({ ...data, salesPerson: e.target.value })}
                             />
                             <datalist id="qs-sales-list">
-                                {SALES_PEOPLE.map(p => <option key={p} value={p} />)}
+                                {salesPeople.length > 0 ? salesPeople.map(p => <option key={p} value={p} />) : <option value="Ładowanie..." />}
                             </datalist>
                         </div>
                         <div>
@@ -181,7 +222,7 @@ export const QuickStartModal: React.FC<Props> = ({
                                 onChange={e => setData({ ...data, assistantPerson: e.target.value })}
                             />
                             <datalist id="qs-support-list">
-                                {SUPPORT_PEOPLE.map(p => <option key={p} value={p} />)}
+                                {supportPeople.length > 0 ? supportPeople.map(p => <option key={p} value={p} />) : <option value="Ładowanie..." />}
                             </datalist>
                         </div>
                     </div>
