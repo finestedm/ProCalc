@@ -940,7 +940,7 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject, onAction }) =
                                     : 'bg-amber-50 border-amber-200 text-amber-600 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400 shadow-sm'
                                     }`}
                             >
-                                {p.project_id || 'Bez Numeru'}
+                                {p.project_id || 'Bez Numeru'} | {p.customer_name || 'Nieznany'}
                             </button>
                         ))}
                     </div>

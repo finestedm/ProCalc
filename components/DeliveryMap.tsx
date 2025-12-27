@@ -34,6 +34,15 @@ interface GeocodedPoint extends DeliveryPoint {
 // Component to handle auto-fitting the map to markers
 const MapAutoFit: React.FC<{ positions: [number, number][] }> = ({ positions }) => {
     const map = useMap();
+
+    useEffect(() => {
+        // Fix for rendering only half of height
+        const timer = setTimeout(() => {
+            map.invalidateSize();
+        }, 100);
+        return () => clearTimeout(timer);
+    }, [map]);
+
     useEffect(() => {
         if (positions.length > 0) {
             const bounds = L.latLngBounds(positions);

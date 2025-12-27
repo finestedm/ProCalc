@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, StickyNote, ArrowRight, Clock, User, Briefcase, RefreshCw, Filter, Bell, MapPin, Truck, ChevronRight, ChevronDown, Shield, Scale, HardDrive, AlertCircle, Check, Mail, CheckCircle, Send, ShieldCheck } from 'lucide-react';
+import { Calendar, StickyNote, ArrowRight, Clock, User, Briefcase, RefreshCw, Filter, Bell, MapPin, Truck, ChevronRight, ChevronDown, Shield, Scale, HardDrive, AlertCircle, Check, Mail, CheckCircle, Send, ShieldCheck, UserCheck, ExternalLink, UserMinus, UserPlus } from 'lucide-react';
 import { storageService } from '../services/storage';
 import { SavedCalculation } from '../services/storage/types';
 import { useAuth } from '../contexts/AuthContext';
@@ -264,7 +264,7 @@ export const DashboardView: React.FC<Props> = ({
     const [managerInsights, setManagerInsights] = useState<ManagerInsights | null>(null);
     const [accessRequests, setAccessRequests] = useState<any[]>([]);
     const [lockedEdits, setLockedEdits] = useState<LockedEdit[]>([]);
-    const [dashFeedTab, setDashFeedTab] = useState<'ACTIVITY' | 'MY_EDITS' | 'APPROVALS'>('ACTIVITY');
+    const [dashFeedTab, setDashFeedTab] = useState<'ACTIVITY' | 'MY_EDITS' | 'APPROVALS' | 'LOCKED_EDITS' | 'LOGISTICS'>('ACTIVITY');
 
     const pendingApprovals = useMemo(() => {
         if (profile?.role !== 'manager' && !profile?.is_admin) return [];
@@ -925,145 +925,343 @@ export const DashboardView: React.FC<Props> = ({
                                             <ShieldCheck size={16} /> Do Akceptacji {pendingApprovals.length > 0 && <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full ml-1">{pendingApprovals.length}</span>}
                                         </button>
                                     )}
+                                    {profile?.role === 'manager' && lockedEdits.length > 0 && (
+                                        <button
+                                            onClick={() => setDashFeedTab('LOCKED_EDITS')}
+                                            className={`flex items-center gap-2 text-sm font-bold transition-all ${dashFeedTab === 'LOCKED_EDITS' ? 'text-red-500 border-b-2 border-red-500 pb-2' : 'text-zinc-400 hover:text-zinc-600'}`}
+                                        >
+                                            <Shield size={16} /> Zablokowane Edycje
+                                        </button>
+                                    )}
+                                    {(profile?.role === 'manager' || profile?.role === 'logistics' || profile?.is_admin) && (
+                                        <button
+                                            onClick={() => setDashFeedTab('LOGISTICS')}
+                                            className={`flex items-center gap-2 text-sm font-bold transition-all ${dashFeedTab === 'LOGISTICS' ? 'text-blue-600 border-b-2 border-blue-600 pb-2' : 'text-zinc-400 hover:text-zinc-600'}`}
+                                        >
+                                            <Truck size={16} /> Kolejka Logistyczna {(getLatestVersions(rawExperiments).filter(p => p.logistics_status === 'PENDING').length > 0) && <span className="bg-blue-500 text-white text-[10px] px-1.5 py-0.5 rounded-full ml-1">{getLatestVersions(rawExperiments).filter(p => p.logistics_status === 'PENDING').length}</span>}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
-                            {dashFeedTab === 'ACTIVITY' ? (
-                                activities.length === 0 ? (
-                                    <p className="text-zinc-400 text-sm py-4 italic">Brak nowych powiadomień.</p>
-                                ) : (
-                                    <div className="space-y-3">
-                                        {activities.map(act => (
-                                            <div key={act.id} className="flex items-center justify-between p-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 rounded transition-colors group">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400 font-bold text-xs">
-                                                        {act.userName.charAt(0)}
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-sm text-zinc-700 dark:text-zinc-300">
-                                                            <strong className="text-zinc-900 dark:text-white">{act.userName}</strong> {act.action} projektu <span className="font-mono text-xs font-bold bg-zinc-100 dark:bg-zinc-800 px-1 rounded">{act.projectNumber}</span>
-                                                        </p>
-                                                        <p className="text-[10px] text-zinc-500">{act.customerName}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-[10px] text-zinc-400">{act.timestamp.toLocaleString()}</p>
-                                                    <button
-                                                        onClick={() => {
-                                                            const saved = rawExperiments.find(p => p.id === act.projectId);
-                                                            if (saved) handleProjectClick(saved);
-                                                        }}
-                                                        className="text-[10px] font-bold text-blue-500 hover:underline opacity-0 group-hover:opacity-100 transition-opacity"
-                                                    >
-                                                        Zobacz
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )
-                            ) : dashFeedTab === 'APPROVALS' ? (
-                                <div className="space-y-3">
-                                    {pendingApprovals.length === 0 ? (
-                                        <p className="text-zinc-400 text-sm py-4 italic">Brak projektów oczekujących na Twoją akceptację.</p>
-                                    ) : (
-                                        pendingApprovals.map((p: any) => (
-                                            <div key={p.id} className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-200 dark:border-amber-800/50 group">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="p-2 rounded-lg bg-amber-100 text-amber-600">
-                                                        <Clock size={20} />
-                                                    </div>
-                                                    <div>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`font-bold ${p.project_id === 'BezNumeru' ? 'text-amber-600 text-[10px]' : 'text-zinc-900 dark:text-white'}`}>
-                                                                {p.project_id === 'BezNumeru' ? '⚠️ BRAK NUMERU' : p.project_id}
-                                                            </span>
-                                                            <span className="text-[8px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase flex items-center gap-1">
-                                                                <Clock size={8} /> Do akceptacji
-                                                            </span>
-                                                        </div>
-                                                        <p className="text-xs text-zinc-600 dark:text-zinc-400 font-medium">{p.customer_name}</p>
-                                                        <p className="text-[10px] text-zinc-500 mt-1">Przesłane przez: <span className="font-bold text-zinc-700 dark:text-zinc-300">{p.user?.full_name || p.specialist || 'Nieznany'}</span></p>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-4">
-                                                    <div className="text-right hidden sm:block">
-                                                        <p className="text-[10px] text-zinc-400 font-mono italic">
-                                                            {p.project_notes && p.project_notes.substring(0, 30)}
-                                                            {p.project_notes && p.project_notes.length > 30 ? '...' : ''}
-                                                        </p>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => handleProjectClick(p)}
-                                                        className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 transition-colors shadow-sm active:scale-95"
-                                                    >
-                                                        Otwórz i oceń
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))
+                            <div className="overflow-x-auto min-h-[300px]">
+                                <table className="w-full text-left text-[11px] border-collapse bg-white dark:bg-zinc-800 rounded-lg overflow-hidden mt-2">
+                                    {dashFeedTab === 'ACTIVITY' && (
+                                        <>
+                                            <thead className="bg-zinc-50 dark:bg-zinc-800/50 text-zinc-500 font-bold uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800">
+                                                <tr>
+                                                    <th className="px-4 py-3">Użytkownik</th>
+                                                    <th className="px-4 py-3">Akcja</th>
+                                                    <th className="px-4 py-3">Projekt</th>
+                                                    <th className="px-4 py-3 text-right">Data</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                                                {activities.length === 0 ? (
+                                                    <tr><td colSpan={4} className="text-zinc-400 text-sm py-8 italic text-center">Brak nowych powiadomień.</td></tr>
+                                                ) : (
+                                                    activities.map(act => (
+                                                        <tr key={act.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors group">
+                                                            <td className="px-4 py-3">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400 font-bold text-[10px]">
+                                                                        {act.userName.charAt(0)}
+                                                                    </div>
+                                                                    <span className="font-bold text-zinc-900 dark:text-white">{act.userName}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{act.action}</td>
+                                                            <td className="px-4 py-3">
+                                                                <div className="flex flex-col">
+                                                                    <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">{act.projectNumber}</span>
+                                                                    <span className="text-[10px] text-zinc-500">{act.customerName}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right">
+                                                                <div className="flex flex-col items-end gap-1">
+                                                                    <span className="text-zinc-400">{act.timestamp.toLocaleString()}</span>
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            const saved = rawExperiments.find(p => p.id === act.projectId);
+                                                                            if (saved) handleProjectClick(saved);
+                                                                        }}
+                                                                        className="text-blue-500 hover:underline opacity-0 group-hover:opacity-100 transition-opacity font-bold uppercase text-[9px]"
+                                                                    >
+                                                                        Zobacz
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </>
                                     )}
-                                </div>
-                            ) : (
-                                <div className="space-y-2">
-                                    {recentProjects.length === 0 ? (
-                                        <p className="text-zinc-400 text-sm py-4 italic">Nie edytowałeś jeszcze żadnych projektów.</p>
-                                    ) : (
-                                        recentProjects.map(p => (
-                                            <div key={p.id} className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-800/30 rounded-lg border border-zinc-100 dark:border-zinc-700/50 group">
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`p-2 rounded-lg ${p.isOutdated ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'}`}>
-                                                        <Briefcase size={20} />
-                                                    </div>
-                                                    <div>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="font-bold text-zinc-900 dark:text-white">{p.project_id}</span>
-                                                            {p.isOutdated && (
-                                                                <span className="text-[8px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase flex items-center gap-1">
-                                                                    <RefreshCw size={8} /> Nowa wersja
-                                                                </span>
-                                                            )}
-                                                            {p.latestOperatorId && (
-                                                                <span className="text-[8px] bg-blue-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase flex items-center gap-1">
-                                                                    <Truck size={8} /> Logistyka
-                                                                </span>
-                                                            )}
-                                                            {p.project_stage === 'PENDING_APPROVAL' && (
-                                                                <span className="text-[8px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase flex items-center gap-1">
-                                                                    <Clock size={8} /> Do akceptacji
-                                                                </span>
-                                                            )}
-                                                            {p.project_stage === 'OPENING' && (
-                                                                <span className="text-[8px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase flex items-center gap-1">
-                                                                    <Truck size={8} /> W Realizacji
-                                                                </span>
-                                                            )}
-                                                            {p.project_stage === 'APPROVED' && (
-                                                                <span className="text-[8px] bg-blue-600 text-white px-1.5 py-0.5 rounded-full font-black uppercase flex items-center gap-1">
-                                                                    <CheckCircle size={8} /> Zatwierdzony
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        <p className="text-xs text-zinc-500">{p.customer_name}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-4">
-                                                    <div className="text-right hidden sm:block">
-                                                        <p className="text-[10px] text-zinc-400">Ostatnia edycja</p>
-                                                        <p className="text-[10px] font-bold text-zinc-600 dark:text-zinc-300">{new Date(p.created_at).toLocaleString()}</p>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => handleProjectClick(p)}
-                                                        className="px-4 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-black rounded-lg text-[10px] font-bold"
-                                                    >
-                                                        Otwórz
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))
+
+                                    {dashFeedTab === 'APPROVALS' && (
+                                        <>
+                                            <thead className="bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 font-bold uppercase tracking-wider border-b border-amber-200 dark:border-amber-800">
+                                                <tr>
+                                                    <th className="px-4 py-3">Projekt / Klient</th>
+                                                    <th className="px-4 py-3">Przesłane przez</th>
+                                                    <th className="px-4 py-3">Notatka</th>
+                                                    <th className="px-4 py-3 text-center">Akcja</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                                                {pendingApprovals.length === 0 ? (
+                                                    <tr><td colSpan={4} className="text-zinc-400 text-sm py-8 italic text-center">Brak projektów oczekujących na Twoją akceptację.</td></tr>
+                                                ) : (
+                                                    pendingApprovals.map((p: any) => (
+                                                        <tr key={p.id} className="hover:bg-amber-50/50 dark:hover:bg-amber-900/10 transition-colors">
+                                                            <td className="px-4 py-4">
+                                                                <div className="flex flex-col">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className={`font-bold ${p.project_id === 'BezNumeru' ? 'text-amber-600' : 'text-zinc-900 dark:text-white'}`}>
+                                                                            {p.project_id === 'BezNumeru' ? '⚠️ BRAK NUMERU' : p.project_id}
+                                                                        </span>
+                                                                        <span className="text-[8px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase">DO AKCEPTACJI</span>
+                                                                    </div>
+                                                                    <span className="text-xs text-zinc-500 font-medium">{p.customer_name}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-4">
+                                                                <span className="font-bold text-zinc-700 dark:text-zinc-300">{p.user?.full_name || p.specialist || 'Nieznany'}</span>
+                                                                <p className="text-[9px] text-zinc-400 font-mono mt-0.5">{new Date(p.created_at).toLocaleString()}</p>
+                                                            </td>
+                                                            <td className="px-4 py-4 max-w-[200px]">
+                                                                <p className="text-[10px] text-zinc-500 italic truncate" title={p.project_notes}>
+                                                                    {p.project_notes || 'Brak notatki'}
+                                                                </p>
+                                                            </td>
+                                                            <td className="px-4 py-4 text-center">
+                                                                <button
+                                                                    onClick={() => handleProjectClick(p)}
+                                                                    className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 transition-colors shadow-sm active:scale-95"
+                                                                >
+                                                                    Otwórz i oceń
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </>
                                     )}
-                                </div>
-                            )}
+
+                                    {dashFeedTab === 'MY_EDITS' && (
+                                        <>
+                                            <thead className="bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 font-bold uppercase tracking-wider border-b border-blue-200 dark:border-blue-800">
+                                                <tr>
+                                                    <th className="px-4 py-3">Projekt / Klient</th>
+                                                    <th className="px-4 py-3">Ostatnia edycja</th>
+                                                    <th className="px-4 py-3">Status</th>
+                                                    <th className="px-4 py-3 text-center">Akcja</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                                                {recentProjects.length === 0 ? (
+                                                    <tr><td colSpan={4} className="text-zinc-400 text-sm py-8 italic text-center">Nie edytowałeś jeszcze żadnych projektów.</td></tr>
+                                                ) : (
+                                                    recentProjects.map(p => (
+                                                        <tr key={p.id} className="hover:bg-blue-50/20 dark:hover:bg-blue-900/5 transition-colors group">
+                                                            <td className="px-4 py-4">
+                                                                <div className="flex flex-col">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="font-bold text-zinc-900 dark:text-white">{p.project_id}</span>
+                                                                        {p.isOutdated && (
+                                                                            <span className="text-[8px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase">NOWA WERSJA</span>
+                                                                        )}
+                                                                    </div>
+                                                                    <span className="text-xs text-zinc-500">{p.customer_name}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-4">
+                                                                <p className="text-xs text-zinc-700 dark:text-zinc-300 font-mono italic">{new Date(p.created_at).toLocaleString()}</p>
+                                                            </td>
+                                                            <td className="px-4 py-4">
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {p.latestOperatorId && (
+                                                                        <span className="text-[8px] bg-blue-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase">LOGISTYKA</span>
+                                                                    )}
+                                                                    {p.project_stage === 'PENDING_APPROVAL' && (
+                                                                        <span className="text-[8px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase">DO AKCEPTACJI</span>
+                                                                    )}
+                                                                    {p.project_stage === 'OPENING' && (
+                                                                        <span className="text-[8px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase">W REALIZACJI</span>
+                                                                    )}
+                                                                    {p.project_stage === 'APPROVED' && (
+                                                                        <span className="text-[8px] bg-blue-600 text-white px-1.5 py-0.5 rounded-full font-black uppercase">ZATWIERDZONY</span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-4 text-center">
+                                                                <button
+                                                                    onClick={() => handleProjectClick(p)}
+                                                                    className="px-4 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-black rounded-lg text-[10px] font-bold hover:shadow-md transition-all active:scale-95"
+                                                                >
+                                                                    Otwórz
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </>
+                                    )}
+
+                                    {dashFeedTab === 'LOCKED_EDITS' && (
+                                        <>
+                                            <thead className="bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-300 font-bold uppercase tracking-wider border-b border-red-200 dark:border-red-800">
+                                                <tr>
+                                                    <th className="px-4 py-3">Użytkownik</th>
+                                                    <th className="px-4 py-3">Projekt / Klient</th>
+                                                    <th className="px-4 py-3">Data</th>
+                                                    <th className="px-4 py-3">Powód</th>
+                                                    <th className="px-4 py-3 text-center">Akcja</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                                                {lockedEdits.length === 0 ? (
+                                                    <tr><td colSpan={5} className="text-zinc-400 text-sm py-8 italic text-center">Brak zapisanych edycji zablokowanych projektów.</td></tr>
+                                                ) : (
+                                                    lockedEdits.map(edit => (
+                                                        <tr key={edit.id} className="hover:bg-red-50/10 dark:hover:bg-red-900/5 transition-colors">
+                                                            <td className="px-4 py-3">
+                                                                <div className="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-100">
+                                                                    <User size={12} className="text-zinc-400" />
+                                                                    {edit.userName}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <div className="flex flex-col">
+                                                                    <span className="bg-zinc-100 dark:bg-zinc-700 px-1.5 py-0.5 rounded font-mono font-bold text-zinc-800 dark:text-zinc-200 self-start">
+                                                                        {edit.projectNumber}
+                                                                    </span>
+                                                                    <span className="text-[10px] text-zinc-500 mt-1">{edit.customerName}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-zinc-500 font-mono whitespace-nowrap">
+                                                                {edit.timestamp.toLocaleString()}
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <div className="text-zinc-600 dark:text-zinc-400 italic max-w-[200px] truncate" title={edit.reason}>
+                                                                    "{edit.reason}"
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-center">
+                                                                <button
+                                                                    onClick={() => handleProjectClick(edit.handle)}
+                                                                    className="px-3 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-black text-[10px] font-bold rounded hover:opacity-90 transition-all active:scale-95"
+                                                                >
+                                                                    Przejrzyj Zmiany
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </>
+                                    )}
+                                    {dashFeedTab === 'LOGISTICS' && (
+                                        <>
+                                            <thead className="bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 font-bold uppercase tracking-wider border-b border-blue-200 dark:border-blue-800">
+                                                <tr>
+                                                    <th className="px-4 py-3">Status / Projekt</th>
+                                                    <th className="px-4 py-3">Klient</th>
+                                                    <th className="px-4 py-3">Handlowiec</th>
+                                                    <th className="px-4 py-3">Data</th>
+                                                    <th className="px-4 py-3 text-center">Akcja</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                                                {(categorizedLogisticsQueue.awaitingApproval.length === 0 && categorizedLogisticsQueue.others.length === 0) ? (
+                                                    <tr><td colSpan={5} className="text-zinc-400 text-sm py-8 italic text-center">Brak projektów w kolejce.</td></tr>
+                                                ) : (
+                                                    [...categorizedLogisticsQueue.awaitingApproval, ...categorizedLogisticsQueue.others].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(p => (
+                                                        <tr key={p.id} className={`hover:bg-blue-50/10 dark:hover:bg-blue-900/5 transition-colors ${p.project_stage === 'PENDING_APPROVAL' ? 'bg-amber-50/20' : ''}`}>
+                                                            <td className="px-4 py-4">
+                                                                <div className="flex flex-col">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="font-bold text-blue-500 tracking-wider">
+                                                                            {p.project_id || 'NOWY'}
+                                                                        </span>
+                                                                        {p.project_stage === 'PENDING_APPROVAL' ? (
+                                                                            <span className="text-[8px] bg-amber-500 text-white px-1.5 py-0.5 rounded font-black uppercase">OCZEKUJE</span>
+                                                                        ) : (
+                                                                            <span className="text-[8px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded font-black uppercase">{p.project_stage || 'OPENING'}</span>
+                                                                        )}
+                                                                    </div>
+                                                                    {p.logistics_operator_id && (
+                                                                        <span className="text-[9px] text-zinc-400 mt-1 uppercase font-black tracking-tighter flex items-center gap-1">
+                                                                            <UserCheck size={10} /> {p.operator?.full_name || 'PRZYIPSANY'}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-4">
+                                                                <div className="font-bold text-zinc-900 dark:text-white leading-tight">
+                                                                    {p.customer_name || 'Nieznany klient'}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-4">
+                                                                <span className="text-xs text-zinc-600 dark:text-zinc-400 font-medium">{p.engineer}</span>
+                                                            </td>
+                                                            <td className="px-4 py-4 text-zinc-500 font-mono text-[10px]">
+                                                                {new Date(p.created_at).toLocaleDateString()}
+                                                            </td>
+                                                            <td className="px-4 py-4 text-center">
+                                                                <div className="flex justify-center gap-1">
+                                                                    <button
+                                                                        onClick={() => handleProjectClick(p)}
+                                                                        className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded transition-all active:scale-95"
+                                                                        title="Podgląd i obróbka"
+                                                                    >
+                                                                        <ExternalLink size={16} />
+                                                                    </button>
+                                                                    {p.logistics_operator_id === profile?.id ? (
+                                                                        <button
+                                                                            onClick={() => handleLogisticsOperatorToggle(p.id, null)}
+                                                                            className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded transition-all active:scale-95"
+                                                                            title="Zrezygnuj"
+                                                                        >
+                                                                            <UserMinus size={16} />
+                                                                        </button>
+                                                                    ) : (
+                                                                        <button
+                                                                            onClick={() => handleLogisticsOperatorToggle(p.id, profile?.id || null)}
+                                                                            className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded transition-all active:scale-95"
+                                                                            title="Przypisz do mnie"
+                                                                        >
+                                                                            <UserPlus size={16} />
+                                                                        </button>
+                                                                    )}
+                                                                    {p.logistics_status !== 'PROCESSED' && p.project_stage !== 'PENDING_APPROVAL' && (
+                                                                        <button
+                                                                            onClick={() => handleLogisticsStatusToggle(p.id, 'PROCESSED')}
+                                                                            className="p-1.5 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 rounded transition-all active:scale-95"
+                                                                            title="Gotowe"
+                                                                        >
+                                                                            <Check size={16} strokeWidth={3} />
+                                                                        </button>
+                                                                    )}
+                                                                    <button
+                                                                        onClick={() => handleOpenOrderPreview(p as any)}
+                                                                        className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 rounded transition-all active:scale-95"
+                                                                        title="Zamówienie (Email)"
+                                                                    >
+                                                                        <Mail size={16} />
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </>
+                                    )}
+                                </table>
+                            </div>
                         </div>
                         <div className="lg:col-span-1 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl p-6 text-white shadow-lg flex flex-col justify-between">
                             <div>
@@ -1077,250 +1275,7 @@ export const DashboardView: React.FC<Props> = ({
                         </div>
                     </div>
 
-                    {/* EDITS ON LOCKED CALCULATIONS (MANAGER) */}
-                    {profile?.role === 'manager' && lockedEdits.length > 0 && (
-                        <div className="mb-8 p-6 bg-amber-50 dark:bg-zinc-900 rounded-xl border-2 border-amber-200 dark:border-amber-900/50">
-                            <div className="flex items-center gap-3 mb-4">
-                                <Shield className="text-amber-600" size={24} />
-                                <h2 className="text-xl font-bold text-amber-800 dark:text-amber-400">Edycje Zablokowanych Kalkulacji</h2>
-                                <span className="text-[10px] bg-amber-200 dark:bg-amber-900 px-2 py-1 rounded-full font-bold ml-auto">
-                                    LOG ZMIAN (OSTATNIE 10)
-                                </span>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {lockedEdits.map(edit => (
-                                    <div key={edit.id} className="bg-white dark:bg-zinc-800 p-4 rounded-lg border border-amber-100 dark:border-amber-800/50 shadow-sm transition-all hover:shadow-md">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div className="font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                                                <User size={14} className="text-zinc-400" />
-                                                {edit.userName}
-                                            </div>
-                                            <div className="text-[10px] text-zinc-400 font-mono italic">
-                                                {edit.timestamp.toLocaleString()}
-                                            </div>
-                                        </div>
-                                        <div className="text-xs text-zinc-600 dark:text-zinc-400 mb-3 flex items-center gap-2">
-                                            <span className="bg-zinc-100 dark:bg-zinc-700 px-1.5 py-0.5 rounded font-bold text-zinc-800 dark:text-zinc-200">
-                                                {edit.projectNumber}
-                                            </span>
-                                            <span className="truncate max-w-[150px]">{edit.customerName}</span>
-                                        </div>
-                                        <div className="p-3 bg-amber-50/50 dark:bg-amber-900/10 rounded-lg text-[11px] mb-4 border-l-4 border-amber-400 text-zinc-700 dark:text-zinc-300">
-                                            <p className="font-bold text-[9px] uppercase text-amber-600 mb-1">Powód edycji:</p>
-                                            "{edit.reason}"
-                                        </div>
-                                        <button
-                                            onClick={() => handleProjectClick(edit.handle)}
-                                            className="w-full py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-black text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-all hover:opacity-90"
-                                        >
-                                            <ArrowRight size={14} /> Przejrzyj Zmiany
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
 
-                    {/* LOGISTICS QUEUE */}
-                    {profile?.role === 'logistics' && (
-                        <div className="mb-8 p-6 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-200 dark:border-blue-800">
-                            <div className="flex justify-between items-center mb-6">
-                                <div className="flex items-center gap-3">
-                                    <Truck className="text-blue-600 dark:text-blue-400" size={28} />
-                                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Kolejka Logistyczna</h2>
-                                </div>
-                                <div className="flex bg-white dark:bg-zinc-800 rounded-lg p-1 border border-zinc-200 dark:border-zinc-700">
-                                    <button
-                                        onClick={() => setLogisticsViewMode('PENDING')}
-                                        className={`px-4 py-1.5 rounded text-sm font-bold transition-all ${logisticsViewMode === 'PENDING' ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'text-zinc-500 hover:text-zinc-900'}`}
-                                    >
-                                        Do Przetworzenia ({getLatestVersions(rawExperiments).filter(p => p.logistics_status === 'PENDING').length})
-                                    </button>
-                                    <button
-                                        onClick={() => setLogisticsViewMode('PROCESSED')}
-                                        className={`px-4 py-1.5 rounded text-sm font-bold transition-all ${logisticsViewMode === 'PROCESSED' ? 'bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300' : 'text-zinc-500 hover:text-zinc-900'}`}
-                                    >
-                                        Przetworzone
-                                    </button>
-                                </div>
-                            </div>
-
-                            {(categorizedLogisticsQueue.awaitingApproval.length === 0 && categorizedLogisticsQueue.others.length === 0) ? (
-                                <div className="text-center py-12 text-zinc-400">
-                                    <Truck size={48} className="mx-auto mb-3 opacity-20" />
-                                    <p>Brak projektów w tej kategorii.</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-8">
-                                    {/* AWAITING APPROVAL SECTION */}
-                                    {categorizedLogisticsQueue.awaitingApproval.length > 0 && (
-                                        <div>
-                                            <h3 className="text-xs font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-4 flex items-center gap-2">
-                                                <Clock size={14} /> Oczekuje na akceptację ({categorizedLogisticsQueue.awaitingApproval.length})
-                                            </h3>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                {categorizedLogisticsQueue.awaitingApproval.map(p => (
-                                                    <div key={p.id} className="bg-white dark:bg-zinc-800 rounded-lg p-5 border border-amber-200 dark:border-amber-900/30 shadow-sm hover:shadow-md transition-all group">
-                                                        <div className="flex justify-between items-start mb-3">
-                                                            <div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="text-[10px] uppercase font-bold text-blue-500 tracking-wider">
-                                                                        {p.project_id || 'Nowy'}
-                                                                    </span>
-                                                                    <span className="text-[8px] bg-amber-500 text-white px-1.5 py-0.5 rounded font-black uppercase">Oczekuje</span>
-                                                                </div>
-                                                                <h3 className="font-bold text-zinc-900 dark:text-white text-lg leading-tight mt-1">
-                                                                    {p.customer_name || 'Nieznany klient'}
-                                                                </h3>
-                                                                <p className="text-xs text-zinc-500 mt-1">
-                                                                    Handlowiec: {p.engineer}
-                                                                </p>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <span className="text-xs font-mono text-zinc-400 block mb-1">
-                                                                    {new Date(p.created_at).toLocaleDateString()}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="border-t border-zinc-100 dark:border-zinc-700 my-3 pt-3 flex justify-between items-center">
-                                                            <button
-                                                                onClick={() => handleProjectClick(p)}
-                                                                className="text-sm font-bold text-zinc-600 hover:text-blue-500 flex items-center gap-1"
-                                                            >
-                                                                Podgląd <ArrowRight size={14} />
-                                                            </button>
-
-                                                            {logisticsViewMode === 'PENDING' ? (
-                                                                <div className="flex items-center gap-2">
-                                                                    <button
-                                                                        disabled
-                                                                        className="p-1.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-400 rounded-lg border border-transparent cursor-not-allowed opacity-50"
-                                                                        title="Czeka na akceptację kierownika"
-                                                                    >
-                                                                        <Send size={16} strokeWidth={2.5} />
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleOpenOrderPreview(p as any)}
-                                                                        className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm"
-                                                                        title="Zamówienie (Email)"
-                                                                    >
-                                                                        <Mail size={16} strokeWidth={2.5} />
-                                                                    </button>
-                                                                </div>
-                                                            ) : (
-                                                                <button
-                                                                    onClick={() => handleLogisticsStatusToggle(p.id, 'PENDING')}
-                                                                    className="px-3 py-1.5 bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 text-zinc-700 dark:text-zinc-300 rounded text-xs font-bold transition-colors flex items-center gap-2"
-                                                                >
-                                                                    Przywróć
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* OTHERS SECTION */}
-                                    <div>
-                                        {categorizedLogisticsQueue.awaitingApproval.length > 0 && (
-                                            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 dark:text-zinc-400 mb-4 flex items-center gap-2">
-                                                <CheckCircle size={14} /> Nie wymaga akceptacji / Zaakceptowane ({categorizedLogisticsQueue.others.length})
-                                            </h3>
-                                        )}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                            {categorizedLogisticsQueue.others.map(p => (
-                                                <div key={p.id} className="bg-white dark:bg-zinc-800 rounded-lg p-5 border border-blue-100 dark:border-blue-900/30 shadow-sm hover:shadow-md transition-all group">
-                                                    <div className="flex justify-between items-start mb-3">
-                                                        <div>
-                                                            <span className="text-[10px] uppercase font-bold text-blue-500 tracking-wider">
-                                                                {p.project_id || 'Nowy'}
-                                                            </span>
-                                                            <h3 className="font-bold text-zinc-900 dark:text-white text-lg leading-tight mt-1">
-                                                                {p.customer_name || 'Nieznany klient'}
-                                                            </h3>
-                                                            <p className="text-xs text-zinc-500 mt-1">
-                                                                Handlowiec: {p.engineer}
-                                                            </p>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <span className="text-xs font-mono text-zinc-400 block mb-1">
-                                                                {new Date(p.created_at).toLocaleDateString()}
-                                                            </span>
-                                                            {p.project_stage && (
-                                                                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${p.project_stage === 'APPROVED' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-zinc-100 dark:bg-zinc-700'}`}>
-                                                                    {p.project_stage}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="border-t border-zinc-100 dark:border-zinc-700 my-3 pt-3 flex justify-between items-center">
-                                                        <button
-                                                            onClick={() => handleProjectClick(p)}
-                                                            className="text-sm font-bold text-zinc-600 hover:text-blue-500 flex items-center gap-1"
-                                                        >
-                                                            Podgląd <ArrowRight size={14} />
-                                                        </button>
-
-                                                        {logisticsViewMode === 'PENDING' ? (
-                                                            <div className="flex items-center gap-2">
-                                                                {p.logistics_operator_id === profile?.id ? (
-                                                                    <button
-                                                                        onClick={() => handleLogisticsOperatorToggle(p.id, null)}
-                                                                        className="px-3 py-1.5 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-red-500 hover:border-red-500/30 rounded text-[10px] font-black uppercase tracking-wider transition-all"
-                                                                        title="Zrezygnuj z przypisania"
-                                                                    >
-                                                                        Zrezygnuj
-                                                                    </button>
-                                                                ) : (
-                                                                    <button
-                                                                        onClick={() => handleLogisticsOperatorToggle(p.id, profile?.id || null)}
-                                                                        className="px-3 py-1.5 bg-white dark:bg-zinc-800 border border-blue-500/30 text-blue-600 hover:bg-blue-500 hover:text-white rounded text-[10px] font-black uppercase tracking-wider transition-all shadow-sm"
-                                                                    >
-                                                                        Przypisz
-                                                                    </button>
-                                                                )}
-                                                                <button
-                                                                    onClick={() => handleLogisticsStatusToggle(p.id, 'PROCESSED')}
-                                                                    className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-bold transition-colors flex items-center gap-2"
-                                                                >
-                                                                    <Check size={14} /> Gotowe
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleRequestApprovalTrigger(p)}
-                                                                    className="p-1.5 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm"
-                                                                    title="Wyślij do akceptacji"
-                                                                >
-                                                                    <Send size={16} strokeWidth={2.5} />
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleOpenOrderPreview(p as any)}
-                                                                    className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm"
-                                                                    title="Zamówienie (Email)"
-                                                                >
-                                                                    <Mail size={16} strokeWidth={2.5} />
-                                                                </button>
-                                                            </div>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => handleLogisticsStatusToggle(p.id, 'PENDING')}
-                                                                className="px-3 py-1.5 bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 text-zinc-700 dark:text-zinc-300 rounded text-xs font-bold transition-colors flex items-center gap-2"
-                                                            >
-                                                                Przywróć do Kolejki
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
 
                     {/* MANAGER DASHBOARD SECTION */}
                     {profile?.role === 'manager' && managerInsights && (
@@ -1342,7 +1297,10 @@ export const DashboardView: React.FC<Props> = ({
                                         </div>
                                     </div>
                                     <button
-                                        onClick={() => setDashFeedTab('APPROVALS')}
+                                        onClick={() => {
+                                            setDashFeedTab('APPROVALS');
+                                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                                        }}
                                         className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 transition-colors shadow-sm active:scale-95"
                                     >
                                         Przejdź do listy
