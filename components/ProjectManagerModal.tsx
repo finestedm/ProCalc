@@ -207,6 +207,29 @@ export const ProjectManagerModal: React.FC<Props> = ({
         }
     };
 
+    const handleArchive = async (item: any) => {
+        if (!item || !item.project_id) return;
+
+        // Toggle archive status
+        const newStatus = !item.is_archived;
+        const confirmMsg = newStatus
+            ? `Czy na pewno chcesz zarchiwizować projekt ${item.project_id}?`
+            : `Czy na pewno chcesz przywrócić projekt ${item.project_id}?`;
+
+        if (!confirm(confirmMsg)) return;
+
+        try {
+            // Since archiving is project-level, we affect all items with this project_id
+            await storageService.archiveProject(item.project_id, newStatus);
+            showSnackbar(newStatus ? "Zarchiwizowano projekt" : "Przywrócono projekt");
+            // Reload data
+            cloud.loadCloudData(fs.setPathStack, fs.setCurrentViewItems, fs.setSearchIndex, fs.setFileMetadata);
+        } catch (e) {
+            console.error("Archive error", e);
+            showSnackbar("Błąd zmiany statusu archiwizacji");
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -315,6 +338,7 @@ export const ProjectManagerModal: React.FC<Props> = ({
                                     setActiveFilterPop={setActiveFilterPop}
                                     onLoad={handleLoad}
                                     onDelete={(item) => setDeleteConfirm(item)}
+                                    onArchive={handleArchive} // [NEW]
                                     deleteConfirm={deleteConfirm}
                                     setDeleteConfirm={setDeleteConfirm}
                                     source={source}

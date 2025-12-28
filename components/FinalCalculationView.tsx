@@ -412,13 +412,22 @@ ${data.meta.salesPerson}
                             >
                                 <Printer size={16} /> Drukuj
                             </button>
+                            {/* [MODIFIED] Closing Logic */}
                             {onApprove && (
-                                <button
-                                    onClick={handleApprove}
-                                    className="bg-purple-600 hover:bg-purple-700 text-white border border-purple-700 px-4 py-2 rounded flex items-center gap-2 text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
-                                >
-                                    <Mail size={16} /> Zatwierdź i Zamknij
-                                </button>
+                                <>
+                                    {/* Helper to check role (in real app, pass role in props or use hook) */}
+                                    {/* Assuming we pass `userRole` or similar. For now, we'll infer or assume parent handles logic based on stage */}
+
+                                    <button
+                                        onClick={handleApprove}
+                                        className={`px-4 py-2 rounded flex items-center gap-2 text-xs font-bold uppercase tracking-wider transition-colors shadow-sm text-white ${data.meta.projectNumber ? 'bg-purple-600 hover:bg-purple-700 border-purple-700' : 'bg-zinc-400 cursor-not-allowed'
+                                            }`}
+                                    >
+                                        <Mail size={16} />
+                                        {/* Button Text changes based on context (handled by parent logic usually, but here visuals) */}
+                                        Rozliczenie / Zamknięcie
+                                    </button>
+                                </>
                             )}
                         </div>
                     </div>

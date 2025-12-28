@@ -52,6 +52,7 @@ import { ProfileEditModal } from './components/ProfileEditModal';
 import { UnlockRequestModal } from './components/UnlockRequestModal';
 import { RestoreSessionModal } from './components/RestoreSessionModal';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
+import { CorrectionPanel } from './components/CorrectionPanel';
 import { lifecycleService } from './services/lifecycleService';
 import { notificationService } from './services/notificationService';
 import { fetchEurRate } from './services/currencyService';
@@ -308,6 +309,21 @@ const App: React.FC = () => {
     const getHistoryState = (state: AppState) => {
         const { viewMode, ...dataState } = state;
         return dataState;
+    };
+
+    const handleToggleCorrectionItem = (id: string) => {
+        setAppState(prev => {
+            const items = [...(prev.correctionItems || [])];
+            const idx = items.findIndex(i => i.id === id);
+            if (idx === -1) return prev;
+
+            items[idx] = {
+                ...items[idx],
+                status: items[idx].status === 'resolved' ? 'pending' : 'resolved'
+            };
+
+            return { ...prev, correctionItems: items };
+        });
     };
 
     // Helper to detect structural changes (Add/Remove items) which should trigger instant snapshots
@@ -913,7 +929,7 @@ const App: React.FC = () => {
         const errors: string[] = [];
         const init = appState.initial;
 
-        if (stage === 'OPENING' || stage === 'FINAL') {
+        if (stage === 'OPENING' || stage === 'SENT_TO_CLOSE' || stage === 'FINAL') {
             // Strict Metadata Requirements
             if (!init.meta.installationType) errors.push("Brak Typu Projektu (Szczegóły Projektu).");
             if (!init.meta.invoiceText) errors.push("Brak Tekstu na Fakturze (Szczegóły Projektu).");
@@ -1319,19 +1335,153 @@ const App: React.FC = () => {
             showSnackbar("Automatycznie utworzono karty transportowe dla dostawców.");
         }
 
+        // Check for unresolved correction items (Just in case, though likely Initial phase)
+        const pendingCorrections = (appState.correctionItems || []).filter(i => i.status === 'pending');
+        if (pendingCorrections.length > 0) {
+            triggerConfirm("Nierozwiązane Poprawki", `${pendingCorrections.length} nierozwiązanych punktów z listy poprawek. Czy na pewno chcesz wysłać?`, () => { }, true);
+            return false;
+        }
+
+        // [FIX] If this was a correction, send it back to PENDING (logistics queue)
+        if (appState.logisticsStatus === 'CORRECTION') {
+            stateToSave = { ...stateToSave, logisticsStatus: 'PENDING' };
+            setAppState(stateToSave); // Update local state too
+        }
+
         // Pass the updated state to save function
         const saved = await handleSmartSave('OPENING', undefined, true, stateToSave);
+
+        if (saved && appState.logisticsStatus === 'CORRECTION') {
+            showSnackbar("Poprawka została wysłana do logistyki.");
+            // Notify logistics about correction
+            const pNum = appState.initial.meta.projectNumber || 'BezNumeru';
+            notificationService.notifyRole('logistics', `Zakończono poprawkę: ${pNum}`, `Specjalista wprowadził poprawki w projekcie ${pNum}.`, 'success');
+        }
+
         return saved;
     };
 
     const processFinalSettlement = async (): Promise<boolean> => {
-        const errors = validateProject('FINAL');
+        const role = profile?.role;
+        const isAdmin = profile?.is_admin;
+        const isLogisticsAllowed = role === 'logistics' || role === 'manager' || isAdmin;
+
+        // Determine target stage
+        const targetStage: ProjectStage = isLogisticsAllowed ? 'FINAL' : 'SENT_TO_CLOSE';
+
+        const errors = validateProject(targetStage);
+
+        // [NEW] Check for unresolved correction items
+        const pendingCorrections = (appState.correctionItems || []).filter(i => i.status === 'pending');
+        if (pendingCorrections.length > 0) {
+            errors.push(`${pendingCorrections.length} nierozwiązanych punktów z listy poprawek.`);
+        }
+
         if (errors.length > 0) {
-            triggerConfirm("Braki w Rozliczeniu", "Nie można zamknąć projektu:\n\n" + errors.join('\n'), () => { }, true);
+            triggerConfirm(
+                targetStage === 'FINAL' ? "Braki w Rozliczeniu" : "Braki Przed Przekazaniem",
+                (targetStage === 'FINAL' ? "Nie można zamknąć projektu:\n\n" : "Nie można przekazać do zamknięcia:\n\n") + errors.map(e => `• ${e}`).join('\n'),
+                () => { },
+                true
+            );
             return false;
         }
 
-        const saved = await handleSmartSave('FINAL', undefined, true);
+        const confirmMsg = targetStage === 'FINAL'
+            ? "Czy na pewno chcesz OSTATECZNIE zamknąć projekt? Operacja jest nieodwracalna."
+            : "Czy na pewno chcesz przekazać projekt do zamknięcia? Logistyka zweryfikuje dane.";
+
+        if (!confirm(confirmMsg)) return false;
+
+        // Perform stage transition
+        setAppState(prev => ({ ...prev, stage: targetStage }));
+
+        // Add log entry
+        const nowStr = new Date().toLocaleString();
+        const userName = profile?.full_name || 'Użytkownik';
+        const logEntry = targetStage === 'FINAL'
+            ? `[${nowStr}] PROJEKT ZAMKNIĘTY OSTATECZNIE (${userName})\n`
+            : `[${nowStr}] PROJEKT PRZEKAZANY DO ZAMKNIĘCIA (${userName})\n`;
+
+        // Assuming we want to log this in project notes
+        setAppState(prev => ({
+            ...prev,
+            initial: {
+                ...prev.initial,
+                projectNotes: (prev.initial.projectNotes || '') + logEntry
+            },
+            // Also update close_date if finalizing
+            ...(targetStage === 'FINAL' ? {
+                final: {
+                    ...prev.final,
+                    close_date: toISODateString(new Date())
+                }
+            } : {})
+        }));
+
+        // [FIX] If this was a correction, we must explicitly reset status to PENDING so it re-appears in Logistics Queue
+        // But we handle this logic by modifying the state passed to handleSmartSave or updating prior.
+        // However, handleSmartSave uses 'appState' by default unless 'stateOverride' is provided.
+        // So we should update state before saving.
+
+        let finalStateToSave = undefined;
+        if (targetStage === 'SENT_TO_CLOSE' && appState.logisticsStatus === 'CORRECTION') {
+            finalStateToSave = {
+                ...appState,
+                stage: targetStage,
+                logisticsStatus: 'PENDING',
+                // Add log entry logic is already in setAppState above but that's async/batched. 
+                // We need to be careful. The setAppState calls might not have flushed yet? 
+                // Actually they are batched. But handleSmartSave reads from REF or current render scope?
+                // It uses 'appState' from closure. So the setAppState calls above WON'T be reflected in 'appState' variable immediately.
+                // We need to construct the full object manually if we want to save it now.
+
+                // Re-applying the log entry logic for the saved object
+                initial: {
+                    ...appState.initial,
+                    projectNotes: (appState.initial.projectNotes || '') + logEntry
+                }
+            };
+        }
+
+        const saved = await handleSmartSave(targetStage, undefined, true, finalStateToSave);
+
+        if (saved) {
+            const isCorrection = appState.logisticsStatus === 'CORRECTION';
+
+            if (targetStage === 'FINAL') {
+                showSnackbar("Projekt został zamknięty.");
+            } else {
+                showSnackbar(isCorrection ? "Poprawka została wysłana do logistyki." : "Projekt przekazany do zamknięcia.");
+            }
+
+            // If sent to close, notify logistics
+            if (targetStage === 'SENT_TO_CLOSE') {
+                const pNum = appState.initial.meta.projectNumber || 'BezNumeru';
+
+                const title = isCorrection
+                    ? `Zakończono poprawkę: ${pNum}`
+                    : `Nowy projekt do zamknięcia: ${pNum}`;
+
+                const message = isCorrection
+                    ? `Specjalista zakończył wprowadzanie poprawek w projekcie ${pNum}. Możesz teraz dokończyć rozliczenie.`
+                    : `Projekt ${pNum} został przekazany do ostatecznego rozliczenia.`;
+
+                // If specialized operator is assigned, notify THEM directly.
+                if (appState.logistics_operator_id) {
+                    notificationService.sendNotification(
+                        appState.logistics_operator_id,
+                        title,
+                        message,
+                        'success'
+                    );
+                } else {
+                    // Otherwise broadcast to all logistics
+                    notificationService.notifyRole('logistics', title, message, 'info');
+                }
+            }
+        }
+
         return saved;
     };
 
@@ -1824,7 +1974,10 @@ const App: React.FC = () => {
                 setAppState({
                     ...parsed.appState,
                     stage: loadedStage,
-                    isLocked: parsed.appState.isLocked || false, // Ensure lock state is applied
+                    logisticsStatus: parsed.logistics_status || parsed.appState?.logisticsStatus,
+                    logistics_operator_id: parsed.logistics_operator_id || parsed.appState?.logistics_operator_id,
+                    correctionItems: parsed.appState?.correctionItems || [], // [NEW] Restore checklist
+                    isLocked: (parsed.is_locked !== undefined ? parsed.is_locked : parsed.appState?.isLocked) || false,
                     activeCalculationId: parsed.id || parsed.appState.activeCalculationId // Restore cloud ID
                 });
 
@@ -2386,6 +2539,13 @@ const App: React.FC = () => {
                                 {/* ScrollSpy Removed from here, moved to Sidebar */}
 
                                 <div className="max-w-[1920px] mx-auto space-y-6 px-4 md:px-6">
+                                    {(appState.logisticsStatus === 'CORRECTION' || (appState.correctionItems && appState.correctionItems.length > 0)) && (
+                                        <CorrectionPanel
+                                            items={appState.correctionItems || []}
+                                            onToggle={handleToggleCorrectionItem}
+                                        />
+                                    )}
+
                                     {isFinal ? (
                                         <FinalCalculationView
                                             data={appState.final}

@@ -198,12 +198,47 @@
     }
 
     /* Utility classes for technical lines */
+    .tech-border {
+      border: 1px solid #e4e4e7;
+    }
+
+    .dark .tech-border {
+      border: 1px solid #27272a;
+    }
+
     .tech-border-b {
       border-bottom: 1px solid #e4e4e7;
     }
 
     .dark .tech-border-b {
       border-bottom: 1px solid #27272a;
+    }
+
+    .premium-card {
+      background-color: #ffffff;
+      border: 1px solid #e4e4e7;
+      border-radius: 0.8rem;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .dark .premium-card {
+      background-color: #09090b;
+      border-color: #27272a;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    }
+
+    .hover-lift {
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+    }
+
+    .hover-lift:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    }
+
+    .dark .hover-lift:hover {
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
     }
 
     /* Mask for scroll indicators */

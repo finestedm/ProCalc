@@ -77,5 +77,24 @@ export const notificationService = {
         } catch (e) {
             console.error("Broadcast failed", e);
         }
+    },
+
+    /**
+     * Marks specific notifications as read based on title pattern.
+     * Useful for clearing old requests when a new one is sent.
+     */
+    markNotificationsAsRead: async (userId: string, titlePattern: string) => {
+        try {
+            const { error } = await supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('user_id', userId)
+                .ilike('title', titlePattern)
+                .eq('is_read', false);
+
+            if (error) throw error;
+        } catch (e) {
+            console.error("Failed to mark notifications as read", e);
+        }
     }
 };

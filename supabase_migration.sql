@@ -232,4 +232,12 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
 CREATE INDEX IF NOT EXISTS idx_users_approved ON public.users(approved);
 CREATE INDEX IF NOT EXISTS idx_calculations_user_id ON public.calculations(user_id);
 CREATE INDEX IF NOT EXISTS idx_calculations_is_locked ON public.calculations(is_locked);
+
+-- 6. Archiwizacja
+-- Add is_archived column to calculations table
+ALTER TABLE calculations
+ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT false;
+
+-- Update existing records to have is_archived = false
+UPDATE calculations SET is_archived = false WHERE is_archived IS NULL;
 ```

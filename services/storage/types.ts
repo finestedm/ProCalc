@@ -17,7 +17,7 @@ export interface SavedCalculation {
     sales_person_1_id: string | null;
     sales_person_2_id: string | null;
     is_locked: boolean; // [NEW] Locking mechanism
-    logistics_status: 'PENDING' | 'PROCESSED' | null; // [NEW] Logistics processing status
+    logistics_status: 'PENDING' | 'PROCESSED' | 'CORRECTION' | null; // [NEW] Logistics processing status
     logistics_operator_id: string | null; // [NEW] ID of the logistics operator assigned
     project_stage: string; // [NEW] For fast metadata listing
     project_notes: string; // [NEW] Dedicated column for fast notes access
@@ -26,6 +26,7 @@ export interface SavedCalculation {
     user?: {
         full_name: string;
     };
+    is_archived: boolean;
 }
 
 export interface AccessRequest {
@@ -59,9 +60,11 @@ export interface ICalculationStorage {
     setLockState(id: string, isLocked: boolean): Promise<void>;
     lockProject(projectId: string, isLocked: boolean): Promise<void>;
     isProjectLocked(projectId: string): Promise<boolean>;
-    updateLogisticsStatus(id: string, status: 'PENDING' | 'PROCESSED' | null): Promise<void>;
+    updateLogisticsStatus(id: string, status: 'PENDING' | 'PROCESSED' | 'CORRECTION' | null): Promise<void>;
     updateLogisticsOperator(id: string, operatorId: string | null): Promise<void>;
+    archiveProject(projectId: string, isArchived: boolean): Promise<void>;
     getInstallationStages(calculationIds: string[]): Promise<any[]>;
+    updateProjectNotes(id: string, notes: string): Promise<void>;
 
     // Access Requests
     createAccessRequest(calculationId: string, message?: string): Promise<void>;

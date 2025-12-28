@@ -1,21 +1,22 @@
 
 import React from 'react';
-import { ArrowUpDown, ChevronUp, ChevronDown, Filter, X, Lock, ChevronRight, Trash2, Check } from 'lucide-react';
+import { ArrowUpDown, ChevronUp, ChevronDown, Filter, X, Lock, ChevronRight, Trash2, Check, Archive } from 'lucide-react';
 import { SALES_PEOPLE, SUPPORT_PEOPLE } from '../services/employeesDatabase';
 import { formatNumber } from '../services/calculationService';
 
 interface ProjectTableViewProps {
     tableData: any[];
-    sortConfig: { key: string, direction: 'asc' | 'desc' };
+    sortConfig: { key: string; direction: 'asc' | 'desc' };
     setSortConfig: (val: any) => void;
     tableFilters: Record<string, any>;
     setTableFilters: (val: any) => void;
-    expandedGroups: Record<string, boolean>;
+    expandedGroups: any;
     setExpandedGroups: (val: any) => void;
     activeFilterPop: string | null;
     setActiveFilterPop: (val: string | null) => void;
     onLoad: (item: any) => void;
     onDelete: (item: any) => void;
+    onArchive?: (item: any) => void; // [NEW]
     deleteConfirm: any;
     setDeleteConfirm: (val: any) => void;
     source: 'local' | 'cloud';
@@ -33,6 +34,7 @@ export const ProjectTableView: React.FC<ProjectTableViewProps> = ({
     setActiveFilterPop,
     onLoad,
     onDelete,
+    onArchive, // [NEW]
     deleteConfirm,
     setDeleteConfirm,
     source
@@ -245,6 +247,15 @@ export const ProjectTableView: React.FC<ProjectTableViewProps> = ({
                                                         title={project.isGroup ? "Usuń grupę" : "Usuń"}
                                                     >
                                                         <Trash2 size={14} />
+                                                    </button>
+                                                )}
+                                                {source === 'cloud' && onArchive && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); onArchive(project); }}
+                                                        className={`p-1.5 transition-colors ${project.is_archived ? 'text-amber-500 hover:text-amber-600' : 'text-zinc-400 hover:text-amber-500'}`}
+                                                        title={project.is_archived ? "Przywróć" : "Archiwizuj"}
+                                                    >
+                                                        <Archive size={14} />
                                                     </button>
                                                 )}
                                             </div>

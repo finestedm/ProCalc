@@ -12,6 +12,7 @@ export const STAGE_LABELS: Record<string, string> = {
     'APPROVED': 'ZATWIERDZONY',
     'OPENING': 'REALIZACJA',
     'FINAL': 'ZAMKNIĘTY',
+    'SENT_TO_CLOSE': 'DO ZAMKNIĘCIA',
     'ARCHIVED': 'ARCHIWUM'
 };
 
@@ -21,6 +22,7 @@ export const STAGE_COLORS: Record<string, string> = {
     'APPROVED': 'bg-emerald-600',
     'OPENING': 'bg-blue-600',
     'FINAL': 'bg-purple-600',
+    'SENT_TO_CLOSE': 'bg-indigo-500',
     'ARCHIVED': 'bg-zinc-800'
 };
 

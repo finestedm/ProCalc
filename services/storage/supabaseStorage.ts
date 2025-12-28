@@ -81,6 +81,7 @@ export class SupabaseStorage implements ICalculationStorage {
         };
 
         // Carry over logistics from latest version if exists
+        // [MODIFIED] Reset status if it was PROCESSED to move it back up the queue on change
         if (payload.project_id && payload.project_id !== 'BezNumeru') {
             const { data: latest } = await this.supabase
                 .from(this.tableName)
@@ -91,7 +92,9 @@ export class SupabaseStorage implements ICalculationStorage {
                 .single();
 
             if (latest) {
-                if (!payload.logistics_status) payload.logistics_status = latest.logistics_status;
+                if (!payload.logistics_status) {
+                    payload.logistics_status = latest.logistics_status === 'PROCESSED' ? 'PENDING' : latest.logistics_status;
+                }
                 payload.logistics_operator_id = latest.logistics_operator_id;
             }
         }
@@ -173,7 +176,8 @@ export class SupabaseStorage implements ICalculationStorage {
     async getCalculations(): Promise<any[]> {
         const { data, error } = await this.supabase
             .from(this.tableName)
-            .select('id, created_at, specialist, specialist_id, engineer, engineer_id, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, logistics_status, logistics_operator_id, project_stage, project_notes, user_id, sales_person_1_id, sales_person_2_id, user:users!user_id(full_name), details:calculations_details(calc)')
+            .select('id, created_at, specialist, specialist_id, engineer, engineer_id, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, is_archived, logistics_status, logistics_operator_id, project_stage, project_notes, user_id, sales_person_1_id, sales_person_2_id, user:users!user_id(full_name), details:calculations_details(calc)')
+            .is('deleted_at', null)
             .order('created_at', { ascending: false });
 
         if (error) throw new Error(error.message);
@@ -196,7 +200,8 @@ export class SupabaseStorage implements ICalculationStorage {
     async getCalculationsMetadata(): Promise<any[]> {
         const { data, error } = await this.supabase
             .from(this.tableName)
-            .select('id, created_at, specialist, specialist_id, engineer, engineer_id, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, logistics_status, logistics_operator_id, project_stage, project_notes, user_id, sales_person_1_id, sales_person_2_id, user:users!user_id(full_name)')
+            .select('id, created_at, specialist, specialist_id, engineer, engineer_id, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, is_archived, logistics_status, logistics_operator_id, project_stage, project_notes, user_id, sales_person_1_id, sales_person_2_id, user:users!user_id(full_name)')
+            .is('deleted_at', null)
             .order('created_at', { ascending: false });
 
         if (error) throw new Error(error.message);
@@ -208,6 +213,7 @@ export class SupabaseStorage implements ICalculationStorage {
             .from(this.tableName)
             .select('*, user:users!user_id(full_name), details:calculations_details(calc)')
             .eq('id', id)
+            .is('deleted_at', null)
             .single();
 
         if (error) return null;
@@ -231,8 +237,9 @@ export class SupabaseStorage implements ICalculationStorage {
         if (!projectId || projectId === 'BezNumeru') return [];
         const { data, error } = await this.supabase
             .from(this.tableName)
-            .select('id, created_at, specialist, engineer, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, logistics_status, project_stage, project_notes, user_id, user:users!user_id(full_name)')
+            .select('id, created_at, specialist, engineer, customer_name, project_id, order_date, close_date, total_cost, total_price, is_locked, is_archived, logistics_status, project_stage, project_notes, user_id, user:users!user_id(full_name)')
             .eq('project_id', projectId)
+            .is('deleted_at', null)
             .order('created_at', { ascending: false });
 
         if (error) throw new Error(error.message);
@@ -242,7 +249,7 @@ export class SupabaseStorage implements ICalculationStorage {
     async deleteCalculation(id: string): Promise<void> {
         const { error } = await this.supabase
             .from(this.tableName)
-            .delete()
+            .update({ deleted_at: new Date().toISOString() })
             .eq('id', id);
         if (error) throw new Error(error.message);
     }
@@ -268,6 +275,15 @@ export class SupabaseStorage implements ICalculationStorage {
         if (error) throw new Error(error.message);
     }
 
+    async archiveProject(projectId: string, isArchived: boolean): Promise<void> {
+        if (!projectId || projectId === 'BezNumeru') return;
+        const { error } = await this.supabase
+            .from(this.tableName)
+            .update({ is_archived: isArchived })
+            .eq('project_id', projectId);
+        if (error) throw new Error(error.message);
+    }
+
     async isProjectLocked(projectId: string): Promise<boolean> {
         if (!projectId || projectId === 'BezNumeru') return false;
         const { data } = await this.supabase
@@ -279,7 +295,7 @@ export class SupabaseStorage implements ICalculationStorage {
         return data && data.length > 0;
     }
 
-    async updateLogisticsStatus(id: string, status: 'PENDING' | 'PROCESSED' | null): Promise<void> {
+    async updateLogisticsStatus(id: string, status: 'PENDING' | 'PROCESSED' | 'CORRECTION' | null): Promise<void> {
         await this.supabase
             .from(this.tableName)
             .update({ logistics_status: status })
@@ -291,6 +307,14 @@ export class SupabaseStorage implements ICalculationStorage {
             .from(this.tableName)
             .update({ logistics_operator_id: operatorId })
             .eq('id', id);
+    }
+
+    async updateProjectNotes(id: string, notes: string): Promise<void> {
+        const { error } = await this.supabase
+            .from(this.tableName)
+            .update({ project_notes: notes })
+            .eq('id', id);
+        if (error) throw new Error(error.message);
     }
 
     async createAccessRequest(calculationId: string, message?: string): Promise<void> {

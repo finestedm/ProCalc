@@ -45,6 +45,16 @@ const getGeocodingAddress = (addr: any) => {
     return parts.length > 0 ? parts.join(', ') : null;
 };
 
+// Helper for thousand separator (space)
+const formatNumberWithSpace = (val: number, decimals: number = 0) => {
+    if (val === undefined || val === null) return '0';
+    return val.toLocaleString('pl-PL', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+        useGrouping: true
+    }).replace(/\xa0/g, ' ').replace(/,/g, '.'); // Ensure space separator and dot for decimals if any
+};
+
 // Flattened row for the datagrid
 interface HubRow {
     id: string; // Composite ID
@@ -197,6 +207,7 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject, onAction }) =
             // Filter detailed: Group by project_id, pick latest OPENING
             const latestProjectsMap: Record<string, SavedCalculation> = {};
             allProjects.forEach(p => {
+                if (p.is_archived) return; // [NEW] Filter archived
                 // [MODIFIED] Use ID fallback to avoid collapsing "BezNumeru" projects together
                 const pid = p.project_id || p.id;
 
@@ -676,17 +687,17 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject, onAction }) =
 
             if (filterText && !pNum.toLowerCase().includes(filterText.toLowerCase()) &&
                 !(project.customer_name || '').toLowerCase().includes(filterText.toLowerCase())) return;
-            const calcData = project.calc as CalculationData;
+            const activeData = extractActiveData(project.calc);
+            if (!activeData) return;
+
             let vendor = 'Nieznany';
             if (tItem.isSupplierOrganized && tItem.supplierId) {
-                vendor = calcData.suppliers?.find(s => s.id === tItem.supplierId)?.name || 'Dostawca';
+                vendor = activeData.suppliers?.find(s => s.id === tItem.supplierId)?.name || 'Dostawca';
             } else if (tItem.name) {
                 vendor = tItem.name;
             } else {
                 vendor = 'Transport Własny';
             }
-
-            const activeData = extractActiveData(project.calc);
 
             if (!projectGroups[pNum]) projectGroups[pNum] = [];
 
@@ -708,7 +719,7 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject, onAction }) =
                 comments: '',
                 originalProject: project,
                 transportData: tItem,
-                suggestedWeight: calculateSuggestedWeight(calcData, tItem),
+                suggestedWeight: calculateSuggestedWeight(activeData, tItem),
                 contactPerson: activeData?.recipient?.contactPerson,
                 contactEmail: activeData?.recipient?.email,
                 isStale: !(window as any)._validTransportKeys?.has(key)
@@ -736,8 +747,8 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject, onAction }) =
                 id: `PROJECT|${pNum}`,
                 type: 'PROJECT',
                 vendorName: `${transports.length} transport(y)`,
-                price: transports.reduce((sum, t) => sum + (t.transportData.confirmedPrice || t.transportData.totalPrice), 0),
-                suggestedWeight: transports.reduce((sum, t) => sum + (t.suggestedWeight || 0), 0),
+                price: transports.reduce((sum, t) => sum + (t.isStale ? 0 : (t.transportData.confirmedPrice || t.transportData.totalPrice)), 0),
+                suggestedWeight: transports.reduce((sum, t) => sum + (t.isStale ? 0 : (t.suggestedWeight || 0)), 0),
                 stage: firstT.originalProject.project_stage || (firstT.originalProject.calc as any).stage || 'OPENING' // Add stage to row
             });
 
@@ -826,49 +837,52 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject, onAction }) =
 
     return (
         <div className="p-6 bg-zinc-50 dark:bg-zinc-950 min-h-screen animate-fadeIn">
-            <div className="flex justify-between items-end mb-8 border-b border-zinc-200 dark:border-zinc-800 pb-6">
+            <div className="flex justify-between items-end mb-10 border-b border-zinc-200 dark:border-zinc-800 pb-8">
                 <div>
-                    <h1 className="text-4xl font-black text-zinc-900 dark:text-white flex items-center gap-3 tracking-tighter uppercase">
-                        <div className="p-2 bg-amber-500 text-zinc-950 rounded-lg shadow-glow">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2.5 bg-amber-500 text-zinc-950 rounded-xl shadow-lg shadow-amber-500/20">
                             <Truck size={32} strokeWidth={2.5} />
                         </div>
-                        Globalny Hub Logistyczny
-                    </h1>
-                    <div className="flex items-center gap-2 mt-2">
-                        <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></div>
-                        <p className="text-zinc-500 text-xs font-medium uppercase tracking-widest">Flota • Kierowcy • Terminy Dostaw</p>
+                        <div>
+                            <h1 className="text-4xl font-black text-zinc-900 dark:text-white tracking-tighter uppercase leading-none">Globalny Hub Logistyczny</h1>
+                            <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.2em] mt-1.5 flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
+                                Flota • Kierowcy • Terminy Dostaw
+                            </p>
+                        </div>
                     </div>
                 </div>
-                <div className="flex gap-2 items-center">
-                    <div className="flex bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-1 mr-2 shadow-sm">
+                <div className="flex gap-3 items-center">
+                    <div className="flex bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1 shadow-sm h-11">
                         <button
                             onClick={handleUndo}
                             disabled={historyIndex <= 0}
-                            className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded text-zinc-600 disabled:opacity-20 transition-colors"
+                            className="w-10 flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-600 disabled:opacity-20 transition-all active:scale-90"
                             title="Cofnij (Undo)"
                         >
-                            <Undo size={16} />
+                            <Undo size={18} />
                         </button>
+                        <div className="w-px h-6 bg-zinc-100 dark:bg-zinc-800 self-center mx-1"></div>
                         <button
                             onClick={handleRedo}
                             disabled={historyIndex >= history.length - 1}
-                            className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded text-zinc-600 disabled:opacity-20 transition-colors"
+                            className="w-10 flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-600 disabled:opacity-20 transition-all active:scale-90"
                             title="Ponów (Redo)"
                         >
-                            <Redo size={16} />
+                            <Redo size={18} />
                         </button>
                     </div>
 
-                    <div className="flex bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-1 mr-4 shadow-sm">
+                    <div className="flex bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1 shadow-sm h-11">
                         <button
                             onClick={() => setShowGantt(!showGantt)}
-                            className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${showGantt ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/20' : 'text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800'}`}
+                            className={`px-4 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${showGantt ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/20 hover:bg-cyan-600' : 'text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800'}`}
                         >
                             <CalendarIcon size={14} /> Wykres
                         </button>
                         <button
                             onClick={() => setShowMap(!showMap)}
-                            className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${showMap ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800'}`}
+                            className={`px-4 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${showMap ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-600' : 'text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800'}`}
                         >
                             <MapIcon size={14} /> Mapa
                         </button>
@@ -876,56 +890,75 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject, onAction }) =
 
                     <button
                         onClick={loadData}
-                        className="p-2.5 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg transition-colors text-zinc-500 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700"
+                        className="w-11 h-11 flex items-center justify-center hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-xl transition-all text-zinc-500 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm active:rotate-180 duration-500"
                         title="Odśwież dane z serwera"
                     >
-                        <RefreshCw size={18} />
+                        <RefreshCw size={20} />
                     </button>
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="flex items-center gap-2 px-8 py-2.5 bg-amber-500 hover:bg-amber-600 text-zinc-950 rounded-lg font-black uppercase text-[11px] tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-70 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        className="flex items-center gap-2 px-8 h-11 bg-amber-500 hover:bg-amber-600 text-zinc-950 rounded-xl font-black uppercase text-[11px] tracking-widest shadow-lg shadow-amber-500/10 disabled:opacity-70 transition-all hover-lift active:scale-[0.98]"
                     >
-                        {saving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                        {saving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} strokeWidth={2.5} />}
                         {saving ? 'Zapisywanie...' : 'Zapisz Hub'}
                     </button>
                 </div>
             </div>
 
-            <div className="mb-8 flex gap-6 flex-wrap items-end bg-white dark:bg-zinc-900/50 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-                <div className="flex flex-col gap-2">
-                    <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
-                        <Search size={10} /> Panel Filtrów
+            <div className="mb-10 grid grid-cols-1 lg:grid-cols-12 gap-6 items-end">
+                <div className="lg:col-span-3 flex flex-col gap-2">
+                    <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                        <Search size={14} className="text-amber-500" /> Wyszukiwarka Aktywna
                     </span>
-                    <div className="relative">
-                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                    <div className="relative group">
+                        <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-amber-500 transition-colors" />
                         <input
-                            placeholder="Szukaj projektu / klienta..."
-                            className="pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs w-72 outline-none focus:ring-2 focus:ring-amber-500 transition-all font-medium"
+                            placeholder="Numer projektu / Klient..."
+                            className="pl-12 pr-4 h-12 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs w-full outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all font-bold tracking-tight shadow-sm"
                             value={filterText}
                             onChange={e => setFilterText(e.target.value)}
                         />
                     </div>
                 </div>
 
-                <div className="flex flex-col gap-2">
-                    <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest">Moje Przypisania</span>
+                <div className="lg:col-span-2 flex flex-col gap-2">
+                    <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                        <UserPlus size={14} className="text-cyan-500" /> Filtr Osobisty
+                    </span>
                     <button
                         onClick={() => setShowOnlyMine(!showOnlyMine)}
-                        className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border-2 flex items-center gap-2 ${showOnlyMine
-                            ? 'bg-cyan-500 border-cyan-500 text-white shadow-lg shadow-cyan-500/20'
+                        className={`h-12 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center justify-center gap-3 w-full ${showOnlyMine
+                            ? 'bg-cyan-500 border-cyan-500 text-white shadow-xl shadow-cyan-500/20'
                             : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-cyan-500/30'
                             }`}
                     >
-                        <Truck size={14} /> Moje Projekty
+                        <Truck size={16} strokeWidth={2.5} /> {showOnlyMine ? 'Widok: Moje' : 'Widok: Wszystkie'}
                     </button>
                 </div>
 
-                <div className="h-10 w-px bg-zinc-200 dark:bg-zinc-800 mx-2 hidden md:block" />
-
-                <div className="flex flex-col gap-2 flex-1">
-                    <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest">Aktywne Projekty (Widoczność)</span>
-                    <div className="flex gap-2 flex-wrap">
+                <div className="lg:col-span-7 flex flex-col gap-2">
+                    <div className="flex justify-between items-center pr-2">
+                        <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                            <Search size={14} className="text-zinc-400" /> Szybkie Filtrowanie Portfela
+                        </span>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setHiddenProjectIds(new Set())}
+                                className="text-[9px] font-black text-blue-600 hover:text-blue-700 uppercase tracking-tighter transition-colors"
+                            >
+                                Pokaż wszystko
+                            </button>
+                            <span className="text-zinc-300 text-[10px]">|</span>
+                            <button
+                                onClick={() => setHiddenProjectIds(new Set(projects.map(p => p.id)))}
+                                className="text-[9px] font-black text-red-500 hover:text-red-600 uppercase tracking-tighter transition-colors"
+                            >
+                                Ukryj wszystko
+                            </button>
+                        </div>
+                    </div>
+                    <div className="h-12 flex gap-2 overflow-x-auto no-scrollbar pb-1 px-1">
                         {projects.map(p => (
                             <button
                                 key={p.id}
@@ -935,12 +968,22 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject, onAction }) =
                                     else newHidden.add(p.id);
                                     setHiddenProjectIds(newHidden);
                                 }}
-                                className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all border ${hiddenProjectIds.has(p.id)
-                                    ? 'bg-zinc-100 border-zinc-200 text-zinc-400'
-                                    : 'bg-amber-50 border-amber-200 text-amber-600 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400 shadow-sm'
+                                onDoubleClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    // Show ONLY this project
+                                    const allIds = projects.map(proj => proj.id);
+                                    const newHidden = new Set(allIds.filter(id => id !== p.id));
+                                    setHiddenProjectIds(newHidden);
+                                }}
+                                title="Kliknij: przełącz | Dwuklik: tylko ten"
+                                className={`px-4 flex items-center rounded-xl text-[10px] font-black transition-all border shrink-0 whitespace-nowrap tracking-tight shadow-sm select-none ${hiddenProjectIds.has(p.id)
+                                    ? 'bg-zinc-50 border-zinc-200 text-zinc-400 opacity-50 grayscale hover:opacity-80'
+                                    : 'bg-white border-amber-500/40 text-amber-700 dark:bg-zinc-900 dark:border-amber-500/30 dark:text-amber-400 hover:border-amber-500 hover:shadow-md active:scale-95'
                                     }`}
                             >
-                                {p.project_id || 'Bez Numeru'} | {p.customer_name || 'Nieznany'}
+                                <span className={`w-1.5 h-1.5 rounded-full mr-2 ${hiddenProjectIds.has(p.id) ? 'bg-zinc-300' : 'bg-amber-500'}`}></span>
+                                {p.project_id || 'Bez Numeru'} | {p.customer_name || 'NIEOKREŚLONY'}
                             </button>
                         ))}
                     </div>
@@ -998,24 +1041,24 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject, onAction }) =
                 </div>
             )}
 
-            {/* DATAGRID */}
-            <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-xl">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-[1400px]">
-                        <thead className="text-[10px] uppercase font-bold text-zinc-400 bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-800">
+            {/* MAIN DATAGRID */}
+            <div className="premium-card overflow-hidden shadow-2xl border-zinc-200 dark:border-zinc-800">
+                <div className="overflow-x-auto custom-scrollbar">
+                    <table className="w-full text-left border-collapse min-w-[1500px]">
+                        <thead className="text-[10px] font-black uppercase text-zinc-400 bg-zinc-50 dark:bg-zinc-900/80 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 z-20 backdrop-blur-md">
                             <tr>
-                                <th className="px-4 py-4 w-12 text-center">Ind</th>
-                                <th className="px-4 py-4">Projekt / Klient</th>
-                                <th className="px-4 py-4">Dostawca / Typ Transp.</th>
-                                <th className="px-4 py-4">Data Załadunku</th>
-                                <th className="px-4 py-4">Data Dostawy</th>
-                                <th className="px-4 py-4" colSpan={3}>
+                                <th className="px-5 py-3 w-14 text-center border-r border-zinc-100 dark:border-zinc-800/50">#</th>
+                                <th className="px-6 py-3 border-r border-zinc-100 dark:border-zinc-800/50 tracking-widest text-zinc-500">PROJEKT / KLIENT</th>
+                                <th className="px-6 py-3 border-r border-zinc-100 dark:border-zinc-800/50 tracking-widest text-zinc-500">DOSTAWCA / STATUS</th>
+                                <th className="px-6 py-3 border-r border-zinc-100 dark:border-zinc-800/50 tracking-widest text-zinc-500">ZAŁADUNEK</th>
+                                <th className="px-6 py-3 border-r border-zinc-100 dark:border-zinc-800/50 tracking-widest text-zinc-500">DOSTAWA</th>
+                                <th className="px-6 py-3 border-r border-zinc-100 dark:border-zinc-800/50 tracking-widest text-zinc-500" colSpan={3}>
                                     <div className="flex items-center gap-2">
-                                        <Truck size={10} /> Szczegóły Auta (Kierowca / Rejestracja / Firma / Notatki)
+                                        <Truck size={12} className="text-amber-500" /> SZCZEGÓŁY TRANSPORTU
                                     </div>
                                 </th>
-                                <th className="px-4 py-4 text-right">Koszt / Waga</th>
-                                <th className="px-4 py-4 text-right w-32">Opcje</th>
+                                <th className="px-6 py-3 border-r border-zinc-100 dark:border-zinc-800/50 text-right tracking-widest text-zinc-500">KOSZT / WAGA</th>
+                                <th className="px-6 py-3 text-right tracking-widest text-zinc-500">OPCJE</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -1027,62 +1070,71 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject, onAction }) =
                                 if (isProject) {
                                     const isCollapsed = collapsedProjects.has(row.projectNumber);
                                     return (
-                                        <tr key={row.id} className="bg-zinc-100/50 dark:bg-zinc-800/40 border-l-4 border-l-zinc-300 dark:border-l-zinc-700 group">
-                                            <td className="px-4 py-2 text-center">
-                                                <button onClick={() => toggleProjectCollapse(row.projectNumber)} className="p-1.5 hover:bg-white dark:hover:bg-zinc-700 rounded shadow-sm transition-all text-zinc-500">
-                                                    {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                                        <tr key={row.id} className="bg-zinc-50/80 dark:bg-zinc-900/40 border-l-[6px] border-l-zinc-400 dark:border-l-zinc-700 group hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors">
+                                            <td className="px-5 py-2.5 text-center border-r border-zinc-100 dark:border-zinc-800/30">
+                                                <button onClick={() => toggleProjectCollapse(row.projectNumber)} className="w-7 h-7 flex items-center justify-center bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-amber-500 hover:border-amber-500/50 transition-all active:scale-90 mx-auto">
+                                                    {isCollapsed ? <ChevronRight size={14} strokeWidth={3} /> : <ChevronDown size={14} strokeWidth={3} />}
                                                 </button>
                                             </td>
-                                            <td className="px-4 py-2">
-                                                <div className="font-black text-[13px] text-zinc-900 dark:text-white uppercase tracking-tighter leading-none mb-0.5">{row.projectNumber}</div>
-                                                <div className="text-[10px] font-bold text-zinc-400 truncate max-w-[200px] leading-tight uppercase tracking-wide mb-1">{row.customerName}</div>
-                                                {/* Status Badge */}
-                                                {row.stage === 'PENDING_APPROVAL' ? (
-                                                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 border border-amber-200 dark:border-amber-800">
-                                                        <Clock size={10} strokeWidth={3} /> Do Akceptacji
-                                                    </span>
-                                                ) : row.stage === 'OPENING' ? (
-                                                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 border border-blue-200 dark:border-blue-800">
-                                                        <Truck size={10} strokeWidth={3} /> W Realizacji
-                                                    </span>
-                                                ) : (
-                                                    <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-gray-100 dark:bg-zinc-800 text-gray-500 border border-gray-200 dark:border-zinc-700">
-                                                        {row.stage || 'DRAFT'}
-                                                    </span>
-                                                )}
+                                            <td className="px-6 py-2.5 border-r border-zinc-100 dark:border-zinc-800/30">
+                                                <div className="flex flex-col">
+                                                    <div className="font-black text-[13px] text-zinc-900 dark:text-white uppercase tracking-tighter leading-none mb-0.5">{row.projectNumber}</div>
+                                                    <div className="text-[9px] font-black text-zinc-400 truncate max-w-[220px] leading-tight uppercase tracking-widest">{row.customerName}</div>
+                                                </div>
                                             </td>
-                                            <td className="px-4 py-2" colSpan={6}>
+                                            <td className="px-6 py-2.5 border-r border-zinc-100 dark:border-zinc-800/30" colSpan={6}>
                                                 <div className="flex items-center gap-4">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                                                        <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest">{row.vendorName}</span>
+                                                    <div className="flex items-center gap-2 bg-white dark:bg-zinc-800/50 px-2 py-1 rounded-lg border border-zinc-100 dark:border-zinc-800 shadow-sm">
+                                                        <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></div>
+                                                        <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">{row.vendorName}</span>
                                                     </div>
-                                                    {isCollapsed && (
-                                                        <span className="text-[10px] bg-zinc-200/50 dark:bg-zinc-700/50 px-2 py-0.5 rounded text-zinc-500 dark:text-zinc-400 font-mono font-bold">
-                                                            ∑ {row.suggestedWeight.toLocaleString()} KG
+                                                    <div className="flex gap-2">
+                                                        {row.stage === 'PENDING_APPROVAL' ? (
+                                                            <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md bg-amber-500 text-black shadow-sm">
+                                                                <Clock size={10} strokeWidth={3} /> DO AKCEPTACJI
+                                                            </span>
+                                                        ) : row.stage === 'OPENING' ? (
+                                                            <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 shadow-sm">
+                                                                <Truck size={10} strokeWidth={3} /> W REALIZACJI
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border border-zinc-200 dark:border-zinc-700">
+                                                                {row.stage || 'DRAFT'}
+                                                            </span>
+                                                        )}
+                                                        <span className="text-[9px] bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-2 py-1 rounded-lg font-mono font-black shadow-sm">
+                                                            ∑ {formatNumberWithSpace(row.suggestedWeight)} KG
                                                         </span>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-2 text-right">
-                                                <div className="text-right">
-                                                    <div className="text-[12px] font-bold text-zinc-800 dark:text-zinc-200 font-mono bg-white dark:bg-zinc-900 inline-block px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-800 shadow-sm">
-                                                        {row.price > 0 ? row.price.toLocaleString() : '-'} {row.currency}
+                                                        <button
+                                                            onClick={() => handleAddTransport(row.originalProject)}
+                                                            className="flex items-center gap-1.5 px-3 py-1 bg-amber-500 hover:bg-amber-600 text-zinc-950 rounded-lg font-black text-[9px] uppercase tracking-widest hover-lift active:scale-95 transition-all shadow-md shadow-amber-500/10"
+                                                        >
+                                                            <PlusCircle size={12} strokeWidth={2.5} /> TRANSPORT
+                                                        </button>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-2 text-right">
-                                                <div className="flex justify-end gap-1 items-center">
+                                            <td className="px-6 py-2.5 text-right border-r border-zinc-100 dark:border-zinc-800/30">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <div className="text-[12px] font-black text-zinc-900 dark:text-white font-mono bg-white dark:bg-zinc-800 px-2 py-0.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                                                        {row.price > 0 ? formatNumberWithSpace(row.price, 2) : '0.00'} <span className="text-zinc-400 text-[9px] ml-0.5">{row.currency}</span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-2.5 text-right">
+                                                <div className="flex justify-end gap-1.5 items-center">
                                                     <button
-                                                        onClick={() => handleAddTransport(row.originalProject)}
-                                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-lg font-bold text-[9px] uppercase tracking-wider hover:scale-105 active:scale-95 transition-all shadow-lg shadow-zinc-500/10 mr-2"
+                                                        onClick={() => handleTakeOverProject(row.originalProject)}
+                                                        className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all border active:scale-90 shadow-sm ${row.originalProject.logistics_operator_id ? 'text-purple-600 bg-purple-50 border-purple-200 dark:bg-purple-900/30 dark:border-purple-800' : 'text-zinc-400 bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 hover:text-purple-500 hover:border-purple-500/50'}`}
+                                                        title={row.originalProject.logistics_operator_id ? "Zarządzasz tym projektem" : "Przejmij zarządzanie projektem"}
                                                     >
-                                                        <PlusCircle size={12} /> Dodaj
-                                                    </button>
-                                                    <button onClick={() => handleTakeOverProject(row.originalProject)} className={`p-2 rounded-lg transition-all border active:scale-95 shadow-sm ${row.originalProject.logistics_operator_id ? 'text-purple-600 bg-purple-50 border-purple-100 dark:bg-purple-900/30 dark:border-purple-800' : 'text-zinc-400 hover:text-purple-600 border-transparent hover:bg-purple-50'}`} title={row.originalProject.logistics_operator_id ? "Projekt przejęty" : "Przejmij projekt"}>
                                                         {row.originalProject.logistics_operator_id ? <UserCheck size={16} strokeWidth={2.5} /> : <UserPlus size={16} strokeWidth={2.5} />}
                                                     </button>
-                                                    <button onClick={() => handleOpenProjectWithSync(row.originalProject)} className="p-2 hover:bg-cyan-100 dark:hover:bg-cyan-900/40 text-cyan-600 dark:text-cyan-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm" title="Otwórz projekt">
+                                                    <button
+                                                        onClick={() => handleOpenProjectWithSync(row.originalProject)}
+                                                        className="w-8 h-8 flex items-center justify-center bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:text-cyan-500 hover:border-cyan-500/50 text-zinc-400 rounded-lg transition-all active:scale-90 shadow-sm"
+                                                        title="Otwórz pełną kartę projektu"
+                                                    >
                                                         <ExternalLink size={16} strokeWidth={2.5} />
                                                     </button>
                                                 </div>
@@ -1097,57 +1149,55 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject, onAction }) =
                                     const isSuppLayer = row.isSupplierOrganized;
 
                                     return (
-                                        <tr key={row.id} className={`transition-all group border-l-4 ${row.isStale ? 'opacity-50 grayscale-[0.5]' : ''} ${isSuppLayer
-                                            ? 'bg-amber-50/20 dark:bg-amber-900/5 hover:bg-amber-50/40 dark:hover:bg-amber-900/10 border-amber-500'
-                                            : 'bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 border-cyan-500'
+                                        <tr key={row.id} className={`transition-all group border-l-[6px] ${row.isStale ? 'opacity-50 grayscale-[0.5]' : ''} ${isSuppLayer
+                                            ? 'bg-amber-50/10 dark:bg-amber-900/5 hover:bg-amber-50/20 dark:hover:bg-amber-900/10 border-amber-500/50'
+                                            : 'bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 border-cyan-500/50'
                                             }`}>
-                                            <td className="px-4 py-4 text-center">
-                                                <button onClick={() => toggleExpand(row.id)} className={`p-1.5 rounded transition-all ${isExpanded ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600' : 'text-zinc-400 hover:text-zinc-600'}`}>
-                                                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                            <td className="px-5 py-2 text-center border-r border-zinc-100 dark:border-zinc-800/30">
+                                                <button onClick={() => toggleExpand(row.id)} className={`w-6 h-6 flex items-center justify-center rounded-md transition-all ${isExpanded ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 shadow-md' : 'bg-transparent text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
+                                                    {isExpanded ? <ChevronDown size={12} strokeWidth={3} /> : <ChevronRight size={12} strokeWidth={3} />}
                                                 </button>
                                             </td>
-                                            <td className="px-4 py-4 pl-12 relative">
-                                                <div className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-px ${isSuppLayer ? 'bg-amber-300 dark:bg-amber-800' : 'bg-cyan-300 dark:bg-cyan-800'}`}></div>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="text-[11px] font-black text-zinc-950 dark:text-zinc-50 tracking-tight">{row.projectNumber}</div>
+                                            <td className="px-6 py-2 border-r border-zinc-100 dark:border-zinc-800/30 pl-14 relative">
+                                                <div className={`absolute left-6 top-1/2 -translate-y-1/2 w-6 h-[2px] rounded-full ${isSuppLayer ? 'bg-amber-400/50' : 'bg-cyan-400/50'}`}></div>
+                                                <div className="flex items-center gap-2 mb-0.5">
+                                                    <div className="text-[11px] font-black text-zinc-950 dark:text-zinc-50 tracking-tight uppercase leading-none">{row.projectNumber}</div>
                                                     {row.isStale && (
-                                                        <span className="text-[8px] font-black bg-white/50 text-zinc-500 border border-zinc-200 px-1 rounded uppercase tracking-tighter">Nieaktualne</span>
-                                                    )}
-                                                    {row.id.includes('|manual-') && (
-                                                        <span className="text-[8px] font-black bg-cyan-100 text-cyan-700 px-1 rounded uppercase tracking-tighter shadow-sm">Logistyka</span>
+                                                        <span className="text-[7px] font-black bg-zinc-200 dark:bg-zinc-700 text-zinc-500 px-1 py-0.5 rounded uppercase tracking-tighter">NIEAKTUALNE</span>
                                                     )}
                                                 </div>
-                                                <div className="text-[9px] font-bold text-zinc-400 uppercase truncate max-w-[150px]">{row.customerName}</div>
+                                                <div className="text-[8px] font-black text-zinc-400 uppercase tracking-widest truncate max-w-[160px] leading-tight">{row.customerName}</div>
                                             </td>
-                                            <td className="px-4 py-4">
-                                                <div className={`font-black text-xs truncate max-w-[150px] uppercase tracking-tight ${isSuppLayer ? 'text-amber-600 dark:text-amber-400' : 'text-cyan-600 dark:text-cyan-400'}`}>{row.vendorName}</div>
-                                                <div className="flex gap-2 items-center mt-1">
-                                                    <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${isSuppLayer ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700' : 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700'}`}>
-                                                        {isSuppLayer ? 'Dostawca' : 'JH Logistyka'}
+                                            <td className="px-6 py-2 border-r border-zinc-100 dark:border-zinc-800/30">
+                                                <div className={`font-black text-[11px] truncate max-w-[160px] uppercase tracking-tight mb-1 ${isSuppLayer ? 'text-amber-600 dark:text-amber-400' : 'text-cyan-600 dark:text-cyan-400'}`}>{row.vendorName}</div>
+                                                <div className="flex flex-wrap gap-1.5 items-center">
+                                                    <span className={`text-[7px] font-black uppercase tracking-[0.1em] px-1.5 py-0.5 rounded shadow-sm ${isSuppLayer ? 'bg-amber-500 text-black' : 'bg-cyan-500 text-white'}`}>
+                                                        {isSuppLayer ? 'DOSTAWCA' : 'JH LOGISTYKA'}
                                                     </span>
                                                     <button
                                                         onClick={() => setAssigningSuppliersKey(assigningSuppliersKey === row.id ? null : row.id)}
-                                                        className="text-[8px] font-bold text-zinc-400 hover:text-zinc-600 uppercase tracking-tighter border border-zinc-200 px-1 rounded hover:bg-zinc-50 transition-colors"
+                                                        className="text-[7px] font-black text-zinc-400 hover:text-zinc-900 dark:hover:text-white uppercase tracking-widest border border-zinc-200 dark:border-zinc-700 px-1.5 py-0.5 rounded hover:bg-white dark:hover:bg-zinc-800 transition-all active:scale-95"
                                                     >
-                                                        {assigningSuppliersKey === row.id ? 'Zamknij' : 'Powiąż'}
+                                                        {assigningSuppliersKey === row.id ? 'ZAMKNIJ' : 'POWIĄŻ'}
                                                     </button>
                                                 </div>
                                                 {assigningSuppliersKey === row.id && (
-                                                    <div className="mt-2 p-2 bg-zinc-50 dark:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-700 animate-fadeInLow">
-                                                        <div className="text-[8px] font-bold text-zinc-400 uppercase mb-1">Dostępni dostawcy:</div>
-                                                        <div className="flex flex-wrap gap-1">
-                                                            {(row.originalProject.calc as CalculationData).suppliers?.map(s => {
+                                                    <div className="mt-2 p-2 bg-white dark:bg-black/40 rounded-lg border border-zinc-200 dark:border-zinc-800 animate-fadeInLow shadow-inner absolute z-50 min-w-[200px]">
+                                                        <div className="text-[7px] font-black text-zinc-400 uppercase mb-1.5 tracking-widest">Dostępni dostawcy:</div>
+                                                        <div className="flex flex-col gap-1">
+                                                            {(extractActiveData(row.originalProject.calc)?.suppliers || []).map(s => {
                                                                 const isLinked = (tItem.linkedSupplierIds || []).includes(s.id) || tItem.supplierId === s.id;
                                                                 return (
                                                                     <button
                                                                         key={s.id}
                                                                         onClick={() => handleToggleSupplierLink(row.projectNumber, row.transportId, s.id)}
-                                                                        className={`text-[8px] px-1.5 py-0.5 rounded border transition-all ${isLinked
-                                                                            ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
-                                                                            : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:border-amber-500/50'
+                                                                        className={`text-[9px] px-2 py-1 rounded border font-black transition-all text-left flex items-center justify-between ${isLinked
+                                                                            ? 'bg-amber-500 border-amber-600 text-black'
+                                                                            : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 text-zinc-500'
                                                                             }`}
                                                                     >
                                                                         {s.name}
+                                                                        {isLinked && <UserCheck size={10} />}
                                                                     </button>
                                                                 );
                                                             })}
@@ -1155,54 +1205,63 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject, onAction }) =
                                                     </div>
                                                 )}
                                             </td>
-                                            <td className="px-4 py-4">
+                                            <td className="px-6 py-2 border-r border-zinc-100 dark:border-zinc-800/30">
                                                 <DatePickerInput
-                                                    className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1 text-xs w-28 outline-none focus:ring-2 focus:ring-amber-500 transition-all font-mono"
+                                                    className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[11px] w-28 outline-none focus:ring-2 focus:ring-amber-500/30 transition-all font-mono font-bold text-zinc-900 dark:text-white shadow-sm"
                                                     value={tItem.pickupDate || ''}
                                                     onChange={(val) => handleUpdateTransport(row.projectNumber, row.transportId, { pickupDate: val })}
                                                 />
                                             </td>
-                                            <td className="px-4 py-4">
+                                            <td className="px-6 py-2 border-r border-zinc-100 dark:border-zinc-800/30">
                                                 <DatePickerInput
-                                                    className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1 text-xs w-28 outline-none focus:ring-2 focus:ring-amber-500 transition-all font-mono"
+                                                    className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[11px] w-28 outline-none focus:ring-2 focus:ring-amber-500/30 transition-all font-mono font-bold text-zinc-900 dark:text-white shadow-sm"
                                                     value={tItem.confirmedDeliveryDate || ''}
                                                     onChange={(val) => handleUpdateTransport(row.projectNumber, row.transportId, { confirmedDeliveryDate: val })}
                                                 />
                                             </td>
-                                            <td className="px-4 py-4 text-xs text-zinc-400 italic" colSpan={3}>
-                                                <div className="flex items-center gap-2 opacity-60">
-                                                    <Truck size={14} className={isSuppLayer ? 'text-amber-500' : 'text-cyan-500'} />
-                                                    <span className="font-bold text-[10px] uppercase tracking-wide">{tItem.trucksCount} aut(a)</span>
-                                                    <span className="mx-1">|</span>
-                                                    <span className="text-[9px]">Rozwiń do edycji szczegółów</span>
+                                            <td className="px-6 py-2 text-xs text-zinc-400 italic border-r border-zinc-100 dark:border-zinc-800/30" colSpan={3}>
+                                                <div className="flex items-center justify-between gap-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className={`p-1.5 rounded-lg ${isSuppLayer ? 'bg-amber-100 text-amber-600' : 'bg-cyan-100 text-cyan-600'}`}>
+                                                            <Truck size={14} strokeWidth={2.5} />
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-black text-[10px] text-zinc-900 dark:text-zinc-100 uppercase tracking-widest leading-none">{tItem.trucksCount} {tItem.trucksCount === 1 ? 'AUTO' : 'AUTA'}</div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col items-end">
+                                                        <div className="text-[10px] font-black text-zinc-900 dark:text-white font-mono bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded shadow-sm border border-zinc-200 dark:border-zinc-700">
+                                                            {formatNumberWithSpace(row.suggestedWeight)} <span className="text-zinc-400 text-[8px] ml-0.5">KG</span>
+                                                        </div>
+                                                        <span className="text-[7px] font-black text-zinc-400 uppercase tracking-widest leading-none mt-1">ŁADUNEK</span>
+                                                    </div>
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-4 text-right">
-                                                <div className="text-right mr-2 flex flex-col items-end gap-1">
-                                                    <div className="text-[9px] text-zinc-400 font-mono font-bold uppercase">Sugerowana: {tItem.totalPrice > 0 ? tItem.totalPrice.toLocaleString() : '-'} {tItem.currency}</div>
-                                                    <div className="flex items-center gap-1 bg-white dark:bg-zinc-950 p-1 rounded border border-zinc-200 dark:border-zinc-800 shadow-sm">
+                                            <td className="px-6 py-2 text-right border-r border-zinc-100 dark:border-zinc-800/30">
+                                                <div className="flex flex-col items-end gap-1">
+                                                    <div className="flex items-center gap-1 bg-white dark:bg-zinc-950 px-1.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-sm focus-within:border-amber-500 transition-colors">
                                                         <input
                                                             type="number"
-                                                            placeholder="Cena"
-                                                            className="bg-transparent text-right px-1.5 py-0.5 text-[11px] w-20 font-black outline-none text-zinc-900 dark:text-zinc-100"
+                                                            placeholder="0.00"
+                                                            className="bg-transparent text-right px-0.5 text-[11px] w-16 font-black outline-none text-zinc-900 dark:text-zinc-100"
                                                             value={tItem.confirmedPrice || ''}
                                                             onChange={(e) => handleUpdateTransport(row.projectNumber, row.transportId, { confirmedPrice: parseFloat(e.target.value) || 0 })}
                                                         />
-                                                        <span className="text-[9px] font-black text-zinc-400 border-l border-zinc-200 dark:border-zinc-800 ml-1 pl-1">{tItem.currency}</span>
+                                                        <span className="text-[8px] font-black text-zinc-400 ml-0.5">{tItem.currency}</span>
                                                     </div>
-                                                    <div className="text-[10px] font-black text-zinc-500 font-mono bg-zinc-100 dark:bg-zinc-800 px-1.5 rounded-sm">{row.suggestedWeight?.toLocaleString()} KG</div>
+                                                    <span className="text-[7px] font-black text-zinc-400 uppercase tracking-widest leading-none">KOSZT NETTO</span>
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-4 text-right">
+                                            <td className="px-6 py-2 text-right">
                                                 <div className="flex justify-end gap-1 items-center">
-                                                    <button onClick={() => handleDeleteTransport(row.projectNumber, row.transportId)} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-zinc-400 hover:text-red-500 rounded-lg transition-all border border-transparent active:scale-95" title="Usuń transport">
-                                                        <Trash2 size={16} strokeWidth={2.5} />
+                                                    <button onClick={() => handleDeleteTransport(row.projectNumber, row.transportId)} className="w-7 h-7 flex items-center justify-center hover:bg-red-50 dark:hover:bg-red-900/40 text-zinc-400 hover:text-red-500 rounded-lg transition-all border border-transparent active:scale-90" title="Usuń transport">
+                                                        <Trash2 size={14} strokeWidth={2.5} />
                                                     </button>
-                                                    <button onClick={() => handleOpenOrderPreview(row)} className="p-2 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm" title="Zamówienie (Email)">
-                                                        <Mail size={16} strokeWidth={2.5} />
+                                                    <button onClick={() => handleOpenOrderPreview(row)} className="w-7 h-7 flex items-center justify-center hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-500 rounded-lg transition-all border border-transparent active:scale-90 shadow-sm" title="Wyślij zamówienie transportu">
+                                                        <Mail size={14} strokeWidth={2.5} />
                                                     </button>
-                                                    <button onClick={() => handleSendDeliveryConfirmation(row)} className="p-2 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-500 rounded-lg transition-all border border-transparent active:scale-95 shadow-sm" title="Potwierdzenie Dostawy (Email)">
-                                                        <Mail size={16} strokeWidth={2.5} />
+                                                    <button onClick={() => handleSendDeliveryConfirmation(row)} className="w-7 h-7 flex items-center justify-center hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-500 rounded-lg transition-all border border-transparent active:scale-90 shadow-sm" title="Wyślij potwierdzenie dostawy">
+                                                        <Send size={14} strokeWidth={2.5} />
                                                     </button>
                                                 </div>
                                             </td>
@@ -1213,36 +1272,36 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject, onAction }) =
                                     const isSuppLayer = row.isSupplierOrganized;
                                     if (!truck) return null;
                                     return (
-                                        <tr key={row.id} className={`bg-zinc-50/30 dark:bg-zinc-900/20 border-l-4 transition-colors ${isSuppLayer ? 'border-amber-400/50' : 'border-cyan-400/50'}`}>
-                                            <td className="px-4 py-2 text-center text-zinc-300">
-                                                <div className="w-1 h-1 bg-zinc-300 dark:bg-zinc-700 rounded-full mx-auto"></div>
+                                        <tr key={row.id} className={`bg-zinc-50/40 dark:bg-black/20 border-l-[6px] transition-colors ${isSuppLayer ? 'border-amber-400/30' : 'border-cyan-400/30'}`}>
+                                            <td className="px-5 py-1.5 text-center border-r border-zinc-100 dark:border-zinc-800/20">
+                                                <div className="w-1.5 h-1.5 bg-zinc-300 dark:bg-zinc-700 rounded-full mx-auto"></div>
                                             </td>
-                                            <td className="px-4 py-2 text-center" colSpan={2}>
-                                                <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded shadow-sm border inline-flex items-center gap-1 ${isSuppLayer
-                                                    ? 'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-900/20 dark:border-amber-800'
-                                                    : 'bg-cyan-50 text-cyan-600 border-cyan-100 dark:bg-cyan-900/20 dark:border-cyan-800'}`}>
-                                                    <Truck size={10} /> {row.vendorName}
+                                            <td className="px-6 py-1.5 text-center border-r border-zinc-100 dark:border-zinc-800/20" colSpan={2}>
+                                                <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-lg shadow-md border inline-flex items-center gap-1.5 tracking-widest ${isSuppLayer
+                                                    ? 'bg-amber-500 text-black border-amber-600/20'
+                                                    : 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 border-zinc-800 dark:border-zinc-300'}`}>
+                                                    <Truck size={10} strokeWidth={3} /> {row.vendorName}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-2">
-                                                <DatePickerInput className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1.5 text-xs w-28 outline-none focus:ring-1 focus:ring-amber-500 transition-all font-mono" value={truck.loadingDates || ''} onChange={(val) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { loadingDates: val })} />
+                                            <td className="px-6 py-1.5 border-r border-zinc-100 dark:border-zinc-800/20">
+                                                <DatePickerInput className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[11px] w-28 outline-none focus:ring-2 focus:ring-amber-500/30 transition-all font-mono font-bold shadow-sm" value={truck.loadingDates || ''} onChange={(val) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { loadingDates: val })} />
                                             </td>
-                                            <td className="px-4 py-2">
-                                                <DatePickerInput className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1.5 text-xs w-28 outline-none focus:ring-1 focus:ring-amber-500 transition-all font-mono" value={truck.deliveryDate || ''} onChange={(val) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { deliveryDate: val })} />
+                                            <td className="px-6 py-1.5 border-r border-zinc-100 dark:border-zinc-800/20">
+                                                <DatePickerInput className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[11px] w-28 outline-none focus:ring-2 focus:ring-amber-500/30 transition-all font-mono font-bold shadow-sm" value={truck.deliveryDate || ''} onChange={(val) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { deliveryDate: val })} />
                                             </td>
-                                            <td className="px-4 py-2">
-                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1.5 text-xs w-full outline-none focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-[10px] font-medium" value={truck.driverInfo || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { driverInfo: e.target.value })} placeholder="Imię Nazwisko / Telefon" />
+                                            <td className="px-6 py-1.5 border-r border-zinc-100 dark:border-zinc-800/20">
+                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[11px] w-full outline-none focus:ring-2 focus:ring-amber-500/30 transition-all placeholder:text-[8px] placeholder:font-black placeholder:uppercase font-bold tracking-tight shadow-sm" value={truck.driverInfo || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { driverInfo: e.target.value })} placeholder="KIEROWCA" />
                                             </td>
-                                            <td className="px-4 py-2">
-                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1.5 text-xs w-28 uppercase font-mono outline-none focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-[10px]" value={truck.registrationNumbers || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { registrationNumbers: e.target.value })} placeholder="NUMER REJ." />
+                                            <td className="px-6 py-1.5 border-r border-zinc-100 dark:border-zinc-800/20">
+                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[11px] w-28 uppercase font-black tracking-[0.1em] outline-none focus:ring-2 focus:ring-amber-500/30 transition-all placeholder:text-[8px] shadow-sm" value={truck.registrationNumbers || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { registrationNumbers: e.target.value })} placeholder="REJ." />
                                             </td>
-                                            <td className="px-4 py-2">
-                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1.5 text-xs w-full outline-none focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-[10px]" value={truck.transportCompany || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { transportCompany: e.target.value })} placeholder="Nazwa firmy transportowej" />
+                                            <td className="px-6 py-1.5 border-r border-zinc-100 dark:border-zinc-800/20">
+                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[11px] w-full outline-none focus:ring-2 focus:ring-amber-500/30 transition-all placeholder:text-[8px] placeholder:font-black placeholder:uppercase font-bold tracking-tight shadow-sm" value={truck.transportCompany || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { transportCompany: e.target.value })} placeholder="FIRMA" />
                                             </td>
-                                            <td className="px-4 py-2">
-                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded px-2 py-1.5 text-xs w-full outline-none focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-[10px]" value={truck.notes || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { notes: e.target.value })} placeholder="Notatki dodatkowe..." />
+                                            <td className="px-6 py-1.5 border-r border-zinc-100 dark:border-zinc-800/20">
+                                                <input className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[11px] w-full outline-none focus:ring-2 focus:ring-amber-500/30 transition-all placeholder:text-[8px] placeholder:font-black placeholder:uppercase font-medium italic shadow-sm" value={truck.notes || ''} onChange={(e) => handleUpdateTruck(row.projectNumber, row.transportId, truck.id, { notes: e.target.value })} placeholder="NOTATKI..." />
                                             </td>
-                                            <td className="px-4 py-2 text-right"></td>
+                                            <td className="px-6 py-1.5 text-right"></td>
                                         </tr>
                                     );
                                 }

@@ -204,6 +204,8 @@ export const Header: React.FC<Props> = ({
         switch (stage) {
             case 'OPENING':
                 return { label: 'Realizacja', color: 'text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400', icon: <Send size={10} /> };
+            case 'SENT_TO_CLOSE':
+                return { label: 'Do Zamknięcia', color: 'text-indigo-600 bg-indigo-50 border-indigo-200 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-400', icon: <Clock size={10} /> };
             case 'FINAL':
                 return { label: 'Zamknięty', color: 'text-purple-600 bg-purple-50 border-purple-200 dark:bg-purple-900/30 dark:border-purple-800 dark:text-purple-400', icon: <Lock size={10} /> };
             case 'DRAFT':

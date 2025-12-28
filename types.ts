@@ -29,7 +29,7 @@ export enum ViewMode {
   DASHBOARD = 'DASHBOARD'
 }
 
-export type ProjectStage = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'OPENING' | 'FINAL';
+export type ProjectStage = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'OPENING' | 'SENT_TO_CLOSE' | 'FINAL';
 
 export interface AddressData {
   name: string;
@@ -404,6 +404,14 @@ export interface ApprovalRequest {
   message?: string;
 }
 
+export interface CorrectionItem {
+  id: string;
+  text: string;
+  status: 'pending' | 'resolved';
+  requestedBy: string;
+  timestamp: string;
+}
+
 export interface AppState {
   initial: CalculationData;
   final: CalculationData;
@@ -423,8 +431,9 @@ export interface AppState {
   activeHubTab?: 'DASH' | 'LOGISTICS';
   isLocked?: boolean; // [NEW] Controls editability of Initial Calculation
   activeCalculationId?: string; // [NEW] ID of the cloud-saved calculation
-  logisticsStatus?: 'PENDING' | 'PROCESSED' | null; // [NEW] Status for logistics
+  logisticsStatus?: 'PENDING' | 'PROCESSED' | 'CORRECTION' | null; // [NEW] Status for logistics
   logistics_operator_id?: string | null; // [NEW] User ID of the logistician who took over
+  correctionItems?: CorrectionItem[]; // [NEW] Checklist for project corrections
 }
 
 export interface HistoryEntry {
