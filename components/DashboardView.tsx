@@ -3,7 +3,7 @@ import { Calendar, StickyNote, ArrowRight, Clock, User, Briefcase, RefreshCw, Fi
 import { formatDistanceToNow } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { storageService } from '../services/storage';
-import { SavedCalculation } from '../services/storage/types';
+import { SavedCalculation, ProjectCorrection } from '../services/storage/types';
 import { useAuth } from '../contexts/AuthContext';
 import { CalculationData, AppState, CalculationMode, Currency, InstallationStage, Supplier } from '../types';
 import { formatNumber, extractActiveData } from '../services/calculationService';
@@ -26,6 +26,7 @@ interface Props {
     onAction?: (action: string, meta?: any) => void;
     activeTab?: 'DASH' | 'LOGISTICS' | 'STATS';
     onTabChange?: (tab: 'DASH' | 'LOGISTICS' | 'STATS') => void;
+    refreshTrigger?: number; // [NEW] Trigger reload
 }
 
 interface DashboardEvent {
@@ -254,7 +255,8 @@ export const DashboardView: React.FC<Props> = ({
     onBack,
     onAction,
     activeTab = 'DASH',
-    onTabChange
+    onTabChange,
+    refreshTrigger = 0
 }) => {
     const { profile } = useAuth();
     const [loading, setLoading] = useState(true);
@@ -269,6 +271,7 @@ export const DashboardView: React.FC<Props> = ({
     const [managerInsights, setManagerInsights] = useState<ManagerInsights | null>(null);
     const [accessRequests, setAccessRequests] = useState<any[]>([]);
     const [lockedEdits, setLockedEdits] = useState<LockedEdit[]>([]);
+    const [projectCorrections, setProjectCorrections] = useState<ProjectCorrection[]>([]);
     const [dashFeedTab, setDashFeedTab] = useState<'ACTIVITY' | 'MY_EDITS' | 'APPROVALS' | 'LOCKED_EDITS' | 'LOGISTICS' | 'CORRECTIONS'>('ACTIVITY');
 
     const pendingApprovals = useMemo(() => {
@@ -322,13 +325,19 @@ export const DashboardView: React.FC<Props> = ({
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [refreshTrigger]);
 
     const loadData = async () => {
         setLoading(true);
         try {
             // [NEW] Use metadata fetch instead of heavy getCalculations()
-            const allMetadata = await storageService.getCalculationsMetadata();
+            // Fetch everything in parallel
+            const [allMetadata, allCorrections] = await Promise.all([
+                storageService.getCalculationsMetadata(),
+                storageService.getProjectCorrections()
+            ]);
+
+            setProjectCorrections(allCorrections);
 
             // FILTERING LOGIC (Metadata-based)
             const myMetadata = allMetadata.filter(p => {
@@ -389,7 +398,7 @@ export const DashboardView: React.FC<Props> = ({
             const metaIds = myMetadata.map(m => m.id);
             const stages = metaIds.length > 0 ? await storageService.getInstallationStages(metaIds) : [];
 
-            parseAggregatedData(myMetadata, allMetadata, stages);
+            parseAggregatedData(myMetadata, allMetadata, stages, allCorrections);
             buildGanttData(myMetadata, stages);
 
             if (profile?.role === 'manager' || profile?.role === 'logistics') {
@@ -408,7 +417,11 @@ export const DashboardView: React.FC<Props> = ({
     const relevantCorrections = React.useMemo(() => {
         const uniqueLatest = getLatestVersions(allMetadataCloud);
         return uniqueLatest.filter(p => {
-            if (p.logistics_status !== 'CORRECTION') return false;
+            // [FIX] Source of truth is the NEW table. 
+            // Show if there is AT LEAST ONE 'pending' OR 'fixed' correction for this project.
+            const hasPendingCorrections = projectCorrections.some(c => c.calculation_id === p.id && (c.status === 'pending' || c.status === 'fixed'));
+            if (!hasPendingCorrections) return false;
+
 
             // Manager/Logistics see everything
             if (profile?.role === 'manager' || profile?.role === 'logistics' || profile?.is_admin) return true;
@@ -425,7 +438,8 @@ export const DashboardView: React.FC<Props> = ({
                 (pEng !== '' && pEng === userName) ||
                 (pSpec !== '' && pSpec === userName);
         });
-    }, [allMetadataCloud, profile]);
+    }, [allMetadataCloud, profile, projectCorrections]);
+
 
     // Build Gantt effect removed - now handled in loadData sequentially
 
@@ -489,7 +503,7 @@ export const DashboardView: React.FC<Props> = ({
         setGanttData(ganttRows);
     };
 
-    const parseAggregatedData = (rawMetadata: any[], allMetadata: any[], stages: any[]) => {
+    const parseAggregatedData = (rawMetadata: any[], allMetadata: any[], stages: any[], corrections: ProjectCorrection[] = []) => {
         const newEvents: DashboardEvent[] = [];
         const newNotes: ProjectNote[] = [];
         const newActivities: ActivityEvent[] = [];
@@ -512,7 +526,10 @@ export const DashboardView: React.FC<Props> = ({
             }
 
             if (isRelevant) {
-                const isCorrection = p.logistics_status === 'CORRECTION';
+                // [FIX] Source of truth for active correction is the 'project_corrections' table
+                const hasActiveCorrection = corrections.some(c => c.calculation_id === p.id && (c.status === 'pending' || c.status === 'fixed'));
+                const isCorrection = hasActiveCorrection;
+
                 let actionText = isCorrection ? 'zgłosił prośbę o poprawkę' : 'zaktualizował kalkulację';
 
                 const event: ActivityEvent = {
@@ -707,7 +724,10 @@ export const DashboardView: React.FC<Props> = ({
             if (fullFile.appState) {
                 const dataToLoad = {
                     ...fullFile,
-                    id: fullProject.id
+                    id: fullProject.id,
+                    logistics_status: fullProject.logistics_status,
+                    logistics_operator_id: fullProject.logistics_operator_id,
+                    is_locked: fullProject.is_locked
                 };
                 onOpenProject(dataToLoad, fullFile.stage || 'DRAFT', fullFile.appState.mode || CalculationMode.INITIAL);
             } else {
@@ -718,6 +738,24 @@ export const DashboardView: React.FC<Props> = ({
             alert("Błąd podczas otwierania projektu.");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleResolveAllCorrections = async (project: any) => {
+        try {
+            // 1. Mark all as resolved in the NEW table
+            await storageService.resolveAllProjectCorrections(project.id);
+
+            // 2. Cleanup Notifications
+            const projectNumber = project.project_id || 'BezNumeru';
+            await notificationService.clearGlobalNotifications(`%Prośba o Poprawkę [${projectNumber}]%`);
+
+            // 3. Reload data to reflect changes
+            await loadData();
+
+        } catch (e) {
+            console.error("Failed to resolve all corrections", e);
+            alert("Błąd podczas zatwierdzania poprawek.");
         }
     };
 
@@ -817,8 +855,10 @@ export const DashboardView: React.FC<Props> = ({
             if (!isAProcessed && isBProcessed) return -1;
             if (isAProcessed && !isBProcessed) return 1;
 
-            const isACorrection = a.logistics_status === 'CORRECTION';
-            const isBCorrection = b.logistics_status === 'CORRECTION';
+            // [FIX] Use projectCorrections as source of truth for sorting priority
+            const isACorrection = projectCorrections.some(c => c.calculation_id === a.id && (c.status === 'pending' || c.status === 'fixed'));
+            const isBCorrection = projectCorrections.some(c => c.calculation_id === b.id && (c.status === 'pending' || c.status === 'fixed'));
+
 
             if (isACorrection && !isBCorrection) return -1;
             if (!isACorrection && isBCorrection) return 1;
@@ -830,7 +870,8 @@ export const DashboardView: React.FC<Props> = ({
             awaitingApproval: sorted.filter(p => p.project_stage === 'PENDING_APPROVAL'),
             others: sorted.filter(p => p.project_stage !== 'PENDING_APPROVAL')
         };
-    }, [rawExperiments, profile]);
+    }, [rawExperiments, profile, projectCorrections]);
+
 
     const handleRequestApprovalTrigger = async (project: any) => {
         try {
@@ -881,59 +922,17 @@ export const DashboardView: React.FC<Props> = ({
         try {
             const projId = correctionProject.id;
             const logName = profile?.full_name || 'Logistyk';
+            const projectNumber = correctionProject.project_id || 'BezNumeru';
 
-            // 1. Fetch FULL project data to create a new version
-            const fullProject = await storageService.getCalculationById(projId);
-            if (!fullProject || !fullProject.calc) throw new Error("Could not load project data");
+            // 1. Create corrections in the NEW table
+            await storageService.createProjectCorrection(projId, projectNumber, points);
 
-            const activeData = extractActiveData(fullProject.calc);
-            const projectNumber = activeData.meta?.projectNumber || 'BezNumeru';
-
-            // 2. Prepare correction items
-            const newCorrectionItems: any[] = points.map((p, idx) => ({
-                id: `corr-${Date.now()}-${idx}`,
-                text: p,
-                status: 'pending',
-                requestedBy: logName,
-                timestamp: new Date().toISOString()
-            }));
-
-            // 3. Update notes and state
-            const currentNotes = activeData.projectNotes || '';
-            const timestampStr = new Date().toLocaleString('pl-PL');
-            const summary = points.join('; ');
-            const newNote = `\n[${timestampStr}] LISTA POPRAWEK (od: ${logName}):\n${points.map(p => `- ${p}`).join('\n')}`;
-
-            activeData.projectNotes = currentNotes + newNote;
-
-            const root = fullProject.calc as any;
-            const state = root.appState || root;
-
-            if (state && typeof state === 'object') {
-                state.logisticsStatus = 'CORRECTION';
-                state.correctionItems = newCorrectionItems; // Set the checklist
-                state.historyLog = [
-                    ...(state.historyLog || []),
-                    {
-                        date: new Date().toISOString(),
-                        user: logName,
-                        action: `Zgłoszono listę poprawek (${points.length} pkt): ${summary.slice(0, 50)}...`
-                    }
-                ];
-            }
-
-            // 4. Save as NEW version
-            await storageService.saveCalculation(fullProject.calc, {
-                totalCost: fullProject.total_cost,
-                totalPrice: fullProject.total_price
-            });
-
-            // 5. Send notifications
+            // 2. Send notifications
             const recipients = new Set<string>();
-            if (fullProject.engineer_id) recipients.add(fullProject.engineer_id);
-            if (fullProject.specialist_id) recipients.add(fullProject.specialist_id);
-            if (fullProject.user_id) recipients.add(fullProject.user_id);
-            if (fullProject.sales_person_1_id) recipients.add(fullProject.sales_person_1_id);
+            if (correctionProject.engineer_id) recipients.add(correctionProject.engineer_id);
+            if (correctionProject.specialist_id) recipients.add(correctionProject.specialist_id);
+            if (correctionProject.user_id) recipients.add(correctionProject.user_id);
+            if (correctionProject.sales_person_1_id) recipients.add(correctionProject.sales_person_1_id);
 
             for (const uid of recipients) {
                 await notificationService.markNotificationsAsRead(uid, `%Prośba o Poprawkę [${projectNumber}]%`);
@@ -947,9 +946,9 @@ export const DashboardView: React.FC<Props> = ({
                 );
             }
 
-            // 5. Refresh data
+            // 3. Refresh data
             await loadData();
-            alert("Prośba o poprawkę została wysłana (utworzono nową wersję).");
+            alert("Prośba o poprawkę została wysłana.");
         } catch (e) {
             console.error("Failed to process correction request", e);
             alert("Błąd podczas wysyłania prośby o poprawkę.");
@@ -1198,21 +1197,39 @@ export const DashboardView: React.FC<Props> = ({
                                                 <div className="text-zinc-400 text-sm py-12 italic text-center">Brak nowych powiadomień.</div>
                                             ) : (
                                                 activities.map(activity => {
-                                                    const isCorrection = activity.action.includes('poprawkę');
+                                                    // [FIX] Check if the correction is STILL active. 
+                                                    // If resolved, show as standard notification.
+                                                    const isCorrectionEvent = activity.action.includes('poprawkę');
+                                                    let isStillActiveCorrection = false;
+
+                                                    if (isCorrectionEvent) {
+                                                        const pNum = activity.projectNumber;
+                                                        // [FIX] Verify if there are STILL pending corrections in our state
+                                                        const hasPending = projectCorrections.some(c =>
+                                                            c.project_id === pNum && (c.status === 'pending' || c.status === 'fixed')
+                                                        );
+                                                        if (hasPending) {
+                                                            isStillActiveCorrection = true;
+                                                        }
+                                                    }
+
+
+                                                    const isUrgent = isStillActiveCorrection;
+
                                                     return (
                                                         <div
                                                             key={activity.id}
-                                                            className={`p-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-all group ${isCorrection ? 'bg-red-500/10 dark:bg-red-500/20 border-l-4 border-red-500 shadow-sm' : ''}`}
+                                                            className={`p-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-all group ${isUrgent ? 'bg-red-500/10 dark:bg-red-500/20 border-l-4 border-red-500 shadow-sm' : ''}`}
                                                         >
                                                             <div className="flex gap-4">
-                                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${isCorrection ? 'bg-red-100 dark:bg-red-900/30 text-red-600' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-bold'}`}>
-                                                                    {isCorrection ? <AlertCircle size={20} className="animate-pulse" /> : String(activity.userName).charAt(0)}
+                                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${isUrgent ? 'bg-red-100 dark:bg-red-900/30 text-red-600' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-bold'}`}>
+                                                                    {isUrgent ? <AlertCircle size={20} className="animate-pulse" /> : String(activity.userName).charAt(0)}
                                                                 </div>
                                                                 <div className="flex-1 min-w-0">
                                                                     <div className="flex justify-between items-start">
                                                                         <div>
-                                                                            <span className={`text-[10px] font-black uppercase tracking-widest ${isCorrection ? 'text-red-600 animate-pulse' : 'text-zinc-400'}`}>
-                                                                                {isCorrection ? 'Wymagana Poprawka' : 'Aktualizacja'}
+                                                                            <span className={`text-[10px] font-black uppercase tracking-widest ${isUrgent ? 'text-red-600 animate-pulse' : 'text-zinc-400'}`}>
+                                                                                {isUrgent ? 'Wymagana Poprawka' : (isCorrectionEvent ? 'Historia Poprawek' : 'Aktualizacja')}
                                                                             </span>
                                                                             <h4 className="text-sm font-black text-zinc-900 dark:text-white truncate tracking-tight">
                                                                                 {activity.userName}
@@ -1222,8 +1239,8 @@ export const DashboardView: React.FC<Props> = ({
                                                                             {formatDistanceToNow(activity.timestamp, { addSuffix: true, locale: pl })}
                                                                         </span>
                                                                     </div>
-                                                                    <p className={`text-xs mt-1 ${isCorrection ? 'text-red-700 dark:text-red-400 font-bold' : 'text-zinc-500 dark:text-zinc-400'}`}>
-                                                                        {activity.action} projekt <span className={`font-mono font-black ${isCorrection ? 'text-red-600 underline' : 'text-zinc-900 dark:text-white'}`}>{activity.projectNumber}</span>
+                                                                    <p className={`text-xs mt-1 ${isUrgent ? 'text-red-700 dark:text-red-400 font-bold' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                                                                        {activity.action} projekt <span className={`font-mono font-black ${isUrgent ? 'text-red-600 underline' : 'text-zinc-900 dark:text-white'}`}>{activity.projectNumber}</span>
                                                                     </p>
                                                                     <div className="flex items-center gap-2 mt-2.5">
                                                                         <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter flex items-center gap-1">
@@ -1233,7 +1250,7 @@ export const DashboardView: React.FC<Props> = ({
                                                                 </div>
                                                                 <button
                                                                     onClick={() => handleProjectClick(activity)}
-                                                                    className={`p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all ${isCorrection ? 'bg-red-600 text-white shadow-lg shadow-red-500/20' : 'bg-zinc-900 dark:bg-white text-white dark:text-black shadow-lg shadow-zinc-500/10'}`}
+                                                                    className={`p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all ${isUrgent ? 'bg-red-600 text-white shadow-lg shadow-red-500/20' : 'bg-zinc-900 dark:bg-white text-white dark:text-black shadow-lg shadow-zinc-500/10'}`}
                                                                 >
                                                                     <ArrowUpRight size={16} strokeWidth={3} />
                                                                 </button>
@@ -1437,16 +1454,21 @@ export const DashboardView: React.FC<Props> = ({
                                                 <tr><td colSpan={4} className="text-zinc-400 text-sm py-12 italic text-center">Brak projektów wymagających poprawki.</td></tr>
                                             ) : (
                                                 relevantCorrections
-                                                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                                                     .map(p => {
                                                         const notes = p.project_notes || '';
                                                         const lines = notes.trim().split('\n');
                                                         const lastNote = lines[lines.length - 1] || 'Brak szczegółów';
 
-                                                        const root = (p as any).calc;
-                                                        const state = root?.appState || root;
-                                                        const items = state?.correctionItems || [];
-                                                        const resolved = items.filter((i: any) => i.status === 'resolved').length;
+                                                        const pCorrections = projectCorrections.filter(c => c.calculation_id === p.id);
+                                                        // [FIX] Map points and determine status per point
+                                                        const items = pCorrections.flatMap(c => c.points.map((text, idx) => {
+                                                            const isFixed = c.fixed_points?.includes(idx);
+                                                            const pointStatus = c.status === 'resolved' ? 'resolved' : (isFixed ? 'fixed' : 'pending');
+                                                            return { id: `${c.id}::${idx}`, text, status: pointStatus };
+                                                        }));
+                                                        const resolved = items.filter((i: any) => i.status === 'resolved' || i.status === 'fixed').length;
+                                                        const allReadyToResolve = items.every((i: any) => i.status === 'resolved' || i.status === 'fixed');
+
                                                         const total = items.length;
 
                                                         return (
@@ -1457,7 +1479,7 @@ export const DashboardView: React.FC<Props> = ({
                                                                             {p.project_id || 'NOWY'}
                                                                         </span>
                                                                         <div className="flex items-center gap-2">
-                                                                            <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full font-black uppercase tracking-tighter shadow-sm w-fit animate-pulse">
+                                                                            <span className={`text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full font-black uppercase tracking-tighter shadow-sm w-fit ${resolved < total ? 'animate-pulse' : ''}`}>
                                                                                 WYMAGA POPRAWKI
                                                                             </span>
                                                                             {total > 0 && (
@@ -1474,28 +1496,42 @@ export const DashboardView: React.FC<Props> = ({
                                                                     </div>
                                                                 </td>
                                                                 <td className="px-6 py-4">
-                                                                    <div className="text-xs text-red-800 dark:text-red-300 italic font-medium max-w-[300px] line-clamp-2 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-lg border border-red-500/10 shadow-inner" title={lastNote}>
+                                                                    <div className="text-xs text-red-800 dark:text-red-300 italic font-medium max-w-[400px] bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-lg border border-red-500/10 shadow-inner" title={lastNote}>
                                                                         {items.length > 0 ? (
-                                                                            <ul className="list-disc list-inside space-y-0.5">
-                                                                                {items.slice(0, 2).map((it: any) => (
-                                                                                    <li key={it.id} className={it.status === 'resolved' ? 'line-through opacity-50' : ''}>
-                                                                                        {it.text.slice(0, 40)}{it.text.length > 40 ? '...' : ''}
-                                                                                    </li>
+                                                                            <div className="flex flex-col gap-1 max-h-[80px] overflow-y-auto custom-scrollbar pr-2">
+                                                                                {items.map((it: any) => (
+                                                                                    <div key={it.id} className="flex items-start gap-2">
+                                                                                        <div className={`mt-1 shrink-0 w-2 h-2 rounded-full ${it.status === 'resolved' ? 'bg-emerald-500' : (it.status === 'fixed' ? 'bg-emerald-400' : 'bg-red-400 animate-pulse')}`} />
+                                                                                        <span className={`flex-1 leading-snug text-[10px] non-italic font-bold ${it.status === 'resolved' ? 'line-through opacity-40 text-zinc-400' : (it.status === 'fixed' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-900 dark:text-red-200')}`}>
+                                                                                            {it.text}
+                                                                                        </span>
+                                                                                    </div>
                                                                                 ))}
-                                                                                {total > 2 && <li>...</li>}
-                                                                            </ul>
+                                                                            </div>
                                                                         ) : (
                                                                             <span>"{lastNote}"</span>
                                                                         )}
                                                                     </div>
                                                                 </td>
                                                                 <td className="px-6 py-4 text-right">
-                                                                    <button
-                                                                        onClick={() => handleProjectClick(p)}
-                                                                        className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-xs font-black shadow-lg shadow-red-500/30 transition-all hover:scale-105 active:scale-95 uppercase tracking-widest flex items-center gap-2 ml-auto"
-                                                                    >
-                                                                        <AlertTriangle size={14} /> Napraw
-                                                                    </button>
+                                                                    <div className="flex flex-col gap-2">
+                                                                        <button
+                                                                            title={!allReadyToResolve ? "Musisz oznaczyć wszystkie punkty jako poprawione w edycji kalkulacji" : "Zatwierdź wprowadzone poprawki"}
+                                                                            disabled={!allReadyToResolve}
+                                                                            className={`px-4 py-2 rounded-xl text-[10px] font-black shadow-lg uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${!allReadyToResolve
+                                                                                ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400 cursor-not-allowed opacity-50 shadow-none'
+                                                                                : 'bg-emerald-600 text-white shadow-emerald-500/20 hover:scale-105 active:scale-95'
+                                                                                }`}
+                                                                        >
+                                                                            <Check size={14} /> Zatwierdź
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleProjectClick(p)}
+                                                                            className="px-4 py-2 bg-white dark:bg-zinc-900 text-red-600 border border-red-200 dark:border-red-900/50 rounded-xl text-[10px] font-black transition-all hover:bg-red-50 dark:hover:bg-red-950/20 uppercase tracking-widest flex items-center justify-center gap-2"
+                                                                        >
+                                                                            <AlertTriangle size={14} /> Napraw
+                                                                        </button>
+                                                                    </div>
                                                                 </td>
                                                             </tr>
                                                         );
@@ -1520,112 +1556,115 @@ export const DashboardView: React.FC<Props> = ({
                                             {(categorizedLogisticsQueue.awaitingApproval.length === 0 && categorizedLogisticsQueue.others.length === 0) ? (
                                                 <tr><td colSpan={5} className="text-zinc-400 text-sm py-12 italic text-center">Brak projektów w kolejce.</td></tr>
                                             ) : (
-                                                [...categorizedLogisticsQueue.awaitingApproval, ...categorizedLogisticsQueue.others].map(p => (
-                                                    <tr key={p.id} className={`hover:bg-blue-500/5 dark:hover:bg-blue-500/10 transition-all group ${p.project_stage === 'PENDING_APPROVAL' ? 'bg-amber-500/5' : ''} ${p.logistics_status === 'CORRECTION' ? 'bg-red-500/10 dark:bg-red-500/20 border-l-4 border-red-500' : ''} ${p.logistics_status === 'PROCESSED' ? 'opacity-60 grayscale-[0.5]' : ''}`}>
-                                                        <td className="px-6 py-4">
-                                                            <div className="flex flex-col gap-1">
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="text-xs font-mono font-black tracking-tighter text-blue-600 dark:text-blue-400">
-                                                                        {p.project_id || 'NOWY'}
-                                                                    </span>
-                                                                    {p.project_stage === 'PENDING_APPROVAL' ? (
-                                                                        <span className="text-[10px] bg-amber-500 text-black px-2 py-0.5 rounded-full font-black uppercase tracking-tighter shadow-sm">OCZEKUJE</span>
-                                                                    ) : p.logistics_status === 'CORRECTION' ? (
-                                                                        <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full font-black uppercase tracking-tighter shadow-sm animate-pulse">POPRAWKA</span>
-                                                                    ) : (
-                                                                        <span className="text-[10px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-black uppercase tracking-tighter shadow-sm">{p.project_stage || 'OPENING'}</span>
-                                                                    )}
-                                                                </div>
-                                                                {p.logistics_operator_id && (
-                                                                    <span className="text-[9px] text-zinc-400 mt-1 uppercase font-black tracking-widest flex items-center gap-1">
-                                                                        <UserCheck size={10} className="text-emerald-500" /> {p.operator?.full_name || 'PRZYPISANY'}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="font-black text-zinc-900 dark:text-white leading-tight tracking-tight uppercase text-xs">
-                                                                {p.customer_name || 'Nieznany klient'}
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="w-5 h-5 rounded bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[9px] font-black">
-                                                                    {(p.engineer || '?').charAt(0)}
-                                                                </div>
-                                                                <span className="text-xs text-zinc-600 dark:text-zinc-400 font-bold tracking-tight uppercase">{p.engineer}</span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-xs font-black text-zinc-700 dark:text-zinc-300 font-mono tracking-tight">
-                                                                    {new Date(p.created_at).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                                                                </span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-right">
-                                                            <div className="flex justify-end gap-1 items-center">
-                                                                <button
-                                                                    onClick={() => handleProjectClick(p)}
-                                                                    className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-lg transition-all active:scale-90"
-                                                                    title="Podgląd"
-                                                                >
-                                                                    <ExternalLink size={16} />
-                                                                </button>
+                                                [...categorizedLogisticsQueue.awaitingApproval, ...categorizedLogisticsQueue.others].map(p => {
+                                                    // [FIX] Use projectCorrections as source of truth for the red highlighting/badge
+                                                    const hasPending = projectCorrections.some(c => c.calculation_id === p.id && (c.status === 'pending' || c.status === 'fixed'));
+                                                    const isReallyCorrection = hasPending;
 
-                                                                <button
-                                                                    onClick={() => handleRequestCorrectionTrigger(p)}
-                                                                    className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-all active:scale-90"
-                                                                    title="Zgłoś błąd / Poprawkę"
-                                                                >
-                                                                    <AlertCircle size={16} />
-                                                                </button>
-                                                                {p.logistics_operator_id === profile?.id ? (
+
+                                                    return (
+                                                        <tr key={p.id} className={`hover:bg-blue-500/5 dark:hover:bg-blue-500/10 transition-all group ${p.project_stage === 'PENDING_APPROVAL' ? 'bg-amber-500/5' : ''} ${isReallyCorrection ? 'bg-red-500/10 dark:bg-red-500/20 border-l-4 border-red-500' : ''} ${p.logistics_status === 'PROCESSED' ? 'opacity-60 grayscale-[0.5]' : ''}`}>
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex flex-col gap-1">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-xs font-mono font-black tracking-tighter text-blue-600 dark:text-blue-400">
+                                                                            {p.project_id || 'NOWY'}
+                                                                        </span>
+                                                                        {p.project_stage === 'PENDING_APPROVAL' ? (
+                                                                            <span className="text-[10px] bg-amber-500 text-black px-2 py-0.5 rounded-full font-black uppercase tracking-tighter shadow-sm">OCZEKUJE</span>
+                                                                        ) : isReallyCorrection ? (
+                                                                            <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full font-black uppercase tracking-tighter shadow-sm animate-pulse">POPRAWKA</span>
+                                                                        ) : (
+                                                                            <span className="text-[10px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-black uppercase tracking-tighter shadow-sm">{p.project_stage || 'OPENING'}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="font-black text-zinc-900 dark:text-white leading-tight tracking-tight uppercase text-xs">
+                                                                    {p.customer_name || 'Nieznany klient'}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-5 h-5 rounded bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[9px] font-black">
+                                                                        {(p.engineer || '?').charAt(0)}
+                                                                    </div>
+                                                                    <span className="text-xs text-zinc-600 dark:text-zinc-400 font-bold tracking-tight uppercase">{p.engineer}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-xs font-black text-zinc-700 dark:text-zinc-300 font-mono tracking-tight">
+                                                                        {new Date(p.created_at).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                                                                    </span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4 text-right">
+                                                                <div className="flex justify-end gap-1 items-center">
                                                                     <button
-                                                                        onClick={() => handleLogisticsOperatorToggle(p.id, null)}
+                                                                        onClick={() => handleProjectClick(p)}
+                                                                        className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-lg transition-all active:scale-90"
+                                                                        title="Podgląd"
+                                                                    >
+                                                                        <ExternalLink size={16} />
+                                                                    </button>
+
+                                                                    <button
+                                                                        onClick={() => handleRequestCorrectionTrigger(p)}
                                                                         className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-all active:scale-90"
-                                                                        title="Zrezygnuj"
+                                                                        title="Zgłoś błąd / Poprawkę"
                                                                     >
-                                                                        <UserMinus size={16} />
+                                                                        <AlertCircle size={16} />
                                                                     </button>
-                                                                ) : (
+                                                                    {p.logistics_operator_id === profile?.id ? (
+                                                                        <button
+                                                                            onClick={() => handleLogisticsOperatorToggle(p.id, null)}
+                                                                            className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-all active:scale-90"
+                                                                            title="Zrezygnuj"
+                                                                        >
+                                                                            <UserMinus size={16} />
+                                                                        </button>
+                                                                    ) : (
+                                                                        <button
+                                                                            onClick={() => handleLogisticsOperatorToggle(p.id, profile?.id || null)}
+                                                                            className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-lg transition-all active:scale-90"
+                                                                            title="Przypisz do mnie"
+                                                                        >
+                                                                            <UserPlus size={16} />
+                                                                        </button>
+                                                                    )}
+                                                                    {p.logistics_status !== 'PROCESSED' && p.project_stage !== 'PENDING_APPROVAL' && (
+                                                                        <button
+                                                                            onClick={() => handleLogisticsStatusToggle(p.id, 'PROCESSED')}
+                                                                            className="p-2 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 rounded-lg transition-all active:scale-90"
+                                                                            title="Gotowe"
+                                                                        >
+                                                                            <Check size={18} strokeWidth={3} />
+                                                                        </button>
+                                                                    )}
+                                                                    {p.logistics_status === 'PROCESSED' && (
+                                                                        <button
+                                                                            onClick={() => handleLogisticsStatusToggle(p.id, 'PENDING')}
+                                                                            className="p-2 text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/10 rounded-lg transition-all active:scale-90"
+                                                                            title="Cofnij"
+                                                                        >
+                                                                            <Undo size={16} />
+                                                                        </button>
+                                                                    )}
                                                                     <button
-                                                                        onClick={() => handleLogisticsOperatorToggle(p.id, profile?.id || null)}
-                                                                        className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-lg transition-all active:scale-90"
-                                                                        title="Przypisz do mnie"
+                                                                        onClick={() => handleOpenOrderPreview(p as any)}
+                                                                        className="p-2 hover:bg-amber-100 dark:hover:bg-amber-900/20 text-amber-600 rounded-lg transition-all active:scale-90"
+                                                                        title="Email"
                                                                     >
-                                                                        <UserPlus size={16} />
+                                                                        <Mail size={16} />
                                                                     </button>
-                                                                )}
-                                                                {p.logistics_status !== 'PROCESSED' && p.project_stage !== 'PENDING_APPROVAL' && (
-                                                                    <button
-                                                                        onClick={() => handleLogisticsStatusToggle(p.id, 'PROCESSED')}
-                                                                        className="p-2 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 rounded-lg transition-all active:scale-90"
-                                                                        title="Gotowe"
-                                                                    >
-                                                                        <Check size={18} strokeWidth={3} />
-                                                                    </button>
-                                                                )}
-                                                                {p.logistics_status === 'PROCESSED' && (
-                                                                    <button
-                                                                        onClick={() => handleLogisticsStatusToggle(p.id, 'PENDING')}
-                                                                        className="p-2 text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/10 rounded-lg transition-all active:scale-90"
-                                                                        title="Cofnij"
-                                                                    >
-                                                                        <Undo size={16} />
-                                                                    </button>
-                                                                )}
-                                                                <button
-                                                                    onClick={() => handleOpenOrderPreview(p as any)}
-                                                                    className="p-2 hover:bg-amber-100 dark:hover:bg-amber-900/20 text-amber-600 rounded-lg transition-all active:scale-90"
-                                                                    title="Email"
-                                                                >
-                                                                    <Mail size={16} />
-                                                                </button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })
+
                                             )}
                                         </tbody>
                                     </table>

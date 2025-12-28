@@ -45,6 +45,20 @@ export interface AccessRequest {
     };
 }
 
+export interface ProjectCorrection {
+    id: string;
+    calculation_id: string;
+    project_id: string;
+    status: 'pending' | 'fixed' | 'resolved';
+    points: string[];
+    fixed_points?: number[]; // [NEW] Indices of fixed points
+    requested_by?: string;
+    requested_by_id?: string;
+    created_at: string;
+    updated_at: string;
+}
+
+
 // Metadata-only version of the calculation (no heavy JSON)
 export interface SavedCalculationMetadata extends Omit<SavedCalculation, 'calc'> { }
 
@@ -70,6 +84,14 @@ export interface ICalculationStorage {
     createAccessRequest(calculationId: string, message?: string): Promise<void>;
     getPendingAccessRequests(): Promise<AccessRequest[]>;
     updateAccessRequestStatus(requestId: string, status: 'approved' | 'rejected'): Promise<void>;
+
+    // Project Corrections
+    getProjectCorrections(calculationId?: string): Promise<ProjectCorrection[]>;
+    createProjectCorrection(calculationId: string, projectId: string, points: string[]): Promise<void>;
+    resolveProjectCorrection(correctionId: string): Promise<void>;
+    updateProjectCorrectionProgress(correctionId: string, fixedPoints: number[], status: 'pending' | 'fixed' | 'resolved'): Promise<void>; // [NEW]
+    resolveAllProjectCorrections(calculationId: string): Promise<void>;
+
 
 
     /**

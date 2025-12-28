@@ -58,6 +58,7 @@ import { notificationService } from './services/notificationService';
 import { fetchEurRate } from './services/currencyService';
 import { generateDiff } from './services/diffService';
 import { storageService } from './services/storage';
+import { ProjectCorrection } from './services/storage/types';
 import { useAuth } from './contexts/AuthContext';
 import { useNotifications } from './hooks/useNotifications';
 import { calculateProjectCosts, ensureTransportData } from './services/calculationService';
@@ -231,6 +232,8 @@ const App: React.FC = () => {
     const [basketPulse, setBasketPulse] = useState(false);
 
     const [dirHandle, setDirHandle] = useState<any>(null);
+    const [dashboardRefreshTrigger, setDashboardRefreshTrigger] = useState(0);
+    const [projectCorrections, setProjectCorrections] = useState<ProjectCorrection[]>([]);
 
     const [dialogConfig, setDialogConfig] = useState<{
         isOpen: boolean;
@@ -311,19 +314,26 @@ const App: React.FC = () => {
         return dataState;
     };
 
-    const handleToggleCorrectionItem = (id: string) => {
-        setAppState(prev => {
-            const items = [...(prev.correctionItems || [])];
-            const idx = items.findIndex(i => i.id === id);
-            if (idx === -1) return prev;
+    const handleToggleCorrectionItem = async (id: string) => {
+        // Here ID is actually the correction entry ID (UUID)
+        // Since the interface might be slightly different now (one entry has multiple points), 
+        // we might need to handle per-point resolution or per-entry resolution.
+        // The current implementation of resolveProjectCorrection marks the WHOLE entry as resolved.
+        // If we want per-point, we'd need a more granular table. 
+        // But the user requested a single button to mark project as corrected in one of the past conversations.
+        // For now, let's keep it simple: clicking any toggle resolves the whole correction request.
 
-            items[idx] = {
-                ...items[idx],
-                status: items[idx].status === 'resolved' ? 'pending' : 'resolved'
-            };
-
-            return { ...prev, correctionItems: items };
-        });
+        try {
+            await storageService.resolveProjectCorrection(id);
+            // Refresh corrections
+            const pnum = appState.initial.meta.projectNumber;
+            if (pnum && pnum !== 'BezNumeru') {
+                const updated = await storageService.getProjectCorrections(appState.activeCalculationId);
+                setProjectCorrections(updated);
+            }
+        } catch (e) {
+            console.error("Failed to toggle correction", e);
+        }
     };
 
     // Helper to detect structural changes (Add/Remove items) which should trigger instant snapshots
@@ -380,6 +390,11 @@ const App: React.FC = () => {
             const mergedState = { ...appState, ...parsed };
             setAppState(mergedState);
             lastSnapshot.current = mergedState;
+
+            // [NEW] Fetch corrections if we have a cloud ID
+            if (parsed.id) {
+                storageService.getProjectCorrections(parsed.id).then(setProjectCorrections);
+            }
         } else {
             // First load defaults if no storage
             const defaultSettings = { ...DEFAULT_SETTINGS };
@@ -419,47 +434,79 @@ const App: React.FC = () => {
     };
 
     useEffect(() => {
-        const savedTheme = localStorage.getItem(THEME_KEY);
-        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const initialDark = savedTheme === 'dark' || (!savedTheme && systemDark);
+        let safetyTimer: ReturnType<typeof setTimeout>;
 
-        setIsDarkMode(initialDark);
-        if (initialDark) document.documentElement.classList.add('dark');
-        else document.documentElement.classList.remove('dark');
-
-        const savedData = localStorage.getItem(STORAGE_KEY);
-
-        if (savedData) {
+        const initApp = async () => {
             try {
-                const parsed = JSON.parse(savedData);
+                // Safety valve: Force load after 5 seconds if something hangs
+                safetyTimer = setTimeout(() => {
+                    if (!isLoaded) {
+                        console.warn("Initialization took too long - forcing load");
+                        setIsLoaded(true);
+                    }
+                }, 5000);
 
-                // [NEW] Intelligent Session Detection
-                // We check if the saved data has any actual content (customer name or items)
-                const hasContent =
-                    (parsed.initial?.orderingParty?.name && parsed.initial.orderingParty.name !== '') ||
-                    (parsed.initial?.suppliers?.length > 0) ||
-                    (parsed.initial?.meta?.projectNumber && parsed.initial.meta.projectNumber !== '');
+                const savedTheme = localStorage.getItem(THEME_KEY);
+                const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                const initialDark = savedTheme === 'dark' || (!savedTheme && systemDark);
 
-                if (hasContent) {
-                    setLastSessionData(parsed);
-                    setShowRestoreModal(true);
-                } else {
-                    // It's empty-ish, just load it silenty
-                    applyLoadedData(parsed);
+                setIsDarkMode(initialDark);
+                if (initialDark) document.documentElement.classList.add('dark');
+                else document.documentElement.classList.remove('dark');
+
+                let savedData = null;
+                try {
+                    savedData = localStorage.getItem(STORAGE_KEY);
+                } catch (e) {
+                    console.error("LocalStorage access failed:", e);
                 }
-            } catch (e) {
-                console.error("Failed to load save state", e);
+
+                if (savedData) {
+                    try {
+                        const parsed = JSON.parse(savedData);
+
+                        // [NEW] Intelligent Session Detection
+                        // We check if the saved data has any actual content (customer name or items)
+                        const hasContent =
+                            (parsed.initial?.orderingParty?.name && parsed.initial.orderingParty.name !== '') ||
+                            (parsed.initial?.suppliers?.length > 0) ||
+                            (parsed.initial?.meta?.projectNumber && parsed.initial.meta.projectNumber !== '');
+
+                        if (hasContent) {
+                            setLastSessionData(parsed);
+                            setShowRestoreModal(true);
+                        } else {
+                            // It's empty-ish, just load it silenty
+                            applyLoadedData(parsed);
+                        }
+                    } catch (e) {
+                        console.error("Failed to load save state", e);
+                        // Fallback to defaults
+                        applyLoadedData(null);
+                    }
+                } else {
+                    applyLoadedData(null);
+                }
+
+                // Request Notification Permission
+                if ("Notification" in window && Notification.permission === "default") {
+                    Notification.requestPermission().catch(err => console.error("Notification permission error", err));
+                }
+
+            } catch (err) {
+                console.error("Critical initialization error:", err);
+                applyLoadedData(null);
+            } finally {
+                clearTimeout(safetyTimer);
+                setIsLoaded(true);
             }
-        } else {
-            applyLoadedData(null);
-        }
+        };
 
-        setIsLoaded(true);
+        initApp();
 
-        // Request Notification Permission
-        if ("Notification" in window && Notification.permission === "default") {
-            Notification.requestPermission();
-        }
+        return () => {
+            if (safetyTimer) clearTimeout(safetyTimer);
+        };
     }, []);
 
     // --- SESSION RESTORATION HANDLERS ---
@@ -1079,6 +1126,7 @@ const App: React.FC = () => {
         // If Logistics Handover, set status AND lock
         if (isLogistics) {
             newState.logisticsStatus = 'PENDING';
+            newState.logistics_status = 'PENDING';
             newState.isLocked = true; // [NEW] Auto-lock on send
         }
 
@@ -1087,7 +1135,13 @@ const App: React.FC = () => {
         const isLogisticsRoleToReset = profile?.role === 'logistics' || profile?.is_admin;
         if (!isDataIdentical && sourceState.logisticsStatus === 'PROCESSED' && !isLogisticsRoleToReset) {
             newState.logisticsStatus = 'PENDING';
+            newState.logistics_status = 'PENDING';
         }
+
+        // [NEW] Cleanup Notifications
+        const pNum = sourceState.initial.meta.projectNumber || 'BezNumeru';
+        notificationService.clearGlobalNotifications(`%Prośba o Poprawkę [${pNum}]%`);
+
 
         // If we have a reason, maybe append to notes?
         if (reason) {
@@ -1335,23 +1389,33 @@ const App: React.FC = () => {
             showSnackbar("Automatycznie utworzono karty transportowe dla dostawców.");
         }
 
-        // Check for unresolved correction items (Just in case, though likely Initial phase)
-        const pendingCorrections = (appState.correctionItems || []).filter(i => i.status === 'pending');
-        if (pendingCorrections.length > 0) {
-            triggerConfirm("Nierozwiązane Poprawki", `${pendingCorrections.length} nierozwiązanych punktów z listy poprawek. Czy na pewno chcesz wysłać?`, () => { }, true);
-            return false;
+        // [FIX] If this was a correction, send it back to PENDING (logistics queue)
+        const currentLogisticsStatus = appState.logisticsStatus || (appState as any).logistics_status;
+        if (currentLogisticsStatus === 'CORRECTION') {
+            stateToSave = { ...stateToSave, logisticsStatus: 'PENDING' };
+            // [FIX] Do NOT update local state here yet, let the save complete? 
+            // Actually, we must update local one for UI consistency
+            setAppState(stateToSave);
         }
 
-        // [FIX] If this was a correction, send it back to PENDING (logistics queue)
-        if (appState.logisticsStatus === 'CORRECTION') {
-            stateToSave = { ...stateToSave, logisticsStatus: 'PENDING' };
-            setAppState(stateToSave); // Update local state too
+        // [NEW] Persist Project Corrections Progress
+        if (projectCorrections.length > 0) {
+            try {
+                // Save all corrections state (fixed points and status)
+                await Promise.all(projectCorrections.map(c =>
+                    storageService.updateProjectCorrectionProgress(c.id, c.fixed_points || [], c.status)
+                ));
+            } catch (e) {
+                console.error("Failed to save correction progress", e);
+            }
         }
+
 
         // Pass the updated state to save function
+
         const saved = await handleSmartSave('OPENING', undefined, true, stateToSave);
 
-        if (saved && appState.logisticsStatus === 'CORRECTION') {
+        if (saved && currentLogisticsStatus === 'CORRECTION') {
             showSnackbar("Poprawka została wysłana do logistyki.");
             // Notify logistics about correction
             const pNum = appState.initial.meta.projectNumber || 'BezNumeru';
@@ -1371,11 +1435,7 @@ const App: React.FC = () => {
 
         const errors = validateProject(targetStage);
 
-        // [NEW] Check for unresolved correction items
-        const pendingCorrections = (appState.correctionItems || []).filter(i => i.status === 'pending');
-        if (pendingCorrections.length > 0) {
-            errors.push(`${pendingCorrections.length} nierozwiązanych punktów z listy poprawek.`);
-        }
+
 
         if (errors.length > 0) {
             triggerConfirm(
@@ -1425,17 +1485,17 @@ const App: React.FC = () => {
         // So we should update state before saving.
 
         let finalStateToSave = undefined;
-        if (targetStage === 'SENT_TO_CLOSE' && appState.logisticsStatus === 'CORRECTION') {
+        const currentLogisticsStatus = appState.logisticsStatus || (appState as any).logistics_status;
+        if (targetStage === 'SENT_TO_CLOSE' && currentLogisticsStatus === 'CORRECTION') {
             finalStateToSave = {
                 ...appState,
                 stage: targetStage,
                 logisticsStatus: 'PENDING',
+                logistics_status: 'PENDING',
                 // Add log entry logic is already in setAppState above but that's async/batched. 
                 // We need to be careful. The setAppState calls might not have flushed yet? 
                 // Actually they are batched. But handleSmartSave reads from REF or current render scope?
                 // It uses 'appState' from closure. So the setAppState calls above WON'T be reflected in 'appState' variable immediately.
-                // We need to construct the full object manually if we want to save it now.
-
                 // Re-applying the log entry logic for the saved object
                 initial: {
                     ...appState.initial,
@@ -1976,10 +2036,15 @@ const App: React.FC = () => {
                     stage: loadedStage,
                     logisticsStatus: parsed.logistics_status || parsed.appState?.logisticsStatus,
                     logistics_operator_id: parsed.logistics_operator_id || parsed.appState?.logistics_operator_id,
-                    correctionItems: parsed.appState?.correctionItems || [], // [NEW] Restore checklist
+
                     isLocked: (parsed.is_locked !== undefined ? parsed.is_locked : parsed.appState?.isLocked) || false,
-                    activeCalculationId: parsed.id || parsed.appState.activeCalculationId // Restore cloud ID
+                    activeCalculationId: parsed.id || parsed.appState.activeCalculationId
                 });
+
+                // Fetch corrections for this project
+                if (parsed.id) {
+                    storageService.getProjectCorrections(parsed.id).then(setProjectCorrections);
+                }
 
                 // Set initial snapshot on load
                 lastSavedSnapshot.current = JSON.stringify({
@@ -2227,7 +2292,22 @@ const App: React.FC = () => {
         }
     }, [appState.viewMode, appState.activeHubTab, appState.initial.meta.projectNumber]);
 
-    if (!isLoaded) return <div className="min-h-screen bg-black flex items-center justify-center text-zinc-500 font-mono text-sm">Wczytywanie systemu...</div>;
+    if (!isLoaded) return (
+        <div className="min-h-screen bg-black flex flex-col items-center justify-center text-zinc-500 font-mono text-sm gap-4">
+            <div className="animate-pulse">Wczytywanie systemu...</div>
+            <button
+                onClick={() => {
+                    if (confirm("Czy na pewno chcesz wyczyścić dane lokalne i zresetować aplikację?")) {
+                        localStorage.removeItem(STORAGE_KEY);
+                        window.location.reload();
+                    }
+                }}
+                className="text-xs text-zinc-700 hover:text-red-500 transition-colors mt-8"
+            >
+                Problem z uruchomieniem? Kliknij tutaj, aby zresetować.
+            </button>
+        </div>
+    );
 
     const scrollSpySections = [
         { id: 'section-customer', label: 'Dane Klienta' },
@@ -2539,12 +2619,7 @@ const App: React.FC = () => {
                                 {/* ScrollSpy Removed from here, moved to Sidebar */}
 
                                 <div className="max-w-[1920px] mx-auto space-y-6 px-4 md:px-6">
-                                    {(appState.logisticsStatus === 'CORRECTION' || (appState.correctionItems && appState.correctionItems.length > 0)) && (
-                                        <CorrectionPanel
-                                            items={appState.correctionItems || []}
-                                            onToggle={handleToggleCorrectionItem}
-                                        />
-                                    )}
+                                    {/* (CorrectionPanel moved to ProjectNotesView) */}
 
                                     {isFinal ? (
                                         <FinalCalculationView
@@ -2784,6 +2859,44 @@ const App: React.FC = () => {
                                         data={data}
                                         onChange={(updates) => updateCalculationData(updates)}
                                         onBack={() => setAppState(prev => ({ ...prev, viewMode: ViewMode.CALCULATOR }))}
+                                        correctionItems={projectCorrections.flatMap(c => c.points.map((p, idx) => ({
+                                            id: `${c.id}-${idx}`, // [FIX] Encode ID + Index
+                                            text: p,
+                                            status: (c.fixed_points?.includes(idx)) ? 'resolved' : 'pending', // Visual status
+                                            requestedBy: c.requested_by || 'Logistyka',
+                                            timestamp: c.created_at
+                                        })))}
+                                        onToggleCorrectionItem={(itemId) => {
+                                            const lastDash = itemId.lastIndexOf('-');
+                                            const correctionId = itemId.substring(0, lastDash);
+                                            const pointIdx = parseInt(itemId.substring(lastDash + 1));
+
+                                            setProjectCorrections(prev => prev.map(c => {
+                                                if (c.id !== correctionId) return c;
+
+                                                const currentFixed = c.fixed_points || [];
+                                                const isFixed = currentFixed.includes(pointIdx);
+                                                let newFixed;
+                                                if (isFixed) {
+                                                    newFixed = currentFixed.filter(i => i !== pointIdx);
+                                                } else {
+                                                    newFixed = [...currentFixed, pointIdx];
+                                                }
+
+                                                // Check if all points are fixed
+                                                const allFixed = c.points.every((_, idx) => newFixed.includes(idx));
+                                                // If all fixed, mark as 'fixed' (ready for review). If was 'resolved', keeps resolved? 
+                                                // User workflow: Pending -> Fixed -> Resolved.
+                                                // If we toggle, we iterate between Pending/Fixed. Resolved is final.
+                                                const newStatus = c.status === 'resolved' ? 'resolved' : (allFixed ? 'fixed' : 'pending');
+
+                                                return {
+                                                    ...c,
+                                                    fixed_points: newFixed,
+                                                    status: newStatus as any
+                                                };
+                                            }));
+                                        }}
                                     />
                                 </div>
                             </div>
@@ -2817,6 +2930,7 @@ const App: React.FC = () => {
                                     onOpenProject={(data, stage, mode) => {
                                         loadProjectFromObject(data);
                                     }}
+                                    refreshTrigger={dashboardRefreshTrigger}
                                 />
                             </div>
                         )}
@@ -3010,7 +3124,10 @@ const App: React.FC = () => {
                     {showProjectManager && (
                         <ProjectManagerModal
                             isOpen={showProjectManager}
-                            onClose={() => setShowProjectManager(false)}
+                            onClose={() => {
+                                setShowProjectManager(false);
+                                setDashboardRefreshTrigger(prev => prev + 1);
+                            }}
                             appState={appState}
                             historyLog={historyLog}
                             past={past}

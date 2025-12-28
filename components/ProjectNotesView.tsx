@@ -2,16 +2,19 @@
 
 
 import React, { useState } from 'react';
-import { CalculationData, ProjectTask } from '../types';
+import { CorrectionPanel } from './CorrectionPanel';
+import { CalculationData, ProjectTask, CorrectionItem } from '../types';
 import { NotebookPen, CheckSquare, Square, Plus, Trash2, StickyNote, ArrowLeft, Check, ListTodo, Calendar, Link } from 'lucide-react';
 
 interface Props {
     data: CalculationData;
     onChange: (updates: Partial<CalculationData>) => void;
     onBack: () => void;
+    correctionItems?: CorrectionItem[];
+    onToggleCorrectionItem?: (id: string) => void;
 }
 
-export const ProjectNotesView: React.FC<Props> = ({ data, onChange, onBack }) => {
+export const ProjectNotesView: React.FC<Props> = ({ data, onChange, onBack, correctionItems = [], onToggleCorrectionItem }) => {
     const [newTaskText, setNewTaskText] = useState('');
     const [newTaskDate, setNewTaskDate] = useState('');
 
@@ -66,7 +69,21 @@ export const ProjectNotesView: React.FC<Props> = ({ data, onChange, onBack }) =>
                 </h2>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-140px)]">
+            <div className={`grid grid-cols-1 ${correctionItems.length > 0 ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-6 h-[calc(100vh-140px)]`}>
+
+                {/* CORRECTION PANEL (If exists) */}
+                {correctionItems.length > 0 && onToggleCorrectionItem && (
+                    <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm flex flex-col overflow-hidden h-full">
+                        <div className="p-4 bg-red-50 dark:bg-red-900/10 border-b border-red-100 dark:border-red-900/30">
+                            <h3 className="font-bold text-red-700 dark:text-red-400 flex items-center gap-2 uppercase text-xs tracking-wider">
+                                Poprawki
+                            </h3>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 bg-zinc-50/30 dark:bg-zinc-900/20 custom-scrollbar">
+                            <CorrectionPanel items={correctionItems} onToggle={onToggleCorrectionItem} />
+                        </div>
+                    </div>
+                )}
 
                 {/* LEFT COLUMN: General Notes */}
                 <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm flex flex-col overflow-hidden h-full">

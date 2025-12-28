@@ -33,8 +33,8 @@ export const CorrectionPanel: React.FC<Props> = ({ items, onToggle }) => {
                         key={item.id}
                         onClick={() => onToggle(item.id)}
                         className={`w-full flex items-start gap-3 p-3 rounded-lg border transition-all text-left ${item.status === 'resolved'
-                                ? 'bg-white/50 dark:bg-zinc-800/50 border-emerald-200 dark:border-emerald-800/50 opacity-70'
-                                : 'bg-white dark:bg-zinc-800 border-red-200 dark:border-red-800/50 shadow-sm hover:border-red-400'
+                            ? 'bg-white/50 dark:bg-zinc-800/50 border-emerald-200 dark:border-emerald-800/50 opacity-70'
+                            : 'bg-white dark:bg-zinc-800 border-red-200 dark:border-red-800/50 shadow-sm hover:border-red-400'
                             }`}
                     >
                         <div className="mt-0.5">
@@ -64,7 +64,7 @@ export const CorrectionPanel: React.FC<Props> = ({ items, onToggle }) => {
                     <div className="bg-emerald-500/10 rounded-lg p-3 flex items-center gap-3 animate-pulse border border-emerald-500/20">
                         <CheckCircle2 size={16} className="text-emerald-500" />
                         <span className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-tight">
-                            Wszystkie punkty poprawione! Możesz teraz wysłać projekt do zamknięcia.
+                            Wszystkie punkty poprawione! Możesz teraz zapisać poprawioną kalkulację.
                         </span>
                     </div>
                 )}

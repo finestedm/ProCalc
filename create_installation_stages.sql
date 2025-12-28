@@ -18,17 +18,39 @@ CREATE INDEX IF NOT EXISTS idx_installation_stages_calc_id ON public.installatio
 ALTER TABLE public.installation_stages ENABLE ROW LEVEL SECURITY;
 
 -- Policies
+DROP POLICY IF EXISTS "Users can view all installation stages" ON public.installation_stages;
+DROP POLICY IF EXISTS "Owner can insert stages" ON public.installation_stages;
+DROP POLICY IF EXISTS "Owner/Bypass can update stages" ON public.installation_stages;
+DROP POLICY IF EXISTS "Owner/Bypass can delete stages" ON public.installation_stages;
+
+-- 1. Everyone can view all installation stages if they are approved
 CREATE POLICY "Users can view all installation stages" ON public.installation_stages
   FOR SELECT USING (
+    public.is_approved() OR public.is_admin()
+  );
+
+-- 2. Owner can INSERT details for their own projects
+CREATE POLICY "Owner can insert stages" ON public.installation_stages
+  FOR INSERT WITH CHECK (
     EXISTS (
         SELECT 1 FROM public.calculations c
         WHERE c.id = public.installation_stages.calculation_id
-        AND (public.is_approved() OR public.is_admin())
+        AND auth.uid() = c.user_id
     )
   );
 
-CREATE POLICY "Owner/Bypass can edit stages" ON public.installation_stages
-  FOR ALL USING (
+-- 3. Owner/Bypass can UPDATE/DELETE stages
+CREATE POLICY "Owner/Bypass can update stages" ON public.installation_stages
+  FOR UPDATE USING (
+    EXISTS (
+        SELECT 1 FROM public.calculations c
+        WHERE c.id = public.installation_stages.calculation_id
+        AND ((auth.uid() = c.user_id AND c.is_locked = FALSE) OR public.can_bypass_lock())
+    )
+  );
+
+CREATE POLICY "Owner/Bypass can delete stages" ON public.installation_stages
+  FOR DELETE USING (
     EXISTS (
         SELECT 1 FROM public.calculations c
         WHERE c.id = public.installation_stages.calculation_id

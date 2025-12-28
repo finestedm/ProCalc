@@ -218,7 +218,7 @@ CREATE POLICY "Users can insert calculations" ON public.calculations
 -- 2. Admin lub Logistyka może edytować ZAWSZE (i zakładać/zdejmować blokadę)
 CREATE POLICY "Update calculations logic" ON public.calculations
   FOR UPDATE USING (
-    (auth.uid() = user_id AND is_locked = FALSE) OR -- Właściciel, niezablokowane
+    ((auth.uid() = user_id OR auth.uid() = engineer_id OR auth.uid() = specialist_id) AND is_locked = FALSE) OR -- Właściciel lub przypisany personel, niezablokowane
     public.can_bypass_lock() -- Logistyka, Manager lub Admin (zawsze)
   );
 

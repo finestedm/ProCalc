@@ -89,7 +89,7 @@ export class SupabaseStorage implements ICalculationStorage {
                 .eq('project_id', payload.project_id)
                 .order('created_at', { ascending: false })
                 .limit(1)
-                .single();
+                .maybeSingle();
 
             if (latest) {
                 if (!payload.logistics_status) {
@@ -102,7 +102,7 @@ export class SupabaseStorage implements ICalculationStorage {
             .from(this.tableName)
             .insert(payload)
             .select()
-            .single();
+            .maybeSingle();
 
         if (error) {
             console.error('Supabase Error:', error);
@@ -214,7 +214,7 @@ export class SupabaseStorage implements ICalculationStorage {
             .select('*, user:users!user_id(full_name), details:calculations_details(calc)')
             .eq('id', id)
             .is('deleted_at', null)
-            .single();
+            .maybeSingle();
 
         if (error) return null;
 
@@ -259,7 +259,7 @@ export class SupabaseStorage implements ICalculationStorage {
             .from(this.tableName)
             .select('project_id')
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
         if (calcRow?.project_id) {
             await this.lockProject(calcRow.project_id, isLocked);
@@ -296,17 +296,19 @@ export class SupabaseStorage implements ICalculationStorage {
     }
 
     async updateLogisticsStatus(id: string, status: 'PENDING' | 'PROCESSED' | 'CORRECTION' | null): Promise<void> {
-        await this.supabase
+        const { error } = await this.supabase
             .from(this.tableName)
             .update({ logistics_status: status })
             .eq('id', id);
+        if (error) throw new Error(error.message);
     }
 
     async updateLogisticsOperator(id: string, operatorId: string | null): Promise<void> {
-        await this.supabase
+        const { error } = await this.supabase
             .from(this.tableName)
             .update({ logistics_operator_id: operatorId })
             .eq('id', id);
+        if (error) throw new Error(error.message);
     }
 
     async updateProjectNotes(id: string, notes: string): Promise<void> {
@@ -347,12 +349,12 @@ export class SupabaseStorage implements ICalculationStorage {
             .update({ status })
             .eq('id', requestId)
             .select()
-            .single();
+            .maybeSingle();
 
         if (error) throw new Error(error.message);
 
         if (status === 'approved' && request) {
-            const { data: calc } = await this.supabase.from(this.tableName).select('project_id').eq('id', request.calculation_id).single();
+            const { data: calc } = await this.supabase.from(this.tableName).select('project_id').eq('id', request.calculation_id).maybeSingle();
             if (calc?.project_id) {
                 await this.lockProject(calc.project_id, false);
             }
@@ -364,7 +366,7 @@ export class SupabaseStorage implements ICalculationStorage {
             .from('calculations_details')
             .select('calc')
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
         let baseCalc = current?.calc;
         if (!baseCalc) {
@@ -372,7 +374,7 @@ export class SupabaseStorage implements ICalculationStorage {
                 .from(this.tableName)
                 .select('calc')
                 .eq('id', id)
-                .single();
+                .maybeSingle();
             baseCalc = fallback?.calc;
         }
 
@@ -440,5 +442,81 @@ export class SupabaseStorage implements ICalculationStorage {
             .eq('project_number', projectNumber)
             .eq('transport_id', transportId);
         if (error) throw new Error(error.message);
+    }
+
+    // Project Corrections Implementation
+    async getProjectCorrections(calculationId?: string): Promise<any[]> {
+        let query = this.supabase.from('project_corrections').select('*');
+        if (calculationId) {
+            query = query.eq('calculation_id', calculationId);
+        }
+        const { data, error } = await query.order('created_at', { ascending: false });
+        if (error) throw new Error(error.message);
+        return data || [];
+    }
+
+    async createProjectCorrection(calculationId: string, projectId: string, points: string[]): Promise<void> {
+        const { data: { user } } = await this.supabase.auth.getUser();
+        const { data: profile } = await this.supabase.from('users').select('full_name').eq('id', user?.id).maybeSingle();
+
+        const { error } = await this.supabase.from('project_corrections').insert({
+            calculation_id: calculationId,
+            project_id: projectId,
+            points: points,
+            requested_by: profile?.full_name || user?.email,
+            requested_by_id: user?.id,
+            status: 'pending'
+        });
+
+        if (error) throw new Error(error.message);
+
+        // Update main calculation status
+        await this.updateLogisticsStatus(calculationId, 'CORRECTION');
+    }
+
+    async updateProjectCorrectionProgress(correctionId: string, fixedPoints: number[], status: 'pending' | 'fixed' | 'resolved'): Promise<void> {
+        const { error } = await this.supabase
+            .from('project_corrections')
+            .update({
+                fixed_points: fixedPoints,
+                status: status,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', correctionId);
+
+        if (error) throw error;
+    }
+
+    async resolveProjectCorrection(correctionId: string): Promise<void> {
+
+        const { data: correction } = await this.supabase
+            .from('project_corrections')
+            .update({ status: 'resolved', updated_at: new Date().toISOString() })
+            .eq('id', correctionId)
+            .select('calculation_id')
+            .maybeSingle();
+
+        if (correction) {
+            // Check if all are resolved for this calculation
+            const { data: pending } = await this.supabase
+                .from('project_corrections')
+                .select('id')
+                .eq('calculation_id', correction.calculation_id)
+                .eq('status', 'pending');
+
+            if (!pending || pending.length === 0) {
+                await this.updateLogisticsStatus(correction.calculation_id, 'PENDING');
+            }
+        }
+    }
+
+    async resolveAllProjectCorrections(calculationId: string): Promise<void> {
+        await this.supabase
+            .from('project_corrections')
+            .update({ status: 'resolved', updated_at: new Date().toISOString() })
+            .eq('calculation_id', calculationId)
+            .eq('status', 'pending');
+
+        await this.updateLogisticsStatus(calculationId, 'PENDING');
     }
 }

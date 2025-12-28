@@ -407,7 +407,7 @@ export interface ApprovalRequest {
 export interface CorrectionItem {
   id: string;
   text: string;
-  status: 'pending' | 'resolved';
+  status: 'pending' | 'fixed' | 'resolved';
   requestedBy: string;
   timestamp: string;
 }
@@ -433,8 +433,8 @@ export interface AppState {
   activeCalculationId?: string; // [NEW] ID of the cloud-saved calculation
   logisticsStatus?: 'PENDING' | 'PROCESSED' | 'CORRECTION' | null; // [NEW] Status for logistics
   logistics_operator_id?: string | null; // [NEW] User ID of the logistician who took over
-  correctionItems?: CorrectionItem[]; // [NEW] Checklist for project corrections
 }
+
 
 export interface HistoryEntry {
   timestamp: number;

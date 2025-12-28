@@ -96,5 +96,22 @@ export const notificationService = {
         } catch (e) {
             console.error("Failed to mark notifications as read", e);
         }
+    },
+
+    /**
+     * Marks specific notifications as read based on title pattern for ALL users.
+     */
+    clearGlobalNotifications: async (titlePattern: string) => {
+        try {
+            const { error } = await supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .ilike('title', titlePattern)
+                .eq('is_read', false);
+
+            if (error) throw error;
+        } catch (e) {
+            console.error("Failed to clear global notifications", e);
+        }
     }
 };
