@@ -711,12 +711,23 @@ export const InstallationSection: React.FC<Props> = ({
                         {formatNumber(displayPrice)}
                     </div>
                 ) : (
-                    <SmartInput
-                        className="w-20 p-1.5 border-0 bg-zinc-50 dark:bg-zinc-800 rounded text-xs text-right outline-none focus:ring-1 focus:ring-amber-300"
-                        value={item.unitPrice}
-                        onChange={val => updateGlobalCustomItem(item.id, 'unitPrice', val)}
-                        readOnly={readOnly}
-                    />
+                    <div className="relative w-28 flex">
+                        <SmartInput
+                            className="w-16 p-1.5 border-0 bg-zinc-50 dark:bg-zinc-800 rounded-l text-xs text-right outline-none focus:ring-1 focus:ring-amber-300"
+                            value={item.unitPrice}
+                            onChange={val => updateGlobalCustomItem(item.id, 'unitPrice', val)}
+                            readOnly={readOnly}
+                        />
+                        <select
+                            value={item.currency || Currency.PLN}
+                            onChange={(e) => updateGlobalCustomItem(item.id, 'currency', e.target.value as Currency)}
+                            className="w-12 bg-zinc-100 dark:bg-zinc-700 border-l border-zinc-200 dark:border-zinc-800 text-[10px] font-bold outline-none rounded-r px-0.5 cursor-pointer"
+                            disabled={readOnly}
+                        >
+                            <option value={Currency.PLN}>PLN</option>
+                            <option value={Currency.EUR}>EUR</option>
+                        </select>
+                    </div>
                 )}
 
                 {/* Actions */}

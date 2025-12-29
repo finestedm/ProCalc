@@ -132,9 +132,29 @@ export const SuppliersSection: React.FC<Props> = ({
             "Usuwanie dostawcy",
             "Czy na pewno usunąć tego dostawcę? Wszystkie pozycje zostaną utracone.",
             () => {
-                const updated = suppliers.filter((_, i) => i !== index);
-                onChange(updated);
-                if (activeTab >= updated.length) setActiveTab(Math.max(0, updated.length - 1));
+                const supplierDetails = suppliers[index];
+                const updatedSuppliers = suppliers.filter((_, i) => i !== index);
+
+                // Cleanup Transport
+                // 1. Remove whole transport if it IS this supplier (Supplier Organized)
+                // 2. Remove ID from linkedSupplierIds if it's a Logistics transport
+                let updatedTransport = transport.filter(t => t.supplierId !== supplierDetails.id);
+
+                updatedTransport = updatedTransport.map(t => {
+                    if (t.linkedSupplierIds?.includes(supplierDetails.id)) {
+                        const newLinked = t.linkedSupplierIds.filter(id => id !== supplierDetails.id);
+                        return { ...t, linkedSupplierIds: newLinked };
+                    }
+                    return t;
+                });
+
+                if (onBatchChange) {
+                    onBatchChange({ suppliers: updatedSuppliers, transport: updatedTransport });
+                } else {
+                    onChange(updatedSuppliers);
+                }
+
+                if (activeTab >= updatedSuppliers.length) setActiveTab(Math.max(0, updatedSuppliers.length - 1));
             },
             true
         );

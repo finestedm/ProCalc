@@ -197,6 +197,7 @@ export interface CustomInstallationItem {
   description: string;
   quantity: number;
   unitPrice: number;
+  currency?: Currency; // [NEW] Added for multi-currency support in extra items
   isExcluded?: boolean;
   // Linking logic for auto-quantity
   linkedSources?: LinkedSource[]; // Array of linked sources
@@ -393,6 +394,14 @@ export interface CalculationScenario {
   projectNotes: string;
   variants: ProjectVariant[];
   paymentTerms: PaymentTerms;
+
+  // [NEW] Per-Variant Financial Settings
+  exchangeRate: number;
+  offerCurrency: Currency;
+  targetMargin: number;
+  manualPrice: number | null;
+  finalManualPrice: number | null;
+  globalSettings: GlobalSettings;
 }
 
 // [NEW] Approval Request Context

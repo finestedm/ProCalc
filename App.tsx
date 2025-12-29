@@ -142,7 +142,7 @@ const normalizeForComparison = (name: string): string => {
 };
 
 // --- SCENARIO DATA HELPERS ---
-const extractScenarioData = (data: CalculationData, id: string, name: string): CalculationScenario => {
+const extractScenarioData = (data: CalculationData, id: string, name: string, appState: AppState): CalculationScenario => {
     return {
         id,
         name,
@@ -155,7 +155,15 @@ const extractScenarioData = (data: CalculationData, id: string, name: string): C
         tasks: data.tasks,
         projectNotes: data.projectNotes,
         variants: data.variants,
-        paymentTerms: data.paymentTerms || EMPTY_PAYMENT_TERMS
+        paymentTerms: data.paymentTerms || EMPTY_PAYMENT_TERMS,
+
+        // [NEW] Capture Financial State
+        exchangeRate: appState.exchangeRate,
+        offerCurrency: appState.offerCurrency,
+        targetMargin: appState.targetMargin,
+        manualPrice: appState.manualPrice,
+        finalManualPrice: appState.finalManualPrice,
+        globalSettings: appState.globalSettings
     };
 };
 
@@ -382,7 +390,7 @@ const App: React.FC = () => {
 
             // Scenario backward compatibility
             if (!parsed.scenarios || parsed.scenarios.length === 0) {
-                const defaultScenario = extractScenarioData(parsed.initial || EMPTY_CALCULATION, 'default', 'Wariant Główny');
+                const defaultScenario = extractScenarioData(parsed.initial || EMPTY_CALCULATION, 'default', 'Wariant Główny', parsed as AppState);
                 parsed.scenarios = [defaultScenario];
                 parsed.activeScenarioId = 'default';
             }
@@ -402,7 +410,16 @@ const App: React.FC = () => {
             const fin = JSON.parse(JSON.stringify(EMPTY_CALCULATION));
 
             // Init default scenario
-            const defaultScenario = extractScenarioData(init, 'default', 'Wariant Główny');
+            // Create a mock state for extraction
+            const defaultState: any = {
+                exchangeRate: 1,
+                offerCurrency: Currency.EUR,
+                targetMargin: 20,
+                manualPrice: null,
+                finalManualPrice: null,
+                globalSettings: defaultSettings
+            };
+            const defaultScenario = extractScenarioData(init, 'default', 'Wariant Główny', defaultState);
 
             setAppState(prev => ({
                 ...prev,
@@ -530,11 +547,11 @@ const App: React.FC = () => {
         setAppState(prev => {
             const newId = Math.random().toString(36).substr(2, 9);
             // Clone current ACTIVE data for new scenario to start with
-            const newScenario = extractScenarioData(prev.initial, newId, `Wariant ${prev.scenarios.length + 1}`);
+            const newScenario = extractScenarioData(prev.initial, newId, `Wariant ${prev.scenarios.length + 1}`, prev);
 
             const updatedScenarios = prev.scenarios.map(s =>
                 s.id === prev.activeScenarioId
-                    ? extractScenarioData(prev.initial, s.id, s.name)
+                    ? extractScenarioData(prev.initial, s.id, s.name, prev)
                     : s
             );
 
@@ -553,12 +570,13 @@ const App: React.FC = () => {
             const newScenario = extractScenarioData(
                 JSON.parse(JSON.stringify(EMPTY_CALCULATION)),
                 newId,
-                `Wariant Pusty ${prev.scenarios.length + 1}`
+                `Wariant Pusty ${prev.scenarios.length + 1}`,
+                prev
             );
 
             const updatedScenarios = prev.scenarios.map(s =>
                 s.id === prev.activeScenarioId
-                    ? extractScenarioData(prev.initial, s.id, s.name)
+                    ? extractScenarioData(prev.initial, s.id, s.name, prev)
                     : s
             );
 
@@ -614,7 +632,7 @@ const App: React.FC = () => {
             const source = prev.scenarios.find(s => s.id === sourceId);
             // If source is active, use current appState.initial as source of truth
             const sourceData = (sourceId === prev.activeScenarioId)
-                ? extractScenarioData(prev.initial, sourceId, source!.name)
+                ? extractScenarioData(prev.initial, sourceId, source!.name, prev)
                 : source;
 
             if (!sourceData) return prev;
@@ -660,7 +678,7 @@ const App: React.FC = () => {
             // 1. Save current state to old scenario in list
             const updatedScenarios = prev.scenarios.map(s =>
                 s.id === prev.activeScenarioId
-                    ? extractScenarioData(prev.initial, s.id, s.name)
+                    ? extractScenarioData(prev.initial, s.id, s.name, prev)
                     : s
             );
 
@@ -674,7 +692,14 @@ const App: React.FC = () => {
                 ...prev,
                 scenarios: updatedScenarios,
                 activeScenarioId: id,
-                initial: newInitial
+                initial: newInitial,
+                // [NEW] Restore Financial State
+                exchangeRate: targetScenario.exchangeRate ?? prev.exchangeRate,
+                offerCurrency: targetScenario.offerCurrency ?? prev.offerCurrency,
+                targetMargin: targetScenario.targetMargin ?? prev.targetMargin,
+                manualPrice: targetScenario.manualPrice ?? prev.manualPrice,
+                finalManualPrice: targetScenario.finalManualPrice ?? prev.finalManualPrice,
+                globalSettings: targetScenario.globalSettings ?? prev.globalSettings
             };
         });
     };
@@ -723,7 +748,7 @@ const App: React.FC = () => {
 
             // If source is active, take data from `initial` state to be most up to date
             const sourceData = source.id === prev.activeScenarioId
-                ? extractScenarioData(prev.initial, source.id, source.name)
+                ? extractScenarioData(prev.initial, source.id, source.name, prev)
                 : source;
 
             const newId = Math.random().toString(36).substr(2, 9);
@@ -732,7 +757,7 @@ const App: React.FC = () => {
             // If we are duplicating active, ensure we save active first
             const updatedScenarios = prev.scenarios.map(s =>
                 s.id === prev.activeScenarioId
-                    ? extractScenarioData(prev.initial, s.id, s.name)
+                    ? extractScenarioData(prev.initial, s.id, s.name, prev)
                     : s
             );
 
@@ -950,7 +975,7 @@ const App: React.FC = () => {
 
             const updatedScenarios = prev.scenarios.map(s =>
                 s.id === prev.activeScenarioId
-                    ? extractScenarioData(prev.initial, s.id, s.name)
+                    ? extractScenarioData(prev.initial, s.id, s.name, prev)
                     : s
             );
 
@@ -2014,7 +2039,7 @@ const App: React.FC = () => {
 
                 // Restore Scenarios
                 if (!parsed.appState.scenarios || parsed.appState.scenarios.length === 0) {
-                    const def = extractScenarioData(parsed.appState.initial || EMPTY_CALCULATION, 'default', 'Wariant Główny');
+                    const def = extractScenarioData(parsed.appState.initial || EMPTY_CALCULATION, 'default', 'Wariant Główny', parsed.appState);
                     parsed.appState.scenarios = [def];
                     parsed.appState.activeScenarioId = 'default';
                 }
@@ -2077,7 +2102,7 @@ const App: React.FC = () => {
 
                 // Setup default scenario if missing
                 if (!merged.scenarios || merged.scenarios.length === 0) {
-                    const def = extractScenarioData(merged.initial || EMPTY_CALCULATION, 'default', 'Wariant Główny');
+                    const def = extractScenarioData(merged.initial || EMPTY_CALCULATION, 'default', 'Wariant Główny', merged as AppState);
                     merged.scenarios = [def];
                     merged.activeScenarioId = 'default';
                 }
@@ -2176,7 +2201,17 @@ const App: React.FC = () => {
                 }
 
                 // Reset Scenarios
-                const defaultScenario = extractScenarioData(init, 'default', 'Wariant Główny');
+                const newStateForMock = {
+                    ...appState, // To get current rate logic maybe? Or just use defaults really.
+                    exchangeRate: appState.exchangeRate,
+                    offerCurrency: Currency.EUR,
+                    targetMargin: 20,
+                    manualPrice: null,
+                    finalManualPrice: null,
+                    globalSettings: appState.globalSettings
+                } as AppState;
+
+                const defaultScenario = extractScenarioData(init, 'default', 'Wariant Główny', newStateForMock);
 
                 const newState = {
                     initial: init,

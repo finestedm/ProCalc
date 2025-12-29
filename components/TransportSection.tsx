@@ -123,7 +123,15 @@ export const TransportSection: React.FC<Props> = ({
         const index = currentTransport.findIndex(t => t.id === id);
         if (index === -1) return;
         const item = { ...currentTransport[index], ...updates };
-        item.totalPrice = item.trucksCount * item.pricePerTruck;
+
+        // Fix: Don't overwrite totalPrice if it was explicitly updated (e.g. for manual items)
+        if (!('totalPrice' in updates)) {
+            item.totalPrice = item.trucksCount * item.pricePerTruck;
+        } else if (item.trucksCount > 0) {
+            // Optional: Keep consistency if needed, but not strictly required if we trust totalPrice
+            item.pricePerTruck = item.totalPrice / item.trucksCount;
+        }
+
         currentTransport[index] = item;
         onChange(currentTransport);
     };

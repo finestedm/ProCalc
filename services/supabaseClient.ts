@@ -8,4 +8,16 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 // Create a single instance of the Supabase client
-export const supabase = createClient(supabaseUrl || '', supabaseKey || '');
+// [FIX] Added better auth configuration to prevent session loss
+export const supabase = createClient(supabaseUrl || '', supabaseKey || '', {
+    auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+    },
+    realtime: {
+        params: {
+            eventsPerSecond: 10
+        }
+    }
+});
