@@ -3,12 +3,15 @@ import { Currency } from '../types';
 import { Zap, X, ArrowRight, User, Briefcase, Layers, FileText, Globe } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import { INSTALLATION_TYPES } from '../services/optionsDatabase';
+import { SALES_PEOPLE, SUPPORT_PEOPLE } from '../services/employeesDatabase';
 
 interface QuickStartData {
     projectNumber: string;
     clientName: string;
     salesPerson: string;
+    salesPersonId?: string;
     assistantPerson: string;
+    assistantPersonId?: string;
     installationType: string;
     currency: Currency;
 }
@@ -41,8 +44,13 @@ export const QuickStartModal: React.FC<Props> = ({
         currency: Currency.EUR
     });
 
-    const [salesPeople, setSalesPeople] = useState<string[]>([]);
-    const [supportPeople, setSupportPeople] = useState<string[]>([]);
+    interface UserOption {
+        id: string;
+        full_name: string;
+        role: string;
+    }
+    const [salesPeople, setSalesPeople] = useState<UserOption[]>([]);
+    const [supportPeople, setSupportPeople] = useState<UserOption[]>([]);
 
     // Fetch users on mount
     useEffect(() => {
@@ -50,25 +58,25 @@ export const QuickStartModal: React.FC<Props> = ({
             try {
                 const { data: users, error } = await supabase
                     .from('users')
-                    .select('full_name, role');
+                    .select('id, full_name, role');
 
                 if (error) throw error;
 
                 if (users) {
                     const sales = users
                         .filter(u => ['manager', 'admin', 'engineer'].includes(u.role))
-                        .map(u => u.full_name)
-                        .filter(Boolean)
-                        .sort();
+                        .filter(u => u.full_name)
+                        .map(u => ({ id: u.id, full_name: u.full_name, role: u.role }))
+                        .sort((a, b) => a.full_name.localeCompare(b.full_name));
 
                     const support = users
                         .filter(u => ['manager', 'admin', 'specialist'].includes(u.role))
-                        .map(u => u.full_name)
-                        .filter(Boolean)
-                        .sort();
+                        .filter(u => u.full_name)
+                        .map(u => ({ id: u.id, full_name: u.full_name, role: u.role }))
+                        .sort((a, b) => a.full_name.localeCompare(b.full_name));
 
-                    setSalesPeople(prev => [...new Set([...prev, ...sales])]);
-                    setSupportPeople(prev => [...new Set([...prev, ...support])]);
+                    setSalesPeople(sales);
+                    setSupportPeople(support);
                 }
             } catch (err) {
                 console.error('Error fetching users for QuickStart:', err);
@@ -206,10 +214,16 @@ export const QuickStartModal: React.FC<Props> = ({
                                 className={inputClass}
                                 placeholder="Wybierz..."
                                 value={data.salesPerson}
-                                onChange={e => setData({ ...data, salesPerson: e.target.value })}
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    const foundUser = salesPeople.find(u => u.full_name === val);
+                                    setData({ ...data, salesPerson: val, salesPersonId: foundUser?.id || '' });
+                                }}
                             />
                             <datalist id="qs-sales-list">
-                                {salesPeople.length > 0 ? salesPeople.map(p => <option key={p} value={p} />) : <option value="Ładowanie..." />}
+                                {Array.from(new Set([...salesPeople.map(u => u.full_name), ...SALES_PEOPLE])).map(name => (
+                                    <option key={name} value={name} />
+                                ))}
                             </datalist>
                         </div>
                         <div>
@@ -219,10 +233,16 @@ export const QuickStartModal: React.FC<Props> = ({
                                 className={inputClass}
                                 placeholder="Wybierz..."
                                 value={data.assistantPerson}
-                                onChange={e => setData({ ...data, assistantPerson: e.target.value })}
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    const foundUser = supportPeople.find(u => u.full_name === val);
+                                    setData({ ...data, assistantPerson: val, assistantPersonId: foundUser?.id || '' });
+                                }}
                             />
                             <datalist id="qs-support-list">
-                                {supportPeople.length > 0 ? supportPeople.map(p => <option key={p} value={p} />) : <option value="Ładowanie..." />}
+                                {Array.from(new Set([...supportPeople.map(u => u.full_name), ...SUPPORT_PEOPLE])).map(name => (
+                                    <option key={name} value={name} />
+                                ))}
                             </datalist>
                         </div>
                     </div>

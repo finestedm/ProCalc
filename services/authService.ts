@@ -28,25 +28,41 @@ export class AuthService {
         // Client initialized via shared instance
     }
 
+    private async withTimeout<T>(promise: Promise<T>, ms: number, context: string): Promise<T> {
+        let timeoutId: any;
+        const timeoutPromise = new Promise<T>((_, reject) => {
+            timeoutId = setTimeout(() => {
+                reject(new Error(`[AuthService] ${context} timed out after ${ms}ms`));
+            }, ms);
+        });
+
+        try {
+            const result = await Promise.race([promise, timeoutPromise]);
+            clearTimeout(timeoutId);
+            return result;
+        } catch (error) {
+            clearTimeout(timeoutId);
+            throw error;
+        }
+    }
+
     /**
      * Rejestracja nowego użytkownika
      */
     async signUp(email: string, password: string, fullName: string, role: 'engineer' | 'specialist' | 'manager'): Promise<{ user: User | null; error: Error | null }> {
-
-
         const { data, error } = await this.supabase.auth.signUp({
             email,
             password,
             options: {
                 data: {
                     full_name: fullName,
-                    role: role, // Default role
+                    role: role,
                 },
             },
         });
 
         if (error) {
-            return { user: null, error };
+            return { user: null, error: error };
         }
 
         return { user: data.user, error: null };
@@ -56,15 +72,13 @@ export class AuthService {
      * Logowanie użytkownika
      */
     async signIn(email: string, password: string): Promise<{ user: User | null; error: Error | null }> {
-
-
         const { data, error } = await this.supabase.auth.signInWithPassword({
             email,
             password,
         });
 
         if (error) {
-            return { user: null, error };
+            return { user: null, error: error };
         }
 
         return { user: data.user, error: null };
@@ -74,18 +88,14 @@ export class AuthService {
      * Wylogowanie użytkownika
      */
     async signOut(): Promise<{ error: Error | null }> {
-
-
         const { error } = await this.supabase.auth.signOut();
-        return { error };
+        return { error: error };
     }
 
     /**
      * Pobranie aktualnie zalogowanego użytkownika
      */
     async getCurrentUser(): Promise<User | null> {
-
-
         const { data } = await this.supabase.auth.getUser();
         return data.user;
     }
@@ -94,31 +104,55 @@ export class AuthService {
      * Pobranie sesji użytkownika
      */
     async getSession(): Promise<Session | null> {
-
-
-        const { data } = await this.supabase.auth.getSession();
-        return data.session;
-    }
-
-    /**
-     * Pobranie profilu użytkownika z tabeli users
-     */
-    async getUserProfile(userId: string): Promise<UserProfile | null> {
-
-
-        const { data, error } = await this.supabase
-            .from('users')
-            .select('*')
-            .eq('id', userId)
-            .single();
-
-        if (error) {
-            console.error('Error fetching user profile:', error);
+        const start = Date.now();
+        console.log('[AuthService] getSession starting...');
+        try {
+            const data = await this.withTimeout(
+                this.supabase.auth.getSession().then(({ data }) => data),
+                500,
+                'getSession'
+            );
+            console.log(`[AuthService] getSession finished in ${Date.now() - start}ms. User:`, data.session?.user?.id || 'None');
+            return data.session;
+        } catch (error) {
+            console.warn(`[AuthService] getSession gave up after ${Date.now() - start}ms:`, error);
             return null;
         }
-
-        return data as UserProfile;
     }
+
+    async getUserProfile(userId: string): Promise<UserProfile | null> {
+        const start = Date.now();
+        console.log('[AuthService] getUserProfile starting for:', userId);
+
+        try {
+            // Explicitly cast to Promise for withTimeout
+            const queryPromise = this.supabase
+                .from('users')
+                .select('*')
+                .eq('id', userId)
+                .single() as any as Promise<{ data: UserProfile | null, error: any }>;
+
+            const result = await this.withTimeout(
+                queryPromise,
+                5000,
+                'getUserProfile'
+            );
+
+            if (result.error) {
+                console.error('[AuthService] getUserProfile DB error:', result.error);
+                return null;
+            }
+
+            console.log(`[AuthService] getUserProfile success in ${Date.now() - start}ms`);
+            return result.data;
+        } catch (err) {
+            console.warn(`[AuthService] getUserProfile failed/timed out after ${Date.now() - start}ms:`, err);
+            return null;
+        }
+    }
+
+
+
 
     /**
      * Nasłuchiwanie zmian w stanie uwierzytelniania

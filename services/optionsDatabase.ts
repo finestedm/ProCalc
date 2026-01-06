@@ -6,6 +6,7 @@ export const INSTALLATION_TYPES = [
     "UPC (Under Pallet Carrier)",
     "Regały mobilne",
     "DriveIn (Wjezdne)",
+    "Regał automatyczny",
     "Sam montaż",
     "Zarządzanie projektem",
     "Modyfikacja istniejącego projektu",

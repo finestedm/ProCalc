@@ -27,6 +27,7 @@ interface Props {
     activeTab?: 'DASH' | 'LOGISTICS' | 'STATS';
     onTabChange?: (tab: 'DASH' | 'LOGISTICS' | 'STATS') => void;
     refreshTrigger?: number; // [NEW] Trigger reload
+    skeleton?: boolean; // [NEW] Skeleton loading state
 }
 
 interface DashboardEvent {
@@ -256,8 +257,53 @@ export const DashboardView: React.FC<Props> = ({
     onAction,
     activeTab = 'DASH',
     onTabChange,
-    refreshTrigger = 0
+    refreshTrigger = 0,
+    skeleton = false
 }) => {
+    if (skeleton) {
+        return (
+            <div className="p-1 md:p-8 animate-in fade-in duration-500">
+                {/* Header-like skeleton */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+                    <div className="space-y-2">
+                        <div className="h-8 w-64 bg-zinc-200 dark:bg-zinc-800 rounded-lg animate-pulse"></div>
+                        <div className="h-4 w-48 bg-zinc-100 dark:bg-zinc-800/50 rounded animate-pulse"></div>
+                    </div>
+                </div>
+
+                {/* Manager Insights Skeleton */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                    {[1, 2, 3].map(i => (
+                        <div key={i} className="premium-card p-6 h-64 flex flex-col">
+                            <div className="h-4 w-32 bg-zinc-200 dark:bg-zinc-800 rounded mb-6 animate-pulse"></div>
+                            <div className="space-y-4 flex-1">
+                                <div className="h-10 bg-zinc-100 dark:bg-zinc-800/50 rounded-xl animate-pulse"></div>
+                                <div className="h-10 bg-zinc-100 dark:bg-zinc-800/50 rounded-xl animate-pulse"></div>
+                                <div className="h-10 bg-zinc-100 dark:bg-zinc-800/50 rounded-xl animate-pulse"></div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Main Content Skeleton */}
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 mb-8">
+                    {[1, 2, 3].map(i => (
+                        <div key={i} className="premium-card h-[580px] flex flex-col overflow-hidden">
+                            <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
+                                <div className="h-4 w-32 bg-zinc-200 dark:bg-zinc-800 rounded animate-pulse"></div>
+                            </div>
+                            <div className="flex-1 p-4 space-y-4">
+                                {[1, 2, 3, 4, 5].map(j => (
+                                    <div key={j} className="h-20 bg-zinc-100 dark:bg-zinc-800/30 rounded-xl animate-pulse border border-zinc-200 dark:border-zinc-800/50"></div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
     const { profile } = useAuth();
     const [loading, setLoading] = useState(true);
     const [rawExperiments, setRawExperiments] = useState<SavedCalculation[]>([]);

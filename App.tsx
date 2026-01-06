@@ -242,6 +242,22 @@ const App: React.FC = () => {
     const [dirHandle, setDirHandle] = useState<any>(null);
     const [dashboardRefreshTrigger, setDashboardRefreshTrigger] = useState(0);
     const [projectCorrections, setProjectCorrections] = useState<ProjectCorrection[]>([]);
+    const [showProfileError, setShowProfileError] = useState(false);
+
+    useEffect(() => {
+        let timer: any;
+        if (user && !profile && !authLoading) {
+            timer = setTimeout(() => {
+                setShowProfileError(true);
+            }, 3000); // 3 seconds grace period for profile loading
+        } else {
+            setShowProfileError(false);
+            if (timer) clearTimeout(timer);
+        }
+        return () => {
+            if (timer) clearTimeout(timer);
+        };
+    }, [user, profile, authLoading]);
 
     const [dialogConfig, setDialogConfig] = useState<{
         isOpen: boolean;
@@ -452,16 +468,21 @@ const App: React.FC = () => {
 
     useEffect(() => {
         let safetyTimer: ReturnType<typeof setTimeout>;
+        const start = Date.now();
 
         const initApp = async () => {
+            console.log('[App] Initialization: Local storage sync started');
             try {
-                // Safety valve: Force load after 5 seconds if something hangs
+                // Safety valve: Force load after 2 seconds if something hangs
                 safetyTimer = setTimeout(() => {
-                    if (!isLoaded) {
-                        console.warn("Initialization took too long - forcing load");
-                        setIsLoaded(true);
-                    }
-                }, 5000);
+                    setIsLoaded(loaded => {
+                        if (!loaded) {
+                            console.warn(`[App] Safety timeout (2s) triggered. Forcing isLoaded: true. (Total time: ${Date.now() - start}ms)`);
+                            return true;
+                        }
+                        return loaded;
+                    });
+                }, 2000);
 
                 const savedTheme = localStorage.getItem(THEME_KEY);
                 const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -475,45 +496,47 @@ const App: React.FC = () => {
                 try {
                     savedData = localStorage.getItem(STORAGE_KEY);
                 } catch (e) {
-                    console.error("LocalStorage access failed:", e);
+                    console.error("[App] LocalStorage access failed:", e);
                 }
 
                 if (savedData) {
                     try {
                         const parsed = JSON.parse(savedData);
+                        console.log('[App] Local storage data parsed');
 
                         // [NEW] Intelligent Session Detection
-                        // We check if the saved data has any actual content (customer name or items)
                         const hasContent =
                             (parsed.initial?.orderingParty?.name && parsed.initial.orderingParty.name !== '') ||
                             (parsed.initial?.suppliers?.length > 0) ||
                             (parsed.initial?.meta?.projectNumber && parsed.initial.meta.projectNumber !== '');
 
                         if (hasContent) {
+                            console.log('[App] Restorable session found');
                             setLastSessionData(parsed);
                             setShowRestoreModal(true);
                         } else {
-                            // It's empty-ish, just load it silenty
                             applyLoadedData(parsed);
                         }
                     } catch (e) {
-                        console.error("Failed to load save state", e);
-                        // Fallback to defaults
+                        console.error("[App] Failed to parse save state:", e);
                         applyLoadedData(null);
                     }
                 } else {
+                    console.log('[App] No local data to load');
                     applyLoadedData(null);
                 }
 
                 // Request Notification Permission
                 if ("Notification" in window && Notification.permission === "default") {
-                    Notification.requestPermission().catch(err => console.error("Notification permission error", err));
+                    Notification.requestPermission().catch(err => console.error("[App] Notification permission error", err));
                 }
 
             } catch (err) {
-                console.error("Critical initialization error:", err);
+                console.error("[App] Critical initialization error:", err);
                 applyLoadedData(null);
             } finally {
+                const duration = Date.now() - start;
+                console.log(`[App] Local storage initialization finished in ${duration}ms`);
                 clearTimeout(safetyTimer);
                 setIsLoaded(true);
             }
@@ -2136,7 +2159,16 @@ const App: React.FC = () => {
     };
 
     // --- QUICK START HANDLER ---
-    const handleQuickStartApply = (qsData: { projectNumber: string, clientName: string, salesPerson: string, assistantPerson: string, installationType: string, currency: Currency }) => {
+    const handleQuickStartApply = (qsData: {
+        projectNumber: string,
+        clientName: string,
+        salesPerson: string,
+        salesPersonId?: string,
+        assistantPerson: string,
+        assistantPersonId?: string,
+        installationType: string,
+        currency: Currency
+    }) => {
         setAppState(prev => {
             const newInit = { ...prev.initial };
             const newFinal = { ...prev.final };
@@ -2146,10 +2178,14 @@ const App: React.FC = () => {
             newFinal.meta.projectNumber = qsData.projectNumber;
 
             newInit.meta.salesPerson = qsData.salesPerson;
+            newInit.meta.salesPersonId = qsData.salesPersonId;
             newFinal.meta.salesPerson = qsData.salesPerson;
+            newFinal.meta.salesPersonId = qsData.salesPersonId;
 
             newInit.meta.assistantPerson = qsData.assistantPerson;
+            newInit.meta.assistantPersonId = qsData.assistantPersonId;
             newFinal.meta.assistantPerson = qsData.assistantPerson;
+            newFinal.meta.assistantPersonId = qsData.assistantPersonId;
 
             newInit.meta.installationType = qsData.installationType;
             newFinal.meta.installationType = qsData.installationType;
@@ -2568,23 +2604,32 @@ const App: React.FC = () => {
                 <AuthModal isOpen={true} onClose={() => { }} />
             )}
 
-            {/* Error State - Authenticated but no profile (e.g. migration missing) */}
-            {!authLoading && user && !profile && (
+            {/* Profile Error State - Only show full-screen if confirmed error after grace period */}
+            {!authLoading && user && !profile && showProfileError && (
                 <div className="fixed inset-0 z-[150] flex items-center justify-center bg-zinc-900 p-4">
-                    <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl p-8 max-w-md text-center border border-zinc-700">
+                    <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl p-8 max-w-md text-center border border-zinc-700 animate-in fade-in zoom-in duration-300">
                         <AlertCircle size={48} className="text-red-500 mx-auto mb-4" />
                         <h2 className="text-2xl font-bold text-zinc-800 dark:text-white mb-2">
                             Błąd profilu
                         </h2>
                         <p className="text-zinc-600 dark:text-zinc-400 mb-6">
-                            Nie udało się załadować profilu użytkownika. Prawdopodobnie migracja bazy danych nie została wykonana.
+                            Nie udało się załadować profilu użytkownika w wyznaczonym czasie.
+                            Spróbuj odświeżyć stronę lub wyloguj się.
                         </p>
-                        <button
-                            onClick={() => signOut()}
-                            className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors"
-                        >
-                            Wyloguj się
-                        </button>
+                        <div className="flex flex-col gap-3">
+                            <button
+                                onClick={() => window.location.reload()}
+                                className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-lg transition-colors border border-zinc-600"
+                            >
+                                Odśwież stronę
+                            </button>
+                            <button
+                                onClick={() => signOut()}
+                                className="px-6 py-2 bg-red-600/10 hover:bg-red-600/20 text-red-500 font-bold rounded-lg transition-colors border border-red-500/30"
+                            >
+                                Wyloguj się
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -2614,8 +2659,8 @@ const App: React.FC = () => {
                 </div>
             )}
 
-            {/* Main App - Only show if authenticated AND approved */}
-            {!authLoading && user && profile?.approved && (
+            {/* Main App - Render immediately if authenticated, even if profile is still loading (skeleton mode) */}
+            {!authLoading && user && (profile?.approved || !profile) && !showProfileError && (
                 <>
                     <Header
                         appState={appState}
@@ -2966,6 +3011,7 @@ const App: React.FC = () => {
                                         loadProjectFromObject(data);
                                     }}
                                     refreshTrigger={dashboardRefreshTrigger}
+                                    skeleton={!profile}
                                 />
                             </div>
                         )}
