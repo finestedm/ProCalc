@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { OtherCostItem, Currency, VariantItemType, SheetRow } from '../types';
-import { Receipt, Plus, Trash2, ChevronDown, Calculator, Grid3X3, Eraser, Check, X, ArrowRight, ArrowDown as ArrowDownIcon, RefreshCw, Copy, Clipboard, ClipboardCheck, AlertTriangle } from 'lucide-react';
+import { Receipt, Plus, Trash2, ChevronDown, Calculator, Grid3X3, Eraser, Check, X, ArrowRight, ArrowDown as ArrowDownIcon, RefreshCw, Copy, Clipboard, ClipboardCheck, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { convert, formatCurrency } from '../services/calculationService';
 import { SmartInput } from './SmartInput';
 import { EmptyState } from './EmptyState';
@@ -690,6 +690,7 @@ export const OtherCostsSection: React.FC<Props> = ({
     };
 
     const otherTotal = costs.reduce((total, c) => {
+        if (c.isExcluded) return total;
         return total + convert(c.price, c.currency, offerCurrency, exchangeRate);
     }, 0);
 
@@ -917,7 +918,7 @@ export const OtherCostsSection: React.FC<Props> = ({
                                         {costs.map((cost, idx) => (
                                             <tr
                                                 key={cost.id}
-                                                className={`${pickingClass} transition-colors`}
+                                                className={`${pickingClass} transition-colors ${cost.isExcluded ? 'opacity-50 grayscale' : ''}`}
                                                 onClick={(e) => handlePick(e, cost)}
                                             >
                                                 <td className="p-2 border-b border-zinc-50 dark:border-zinc-800/50 text-xs text-center text-zinc-400">{idx + 1}</td>
@@ -969,11 +970,20 @@ export const OtherCostsSection: React.FC<Props> = ({
                                                     </select>
                                                 </td>
                                                 <td className="p-2 border-b border-zinc-50 dark:border-zinc-800/50 text-xs text-center">
-                                                    {!readOnly && (
-                                                        <button onClick={(e) => { e.stopPropagation(); removeCost(idx); }} className="p-1 rounded text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                                                            <Trash2 size={12} />
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); updateCost(idx, 'isExcluded', !cost.isExcluded); }}
+                                                            className={`p-1 rounded transition-colors ${cost.isExcluded ? 'text-zinc-400 hover:text-zinc-600' : 'text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20'}`}
+                                                            title={cost.isExcluded ? "Include" : "Exclude"}
+                                                        >
+                                                            {cost.isExcluded ? <EyeOff size={12} /> : <Eye size={12} />}
                                                         </button>
-                                                    )}
+                                                        {!readOnly && (
+                                                            <button onClick={(e) => { e.stopPropagation(); removeCost(idx); }} className="p-1 rounded text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                                                                <Trash2 size={12} />
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -998,12 +1008,10 @@ export const OtherCostsSection: React.FC<Props> = ({
 
                                 <div className="flex flex-col w-32">
                                     <label className="text-[10px] text-zinc-400 font-bold uppercase mb-1">Liczba Przeglądów</label>
-                                    <input
-                                        type="number"
-                                        min="1"
+                                    <SmartInput
                                         className={`h-8 w-full p-2 text-xs border border-zinc-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 focus:border-amber-400 outline-none text-center font-bold ${readOnly ? 'opacity-80 pointer-events-none' : ''}`}
                                         value={iblCount}
-                                        onChange={(e) => setIblCount(Math.max(1, parseInt(e.target.value) || 1))}
+                                        onChange={(val) => setIblCount(Math.max(1, val))}
                                         readOnly={readOnly}
                                     />
                                 </div>

@@ -8,15 +8,15 @@ interface Props extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onCha
     decimalScale?: number;
 }
 
-export const SmartInput: React.FC<Props> = ({ 
-    value, 
-    onChange, 
-    allowNegative = false, 
+export const SmartInput: React.FC<Props> = ({
+    value,
+    onChange,
+    allowNegative = false,
     decimalScale,
-    onBlur, 
-    onKeyDown, 
-    className, 
-    ...props 
+    onBlur,
+    onKeyDown,
+    className,
+    ...props
 }) => {
     const [localValue, setLocalValue] = useState<string>('');
     const [isFocused, setIsFocused] = useState(false);
@@ -24,14 +24,22 @@ export const SmartInput: React.FC<Props> = ({
     const calculate = (str: string): number | null => {
         let input = str.trim();
         if (!input) return 0;
-        
+
         // Normalize decimal separator: replace comma with dot
         input = input.replace(/,/g, '.');
 
         try {
-            if (input.startsWith('=')) {
-                // Security: Only allow digits and math operators
-                const expr = input.substring(1).replace(/[^0-9+\-*/().]/g, '');
+            // Check if it's a formula or just a math expression (contains operators)
+            const isFormula = input.startsWith('=');
+            const cleanExpr = isFormula ? input.substring(1) : input;
+
+            // Check if it's actually math (contains +, -, *, /)
+            const hasOperators = /[+\-*/]/.test(cleanExpr);
+
+            if (isFormula || hasOperators) {
+                // Security: Only allow digits, math operators, dots and parentheses
+                const expr = cleanExpr.replace(/[^0-9+\-*/().]/g, '');
+                if (!expr) return null;
                 // eslint-disable-next-line no-new-func
                 const res = new Function(`return (${expr})`)();
                 return isFinite(res) ? res : null;
@@ -47,13 +55,13 @@ export const SmartInput: React.FC<Props> = ({
     // Sync with parent value
     useEffect(() => {
         const propValue = value !== undefined && value !== null ? value.toString() : '';
-        
+
         // Logic: 
         // 1. If not focused, always sync with parent.
         // 2. If focused, check if parent value differs from what we currently have locally (parsed).
         //    This happens on Undo/Redo or external updates. We avoid overwriting if the values match conceptually 
         //    (e.g. parent has 1, local has "1." -> don't overwrite).
-        
+
         if (!isFocused) {
             setLocalValue(propValue);
         } else {
@@ -61,7 +69,7 @@ export const SmartInput: React.FC<Props> = ({
             // If parent value is different from our current valid number, it implies an external force change (Undo)
             // Note: We use loose equality or epsilon if floats, but exact match is fine for state restoration
             if (currentParsed !== value && value !== undefined && value !== null) {
-                 setLocalValue(propValue);
+                setLocalValue(propValue);
             }
         }
     }, [value, isFocused]); // localValue excluded to prevent loop, logic handles it via closure or stable ref pattern if needed, but here simple dep is safer if we trust prop update frequency
@@ -69,11 +77,11 @@ export const SmartInput: React.FC<Props> = ({
     const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
         setIsFocused(false);
         const result = calculate(localValue);
-        
+
         if (result !== null) {
             let finalVal = result;
             if (!allowNegative && finalVal < 0) finalVal = 0;
-            
+
             if (decimalScale !== undefined) {
                 const factor = Math.pow(10, decimalScale);
                 finalVal = Math.round(finalVal * factor) / factor;
@@ -85,7 +93,7 @@ export const SmartInput: React.FC<Props> = ({
             // Revert to original on error
             setLocalValue(value !== undefined && value !== null ? value.toString() : '');
         }
-        
+
         if (onBlur) onBlur(e);
     };
 

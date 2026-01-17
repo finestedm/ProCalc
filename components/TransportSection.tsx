@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { TransportItem, Supplier, Currency, VariantItemType } from '../types';
-import { Truck, CheckSquare, Square, Plus, Trash2, ChevronUp, ChevronDown, Combine, Info, Unplug, AlertTriangle, Calendar, X, Scale, Layers, Link } from 'lucide-react';
+import { Truck, CheckSquare, Square, Plus, Trash2, ChevronUp, ChevronDown, Combine, Info, Unplug, AlertTriangle, Calendar, X, Scale, Layers, Link, Eye, EyeOff } from 'lucide-react';
 import { convert, formatCurrency, formatNumber } from '../services/calculationService';
 import { SmartInput } from './SmartInput';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -261,6 +261,7 @@ export const TransportSection: React.FC<Props> = ({
     const manualItems = transport.filter(t => !t.supplierId && (!t.linkedSupplierIds || t.linkedSupplierIds.length === 0));
 
     const transportTotal = transport.reduce((sum, item) => {
+        if (item.isExcluded) return sum;
         if (item.supplierId) {
             const s = suppliers.find(x => x.id === item.supplierId);
             if (s && s.isIncluded === false) return sum;
@@ -446,7 +447,7 @@ export const TransportSection: React.FC<Props> = ({
                                             return (
                                                 <tr
                                                     key={item.id}
-                                                    className={`${pickingClass} transition-colors border-l-4 border-l-blue-500`}
+                                                    className={`${pickingClass} transition-colors border-l-4 border-l-blue-500 ${item.isExcluded ? 'opacity-50 grayscale' : ''}`}
                                                     onClick={(e) => handlePick(e, item)}
                                                 >
                                                     <td className={`${cellClass} pl-4`}>
@@ -461,11 +462,10 @@ export const TransportSection: React.FC<Props> = ({
                                                         </span>
                                                     </td>
                                                     <td className={cellClass}>
-                                                        <input
-                                                            type="number"
+                                                        <SmartInput
                                                             className={`${inputClass} text-center`}
                                                             value={item.trucksCount}
-                                                            onChange={(e) => updateById(item.id, { trucksCount: parseFloat(e.target.value) || 0 })}
+                                                            onChange={(val) => updateById(item.id, { trucksCount: val })}
                                                             onClick={(e) => e.stopPropagation()}
                                                         />
                                                     </td>
@@ -492,9 +492,18 @@ export const TransportSection: React.FC<Props> = ({
                                                         {formatNumber(item.totalPrice)}
                                                     </td>
                                                     <td className={`${cellClass} text-center`}>
-                                                        <button onClick={(e) => { e.stopPropagation(); handleUnmerge(item.id); }} className={`text-zinc-400 hover:text-red-500 p-1 ${readOnly ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`} title="Rozdziel transport" disabled={readOnly}>
-                                                            <Unplug size={14} />
-                                                        </button>
+                                                        <div className="flex items-center justify-center gap-1">
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); updateById(item.id, { isExcluded: !item.isExcluded }); }}
+                                                                className={`p-1 rounded transition-colors ${item.isExcluded ? 'text-zinc-400 hover:text-zinc-600' : 'text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20'}`}
+                                                                title={item.isExcluded ? "Include" : "Exclude"}
+                                                            >
+                                                                {item.isExcluded ? <EyeOff size={12} /> : <Eye size={12} />}
+                                                            </button>
+                                                            <button onClick={(e) => { e.stopPropagation(); handleUnmerge(item.id); }} className={`text-zinc-400 hover:text-red-500 p-1 ${readOnly ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`} title="Rozdziel transport" disabled={readOnly}>
+                                                                <Unplug size={14} />
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             );
@@ -508,7 +517,7 @@ export const TransportSection: React.FC<Props> = ({
                                             return (
                                                 <tr
                                                     key={s.id}
-                                                    className={`${pickingClass} transition-colors ${s.isOrm ? 'bg-zinc-50/30' : ''}`}
+                                                    className={`${pickingClass} transition-colors ${s.isOrm ? 'bg-zinc-50/30' : ''} ${tItem.isExcluded ? 'opacity-50 grayscale' : ''}`}
                                                     onClick={(e) => handlePick(e, tItem)}
                                                 >
                                                     <td className={`${cellClass} pl-4`}>
@@ -538,11 +547,10 @@ export const TransportSection: React.FC<Props> = ({
                                                         <>
                                                             <td className={cellClass}>
                                                                 <div className="relative group">
-                                                                    <input
-                                                                        type="number"
+                                                                    <SmartInput
                                                                         className={`${inputClass} text-center ${isManual ? 'text-blue-600 dark:text-blue-400 font-bold' : ''}`}
                                                                         value={tItem.trucksCount}
-                                                                        onChange={(e) => handleManualInputChange(s.id, parseFloat(e.target.value) || 0)}
+                                                                        onChange={(val) => handleManualInputChange(s.id, val)}
                                                                         onClick={(e) => e.stopPropagation()}
                                                                         readOnly={readOnly}
                                                                     />
@@ -580,7 +588,15 @@ export const TransportSection: React.FC<Props> = ({
                                                             <td className={`${cellClass} text-right pr-4 font-mono font-bold text-zinc-700 dark:text-zinc-200`}>
                                                                 {formatNumber(tItem.totalPrice)}
                                                             </td>
-                                                            <td className={cellClass}></td>
+                                                            <td className={`${cellClass} text-center`}>
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); updateSupplierTransport(s.id, { isExcluded: !tItem.isExcluded }); }}
+                                                                    className={`p-1 rounded transition-colors ${tItem.isExcluded ? 'text-zinc-400 hover:text-zinc-600' : 'text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20'}`}
+                                                                    title={tItem.isExcluded ? "Include" : "Exclude"}
+                                                                >
+                                                                    {tItem.isExcluded ? <EyeOff size={12} /> : <Eye size={12} />}
+                                                                </button>
+                                                            </td>
                                                         </>
                                                     )}
                                                 </tr>
@@ -612,7 +628,7 @@ export const TransportSection: React.FC<Props> = ({
                                             const finalPricePLN = pricePLN * (offerCurrency === Currency.EUR ? (1 / exchangeRate) : 1);
 
                                             return (
-                                                <div key={item.id} className="bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 flex items-center gap-3">
+                                                <div key={item.id} className={`bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 flex items-center gap-3 ${item.isExcluded ? 'opacity-50 grayscale' : ''}`}>
                                                     <div className="flex-1">
                                                         <label className="text-[9px] text-zinc-400 block mb-0.5 uppercase">Opis</label>
                                                         <input
@@ -644,17 +660,26 @@ export const TransportSection: React.FC<Props> = ({
                                                             {Object.values(Currency).map(c => <option key={c} value={c}>{c}</option>)}
                                                         </select>
                                                     </div>
-                                                    {!readOnly && (
+                                                    <div className="flex items-center gap-1">
                                                         <button
-                                                            onClick={() => {
-                                                                const newTransport = transport.filter(t => t.id !== item.id);
-                                                                onChange(newTransport);
-                                                            }}
-                                                            className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                                                            onClick={(e) => { e.stopPropagation(); updateById(item.id, { isExcluded: !item.isExcluded }); }}
+                                                            className={`p-1 rounded transition-colors ${item.isExcluded ? 'text-zinc-400 hover:text-zinc-600' : 'text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20'}`}
+                                                            title={item.isExcluded ? "Include" : "Exclude"}
                                                         >
-                                                            <Trash2 size={16} />
+                                                            {item.isExcluded ? <EyeOff size={14} /> : <Eye size={14} />}
                                                         </button>
-                                                    )}
+                                                        {!readOnly && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    const newTransport = transport.filter(t => t.id !== item.id);
+                                                                    onChange(newTransport);
+                                                                }}
+                                                                className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             );
                                         })}

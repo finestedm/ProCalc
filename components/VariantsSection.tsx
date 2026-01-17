@@ -136,16 +136,79 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
 
     // --- ACTIONS ---
 
+    const collectExcludedItems = (): VariantItem[] => {
+        const excluded: VariantItem[] = [];
+
+        data.suppliers.forEach(s => {
+            s.items.forEach(i => {
+                if (i.isExcluded) {
+                    excluded.push({ id: i.id, type: 'SUPPLIER_ITEM', originalDescription: i.itemDescription });
+                }
+            });
+        });
+
+        data.transport.forEach(t => {
+            if (t.isExcluded) {
+                const name = t.name || (t.supplierId ? data.suppliers.find(s => s.id === t.supplierId)?.name : 'Transport');
+                excluded.push({ id: t.id, type: 'TRANSPORT', originalDescription: `[Transport] ${name}` });
+            }
+        });
+
+        data.otherCosts.forEach(o => {
+            if (o.isExcluded) {
+                excluded.push({ id: o.id, type: 'OTHER', originalDescription: o.description });
+            }
+        });
+
+        data.installation.stages.forEach(st => {
+            if (st.isExcluded) {
+                excluded.push({ id: st.id, type: 'STAGE', originalDescription: st.name });
+            }
+            // Add custom items from stage
+            st.customItems.forEach(ci => {
+                if (ci.isExcluded) {
+                    excluded.push({ id: ci.id, type: 'CUSTOM_INSTALLATION_ITEM', originalDescription: `[${st.name}] ${ci.description}` });
+                }
+            });
+        });
+
+        data.installation.customItems.forEach(ci => {
+            if (ci.isExcluded) {
+                excluded.push({ id: ci.id, type: 'CUSTOM_INSTALLATION_ITEM', originalDescription: ci.description });
+            }
+        });
+
+        return excluded;
+    };
+
+    const clearAllExclusions = (d: CalculationData) => {
+        d.suppliers.forEach(s => s.items.forEach(i => i.isExcluded = false));
+        d.transport.forEach(t => t.isExcluded = false);
+        d.otherCosts.forEach(o => o.isExcluded = false);
+        d.installation.stages.forEach(st => {
+            st.isExcluded = false;
+            st.customItems.forEach(ci => ci.isExcluded = false);
+        });
+        d.installation.customItems.forEach(ci => ci.isExcluded = false);
+    };
+
     const addVariant = (e: React.FormEvent) => {
         e.preventDefault();
         if (!newVariantName.trim()) return;
+
+        const currentExcludedItems = collectExcludedItems();
+
         const newVariant: ProjectVariant = {
             id: Math.random().toString(36).substr(2, 9),
             name: newVariantName.trim(),
-            status: 'NEUTRAL', // Start as Neutral
-            items: []
+            status: 'NEUTRAL',
+            items: currentExcludedItems
         };
-        onChange({ ...data, variants: [...(data.variants || []), newVariant] });
+
+        const newData = { ...data, variants: [...(data.variants || []), newVariant] };
+        clearAllExclusions(newData); // Reset eye icons after capturing
+        recalculateGlobalExclusions(newData);
+        onChange(newData);
         setNewVariantName('');
         setActiveVariantId(newVariant.id);
         setShowDropdown(true); // Auto open search for new variant
@@ -155,11 +218,13 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
         const parent = data.variants.find(v => v.id === parentId);
         if (!parent) return;
 
+        const currentExcludedItems = collectExcludedItems();
+
         const newVariant: ProjectVariant = {
             id: Math.random().toString(36).substr(2, 9),
             name: `${parent.name} (Opcja)`,
             status: 'NEUTRAL',
-            items: JSON.parse(JSON.stringify(parent.items)), // Deep copy items from parent
+            items: currentExcludedItems,
             parentId: parentId
         };
 
@@ -169,7 +234,7 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
         );
 
         const newData = { ...data, variants: [...newVariants, newVariant] };
-
+        clearAllExclusions(newData); // Reset eye icons after capturing
         recalculateGlobalExclusions(newData);
         onChange(newData);
         setActiveVariantId(newVariant.id); // Auto-focus for editing
@@ -336,7 +401,11 @@ export const VariantsSection: React.FC<Props> = ({ data, onChange, exchangeRate,
         d.suppliers.forEach(s => s.items.forEach(i => i.isExcluded = isItemExcluded(i.id)));
         d.transport.forEach(t => t.isExcluded = isItemExcluded(t.id));
         d.otherCosts.forEach(o => o.isExcluded = isItemExcluded(o.id));
-        d.installation.stages.forEach(stage => stage.isExcluded = isItemExcluded(stage.id));
+        d.installation.stages.forEach(stage => {
+            stage.isExcluded = isItemExcluded(stage.id);
+            // Handle Nested Custom Items in Stage
+            stage.customItems.forEach(i => i.isExcluded = isItemExcluded(i.id));
+        });
         // Also handle Global Custom Items
         d.installation.customItems.forEach(i => i.isExcluded = isItemExcluded(i.id));
     };

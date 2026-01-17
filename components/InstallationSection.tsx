@@ -732,11 +732,11 @@ export const InstallationSection: React.FC<Props> = ({
 
                 {/* Actions */}
                 {!readOnly && (
-                    <div className="flex items-center gap-1 pl-2 border-l border-zinc-100 dark:border-zinc-800 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 pl-2 border-l border-zinc-100 dark:border-zinc-800 transition-opacity">
                         <button
-                            onClick={() => updateGlobalCustomItem(item.id, 'isExcluded', !item.isExcluded)}
-                            className={`p-1.5 rounded transition-colors ${item.isExcluded ? 'text-zinc-400 hover:text-zinc-600' : 'text-zinc-300 hover:text-amber-500'}`}
-                            title={item.isExcluded ? "Przywróć" : "Wyklucz"}
+                            onClick={(e) => { e.stopPropagation(); updateGlobalCustomItem(item.id, 'isExcluded', !item.isExcluded); }}
+                            className={`p-1.5 rounded transition-colors ${item.isExcluded ? 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200' : 'text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20'}`}
+                            title={item.isExcluded ? "Include" : "Exclude"}
                         >
                             {item.isExcluded ? <EyeOff size={14} /> : <Eye size={14} />}
                         </button>
@@ -891,9 +891,18 @@ export const InstallationSection: React.FC<Props> = ({
                             <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Koszt Etapu</span>
                             <div className="font-mono font-bold text-zinc-800 dark:text-zinc-200 text-sm">{formatNumber(stageCost)} PLN</div>
                         </div>
-                        {!readOnly && (
-                            <button onClick={(e) => { e.stopPropagation(); removeStage(stage.id); }} className="text-zinc-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors"><Trash2 size={16} /></button>
-                        )}
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={(e) => { e.stopPropagation(); updateStage(stage.id, { isExcluded: !stage.isExcluded }); }}
+                                className={`p-1.5 rounded transition-colors ${stage.isExcluded ? 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200' : 'text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20'}`}
+                                title={stage.isExcluded ? "Include" : "Exclude"}
+                            >
+                                {stage.isExcluded ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                            {!readOnly && (
+                                <button onClick={(e) => { e.stopPropagation(); removeStage(stage.id); }} className="text-zinc-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors"><Trash2 size={16} /></button>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -1097,7 +1106,7 @@ export const InstallationSection: React.FC<Props> = ({
                                     const isAuto = !!item.isAutoQuantity;
 
                                     return (
-                                        <div key={item.id} className={`flex gap-2 items-center mb-1.5 relative ${item.isExcluded ? 'opacity-50' : ''}`}>
+                                        <div key={item.id} className={`flex gap-2 items-center mb-1.5 relative ${item.isExcluded ? 'opacity-50 grayscale' : ''}`}>
                                             <div className="relative flex-1">
                                                 <input
                                                     type="text"
@@ -1120,11 +1129,10 @@ export const InstallationSection: React.FC<Props> = ({
                                             </div>
 
                                             <div className="relative w-16">
-                                                <input
-                                                    type="number"
+                                                <SmartInput
                                                     className={`w-full p-1.5 border-0 rounded text-xs text-center outline-none ${isAuto ? 'bg-cyan-50 text-cyan-700 font-bold' : 'bg-zinc-50 dark:bg-zinc-800'} ${readOnly ? 'opacity-80 pointer-events-none' : ''}`}
                                                     value={item.quantity}
-                                                    onChange={e => updateCustomItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                                                    onChange={val => updateCustomItem(idx, 'quantity', val)}
                                                     readOnly={readOnly}
                                                 />
                                                 {isAuto && (
@@ -1252,10 +1260,16 @@ export const InstallationSection: React.FC<Props> = ({
                                             </div>
 
                                             {!readOnly && (
-                                                <>
-                                                    <button onClick={() => updateCustomItem(idx, 'isExcluded', !item.isExcluded)} className="text-zinc-400 hover:text-zinc-600">{item.isExcluded ? <EyeOff size={14} /> : <Eye size={14} />}</button>
-                                                    <button onClick={() => removeCustomItem(idx)} className="text-zinc-300 hover:text-red-500"><Trash2 size={14} /></button>
-                                                </>
+                                                <div className="flex items-center gap-1 px-1">
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); updateCustomItem(idx, 'isExcluded', !item.isExcluded); }}
+                                                        className={`p-1.5 rounded transition-colors ${item.isExcluded ? 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200' : 'text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20'}`}
+                                                        title={item.isExcluded ? "Include" : "Exclude"}
+                                                    >
+                                                        {item.isExcluded ? <EyeOff size={14} /> : <Eye size={14} />}
+                                                    </button>
+                                                    <button onClick={() => removeCustomItem(idx)} className="text-zinc-300 hover:text-red-500 p-1"><Trash2 size={14} /></button>
+                                                </div>
                                             )}
                                         </div>
                                     );

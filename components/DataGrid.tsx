@@ -491,21 +491,19 @@ export const DataGrid: React.FC<DataGridProps> = ({
                                                             />
                                                         )}
                                                         {col.id === 'quantity' && (
-                                                            <input
-                                                                type="number"
+                                                            <SmartInput
                                                                 className={`${commonInputClass} text-center font-bold`}
                                                                 value={item.quantity}
-                                                                onChange={(e) => onUpdateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
+                                                                onChange={(val) => onUpdateItem(item.id, 'quantity', val)}
                                                                 readOnly={readOnly || isExcluded}
                                                                 onClick={(e) => e.stopPropagation()}
                                                             />
                                                         )}
                                                         {col.id === 'weight' && (
-                                                            <input
-                                                                type="number"
+                                                            <SmartInput
                                                                 className={`${commonInputClass} text-center text-zinc-500`}
                                                                 value={item.weight}
-                                                                onChange={(e) => onUpdateItem(item.id, 'weight', parseFloat(e.target.value) || 0)}
+                                                                onChange={(val) => onUpdateItem(item.id, 'weight', val)}
                                                                 readOnly={readOnly || isExcluded}
                                                                 onClick={(e) => e.stopPropagation()}
                                                             />

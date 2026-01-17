@@ -882,7 +882,7 @@ export const DashboardView: React.FC<Props> = ({
             return { awaitingApproval: [], others: [] };
         }
 
-        const allLatest = getLatestVersions(rawExperiments);
+        const allLatest = getLatestVersions(rawExperiments).filter(p => p.project_stage !== 'DRAFT');
 
         // Sorting logic: 
         // 1. My projects first (p.logistics_operator_id === profile.id)
@@ -1067,7 +1067,7 @@ export const DashboardView: React.FC<Props> = ({
                             <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Logistyka</span>
                         </div>
                         <div className="text-3xl font-black text-purple-600 mb-1 font-mono">
-                            {getLatestVersions(rawExperiments).filter(p => p.logistics_status === 'PENDING').length}
+                            {getLatestVersions(rawExperiments).filter(p => p.logistics_status === 'PENDING' && p.project_stage !== 'DRAFT').length}
                         </div>
                         <p className="text-xs text-zinc-500">Projekty w kolejce transportowej</p>
                     </div>
@@ -1229,7 +1229,7 @@ export const DashboardView: React.FC<Props> = ({
                                             onClick={() => setDashFeedTab('LOGISTICS')}
                                             className={`flex items-center gap-2 text-xs font-black uppercase tracking-widest transition-all pb-2 ${dashFeedTab === 'LOGISTICS' ? 'text-blue-500 border-b-2 border-blue-500' : 'text-zinc-400 hover:text-zinc-600'}`}
                                         >
-                                            <Truck size={14} /> Logistyka {(getLatestVersions(rawExperiments).filter(p => p.logistics_status === 'PENDING').length > 0) && <span className="bg-blue-500 text-white text-[9px] px-1.5 py-0.5 rounded-full ml-1 font-black leading-none">{getLatestVersions(rawExperiments).filter(p => p.logistics_status === 'PENDING').length}</span>}
+                                            <Truck size={14} /> Logistyka {(getLatestVersions(rawExperiments).filter(p => p.logistics_status === 'PENDING' && p.project_stage !== 'DRAFT').length > 0) && <span className="bg-blue-500 text-white text-[9px] px-1.5 py-0.5 rounded-full ml-1 font-black leading-none">{getLatestVersions(rawExperiments).filter(p => p.logistics_status === 'PENDING' && p.project_stage !== 'DRAFT').length}</span>}
                                         </button>
                                     )}
                                 </div>

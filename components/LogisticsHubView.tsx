@@ -5,7 +5,7 @@ import { DeliveryMap } from './DeliveryMap';
 import { storageService } from '../services/storage';
 import { SavedCalculation, SavedLogisticsTransport } from '../services/storage/types';
 import { useAuth } from '../contexts/AuthContext';
-import { CalculationData, CalculationMode, TransportItem, TruckDetail, Supplier, Language, Currency } from '../types';
+import { CalculationData, CalculationMode, TransportItem, TruckDetail, Supplier, Language, Currency, ProjectStage } from '../types';
 import { GanttChart } from './GanttChart';
 import { OrderPreviewModal } from './OrderPreviewModal';
 
@@ -222,8 +222,9 @@ export const LogisticsHubView: React.FC<Props> = ({ onOpenProject, onAction }) =
 
                 // [MODIFIED] Prefer DB column for stage source of truth
                 const stage = p.project_stage || fullFile.stage || fullFile.appState?.stage;
-                // User Request: Logistics should see projects pending approval too
-                if (stage !== 'OPENING' && stage !== 'PENDING_APPROVAL') return;
+                // User Request: Logistics should see projects pending approval, opening, and sent to close. Exclude DRAFT.
+                const allowedStages: ProjectStage[] = ['OPENING', 'PENDING_APPROVAL', 'SENT_TO_CLOSE'];
+                if (!allowedStages.includes(stage) || stage === 'DRAFT') return;
 
                 if (!latestProjectsMap[pid] || new Date(p.created_at) > new Date(latestProjectsMap[pid].created_at)) {
                     latestProjectsMap[pid] = p;
